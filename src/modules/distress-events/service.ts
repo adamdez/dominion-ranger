@@ -3,6 +3,7 @@ import { db } from '../../db/connection.js';
 import { distressEvents } from '../../db/schema/index.js';
 import type { DistressEvent, NewDistressEvent } from '../../db/schema/index.js';
 import { generateId, daysBetween, classifyFreshness } from '../../lib/index.js';
+import { generateEventFingerprint } from '../../lib/fingerprint.js';
 import { domainEvents } from '../../events/bus.js';
 import { logger } from '../../config/logger.js';
 
@@ -23,21 +24,19 @@ export interface DistressEventInput {
 /**
  * Ingest a distress event. Append-only — never updates or deletes.
  *
- * Automatically:
- * - Generates UUID v7 event_id
- * - Classifies freshness based on trigger date
- * - Emits domain event for downstream scoring
+ * Uses fingerprint-based atomic dedup:
+ *   INSERT ... ON CONFLICT (fingerprint) DO NOTHING
+ *
+ * Returns null when the event is a duplicate (fingerprint collision).
  */
-export async function ingestDistressEvent(input: DistressEventInput): Promise<DistressEvent> {
+export async function ingestDistressEvent(input: DistressEventInput): Promise<DistressEvent | null> {
   const eventId = generateId();
 
-  // Determine freshness from trigger date
   const referenceDate = input.triggerEventDate ?? input.filingDate ?? input.recordedDate;
   const daysSince = referenceDate ? daysBetween(referenceDate) : 0;
   const freshness = classifyFreshness(daysSince);
-
-  // Clamp reliability score
   const reliability = Math.max(0, Math.min(1, input.reliabilityScore));
+  const fingerprint = generateEventFingerprint(input);
 
   const newEvent: NewDistressEvent = {
     eventId,
@@ -48,6 +47,7 @@ export async function ingestDistressEvent(input: DistressEventInput): Promise<Di
     filingDate: input.filingDate ?? null,
     recordedDate: input.recordedDate ?? null,
     sourceName: input.sourceName,
+    fingerprint,
     sourceUrl: input.sourceUrl ?? null,
     sourceLegitimacyNotes: input.sourceLegitimacyNotes ?? null,
     freshnessCategory: freshness,
@@ -55,7 +55,18 @@ export async function ingestDistressEvent(input: DistressEventInput): Promise<Di
     rawEventPayload: input.rawEventPayload ?? null,
   };
 
-  const [event] = await db.insert(distressEvents).values(newEvent).returning();
+  const result = await db
+    .insert(distressEvents)
+    .values(newEvent)
+    .onConflictDoNothing({ target: distressEvents.fingerprint })
+    .returning();
+
+  if (result.length === 0) {
+    logger.debug({ fingerprint, eventType: input.eventType }, 'Duplicate event skipped (fingerprint match)');
+    return null;
+  }
+
+  const event = result[0];
 
   logger.info(
     { eventId, dominionLeadId: input.dominionLeadId, eventType: input.eventType, eventLayer: input.eventLayer },
@@ -121,41 +132,4 @@ export async function countEventsByType(
     .groupBy(distressEvents.eventType);
 
   return Object.fromEntries(rows.map((r) => [r.eventType, r.count]));
-}
-
-/**
- * Check for duplicate event (same type, same source, same trigger date).
- * Prevents re-ingesting the same filing from the same source.
- */
-export async function isDuplicateEvent(
-  dominionLeadId: string,
-  eventType: string,
-  sourceName: string,
-  triggerDate: Date | null,
-): Promise<boolean> {
-  const conditions = [
-    eq(distressEvents.dominionLeadId, dominionLeadId),
-    eq(distressEvents.eventType, eventType as DistressEvent['eventType']),
-    eq(distressEvents.sourceName, sourceName),
-  ];
-
-  if (triggerDate) {
-    // Match within same day
-    const dayStart = new Date(triggerDate);
-    dayStart.setHours(0, 0, 0, 0);
-    const dayEnd = new Date(triggerDate);
-    dayEnd.setHours(23, 59, 59, 999);
-
-    conditions.push(
-      gte(distressEvents.triggerEventDate, dayStart),
-      sql`${distressEvents.triggerEventDate} <= ${dayEnd}`,
-    );
-  }
-
-  const [result] = await db
-    .select({ count: sql<number>`count(*)::int` })
-    .from(distressEvents)
-    .where(and(...conditions));
-
-  return result.count > 0;
 }

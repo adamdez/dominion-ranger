@@ -71,10 +71,49 @@ export async function seedScoringModel(): Promise<void> {
     },
 
     confidenceConfig: {
-      min_signals_for_high: 5,      // 5+ signals needed for max signal-count confidence
-      diversity_bonus: 0.05,         // Per unique event type
-      confirmed_presence_bonus: 0.25, // Large boost when confirmed distress exists
-      source_count_weight: 0.05,     // Per unique source
+      min_signals_for_high: 5,
+      diversity_bonus: 0.05,
+      confirmed_presence_bonus: 0.25,
+      source_count_weight: 0.05,
+    },
+
+    equityMultiplierConfig: {
+      ranges: [
+        { min: 0, max: 25000, multiplier: 0.7 },
+        { min: 25000, max: 75000, multiplier: 0.85 },
+        { min: 75000, max: 200000, multiplier: 1.0 },
+        { min: 200000, multiplier: 1.15 },
+      ],
+      default_multiplier: 1.0,
+    },
+
+    dealScoreWeights: {
+      equity_weight: 0.35,
+      ownership_weight: 0.25,
+      absentee_weight: 0.15,
+      mortgage_weight: 0.25,
+      equity_thresholds: { low: 25000, mid: 75000, high: 200000 },
+      ownership_thresholds: { short_months: 24, long_months: 120 },
+      mortgage_severity: {
+        FREE_AND_CLEAR: 0.3,
+        CURRENT: 0.2,
+        LATE_30: 0.5,
+        LATE_60: 0.7,
+        LATE_90: 0.85,
+        DEFAULT: 0.95,
+        FORECLOSURE: 1.0,
+        UNKNOWN: 0.1,
+      },
+    },
+
+    compositeWeights: {
+      motivation_weight: 0.65,
+      deal_weight: 0.35,
+    },
+
+    suppressionConfig: {
+      mortgage_statuses: [],
+      custom_flags: [],
     },
 
     active: true,

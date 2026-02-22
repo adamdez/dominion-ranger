@@ -41,6 +41,18 @@ export const scoringModelConfigs = pgTable('scoring_model_configs', {
   // Confidence model params
   confidenceConfig: jsonb('confidence_config').notNull(),
 
+  // Equity multiplier: ranges with multipliers based on equity estimate
+  equityMultiplierConfig: jsonb('equity_multiplier_config'),
+
+  // Deal score: weights for property economics factors
+  dealScoreWeights: jsonb('deal_score_weights'),
+
+  // Composite score weights: motivation vs deal score ratio
+  compositeWeights: jsonb('composite_weights'),
+
+  // Negative-stack suppression: conditions that zero-out a property
+  suppressionConfig: jsonb('suppression_config'),
+
   // Only one version active at a time
   active: boolean('active').default(false).notNull(),
 

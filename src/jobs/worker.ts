@@ -1,4 +1,4 @@
-import { Worker } from 'bullmq';
+import { Worker, type ConnectionOptions } from 'bullmq';
 import IORedis from 'ioredis';
 import { env } from '../config/env.js';
 import { logger } from '../config/logger.js';
@@ -7,14 +7,14 @@ import { scoreProperty } from '../modules/scoring/service.js';
 import { evaluateForPromotion } from '../modules/promotion/service.js';
 import { dispatchToSentinel } from '../modules/sentinel/service.js';
 import { getPropertyById } from '../modules/properties/service.js';
-import { getLatestScore } from '../modules/scoring/service.js';
 import type { IngestionJobData, ScoringJobData, SentinelDispatchJobData } from './queues.js';
 import { initializeAdapters } from '../ingestion/adapters/registry.js';
 import { eq } from 'drizzle-orm';
 import { db } from '../db/connection.js';
 import { promotedLeads } from '../db/schema/index.js';
 
-const connection = new IORedis(env.REDIS_URL, { maxRetriesPerRequest: null });
+const redisInstance = new IORedis(env.REDIS_URL, { maxRetriesPerRequest: null });
+const connection = redisInstance as unknown as ConnectionOptions;
 
 // ─── Ingestion Worker ──────────────────────────────
 
@@ -128,6 +128,6 @@ export async function stopWorkers(): Promise<void> {
     scoringWorker.close(),
     sentinelWorker.close(),
   ]);
-  await connection.quit();
+  await redisInstance.quit();
   logger.info('All BullMQ workers stopped');
 }

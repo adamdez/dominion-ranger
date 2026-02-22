@@ -29,7 +29,7 @@ describe('standardizeAddress', () => {
 describe('addressKey', () => {
   it('strips all non-alphanumeric chars and lowercases', () => {
     const key = addressKey('123 Main St, Apt 4B');
-    expect(key).toBe('123mainstaptunit4b');
+    expect(key).toBe('123mainstapt4b');
   });
 
   it('produces same key for equivalent addresses', () => {

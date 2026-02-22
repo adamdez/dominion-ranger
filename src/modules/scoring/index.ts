@@ -5,3 +5,8 @@ export {
   invalidateConfigCache,
 } from './service.js';
 export type { ScoringResult } from './service.js';
+
+export {
+  replayPropertyScoring,
+  replayAllScoring,
+} from './replay.js';

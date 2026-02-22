@@ -2,15 +2,10 @@ import type { FastifyInstance } from 'fastify';
 import { receiveSentinelStatus } from '../../modules/sentinel/index.js';
 import type { SentinelStatus } from '../../modules/sentinel/index.js';
 import { requireRole } from '../middleware/auth.js';
-
-const VALID_STATUSES: SentinelStatus[] = [
-  'CLAIMED', 'DIALED', 'OFFER_SENT', 'CONTRACTED',
-  'CLOSED', 'DEAD', 'LISTED', 'SOLD',
-];
+import { sentinelStatusBody } from '../schemas/sentinel.js';
 
 export async function sentinelRoutes(app: FastifyInstance): Promise<void> {
 
-  // POST /api/sentinel/status-sync — Receive status updates from Sentinel
   app.post<{
     Body: {
       dominion_lead_id: string;
@@ -21,27 +16,17 @@ export async function sentinelRoutes(app: FastifyInstance): Promise<void> {
   }>(
     '/api/sentinel/status-sync',
     { preHandler: [requireRole('sentinel.write')] },
-    async (request, reply) => {
-      const { dominion_lead_id, status, user_id, metadata } = request.body;
-
-      if (!dominion_lead_id || !status) {
-        return reply.code(400).send({ error: 'dominion_lead_id and status are required' });
-      }
-
-      if (!VALID_STATUSES.includes(status)) {
-        return reply.code(400).send({
-          error: `Invalid status. Valid: ${VALID_STATUSES.join(', ')}`,
-        });
-      }
+    async (request) => {
+      const body = sentinelStatusBody.parse(request.body);
 
       await receiveSentinelStatus({
-        dominionLeadId: dominion_lead_id,
-        status,
-        userId: user_id,
-        metadata,
+        dominionLeadId: body.dominion_lead_id,
+        status: body.status as SentinelStatus,
+        userId: body.user_id,
+        metadata: body.metadata,
       });
 
-      return { success: true, dominion_lead_id, status };
+      return { success: true, dominion_lead_id: body.dominion_lead_id, status: body.status };
     },
   );
 }

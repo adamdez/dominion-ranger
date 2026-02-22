@@ -1,10 +1,13 @@
 import type { FastifyInstance } from 'fastify';
+import type { SQL } from 'drizzle-orm';
 import { requireRole } from '../middleware/auth.js';
-import { scoreProperty, getLatestScore, getScoringHistory } from '../../modules/scoring/service.js';
+import { scoreProperty, getLatestScore, getScoringHistory } from '../../modules/scoring/index.js';
 import { db } from '../../db/connection.js';
-import { properties, scoringRecords } from '../../db/schema/index.js';
+import { properties } from '../../db/schema/index.js';
 import { eq, sql, and } from 'drizzle-orm';
 import { logger } from '../../config/logger.js';
+import { BUSINESS_RULES } from '../../config/business-rules.js';
+import { batchScoreBody, scoringParamsSchema, scoringHistoryQuery } from '../schemas/scoring.js';
 
 export async function scoringRoutes(app: FastifyInstance): Promise<void> {
 
@@ -21,11 +24,11 @@ export async function scoringRoutes(app: FastifyInstance): Promise<void> {
       preHandler: [requireRole('pipeline.run')],
     },
     async (request, reply) => {
-      const { limit = 50000, county, rescore = false } = request.body ?? {};
+      const body = batchScoreBody.parse(request.body);
+      const { limit = BUSINESS_RULES.batch.defaultScoringLimit, county, rescore = false } = body ?? {};
 
       try {
-        // Find properties to score
-        const conditions: any[] = [];
+        const conditions: SQL[] = [];
 
         if (!rescore) {
           conditions.push(
@@ -48,8 +51,7 @@ export async function scoringRoutes(app: FastifyInstance): Promise<void> {
 
         const total = toScore.length;
 
-        // Large batches: return immediately, score in background
-        if (total > 500) {
+        if (total > BUSINESS_RULES.batch.largeBatchThreshold) {
           reply.send({
             status: 'started',
             message: `Scoring ${total} properties directly. Check /api/scoring/stats for progress.`,
@@ -66,9 +68,9 @@ export async function scoringRoutes(app: FastifyInstance): Promise<void> {
               try {
                 const result = await scoreProperty(row.dominionLeadId);
                 scored++;
-                if (result.compositeScore >= 40) promoted++;
+                if (result.compositeScore >= BUSINESS_RULES.tiers.C.minScore) promoted++;
 
-                if (scored % 500 === 0) {
+                if (scored % BUSINESS_RULES.batch.progressLogInterval === 0) {
                   const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
                   const rate = (scored / parseFloat(elapsed)).toFixed(1);
                   logger.info(
@@ -76,10 +78,10 @@ export async function scoringRoutes(app: FastifyInstance): Promise<void> {
                     'Batch scoring progress',
                   );
                 }
-              } catch (err: any) {
+              } catch (err: unknown) {
                 errors++;
-                if (errors <= 5) {
-                  logger.error({ dominionLeadId: row.dominionLeadId, err: err.message }, 'Scoring error');
+                if (errors <= BUSINESS_RULES.batch.maxLoggedErrors) {
+                  logger.error({ dominionLeadId: row.dominionLeadId, err: err instanceof Error ? err.message : String(err) }, 'Scoring error');
                 }
               }
             }
@@ -103,9 +105,9 @@ export async function scoringRoutes(app: FastifyInstance): Promise<void> {
           try {
             const result = await scoreProperty(row.dominionLeadId);
             scored++;
-            if (result.compositeScore >= 40) promoted++;
-          } catch (err: any) {
-            errs.push(`${row.dominionLeadId}: ${err.message}`);
+            if (result.compositeScore >= BUSINESS_RULES.tiers.C.minScore) promoted++;
+          } catch (err: unknown) {
+            errs.push(`${row.dominionLeadId}: ${err instanceof Error ? err.message : String(err)}`);
           }
         }
 
@@ -114,13 +116,13 @@ export async function scoringRoutes(app: FastifyInstance): Promise<void> {
           scored,
           promoted,
           total,
-          errors: errs.length > 0 ? errs.slice(0, 10) : undefined,
+          errors: errs.length > 0 ? errs.slice(0, BUSINESS_RULES.batch.maxReturnedErrors) : undefined,
         });
-      } catch (err: any) {
+      } catch (err: unknown) {
         logger.error({ err }, 'Batch scoring failed');
         return reply.code(500).send({
           error: 'SCORING_FAILED',
-          message: err.message,
+          message: err instanceof Error ? err.message : 'Unknown error',
         });
       }
     },
@@ -131,16 +133,20 @@ export async function scoringRoutes(app: FastifyInstance): Promise<void> {
     '/api/scoring/stats',
     { preHandler: [requireRole('pipeline.run')] },
     async (_request, reply) => {
+      const tierA = BUSINESS_RULES.tiers.A.minScore;
+      const tierB = BUSINESS_RULES.tiers.B.minScore;
+      const tierC = BUSINESS_RULES.tiers.C.minScore;
+
       const result = await db.execute(sql`
         SELECT
           COUNT(DISTINCT dominion_lead_id)::int as properties_scored,
           COUNT(*)::int as total_records,
           ROUND(AVG(CAST(composite_score AS numeric)), 2) as avg_score,
           ROUND(MAX(CAST(composite_score AS numeric)), 2) as max_score,
-          COUNT(CASE WHEN CAST(composite_score AS numeric) >= 80 THEN 1 END)::int as tier_a,
-          COUNT(CASE WHEN CAST(composite_score AS numeric) >= 60 AND CAST(composite_score AS numeric) < 80 THEN 1 END)::int as tier_b,
-          COUNT(CASE WHEN CAST(composite_score AS numeric) >= 40 AND CAST(composite_score AS numeric) < 60 THEN 1 END)::int as tier_c,
-          COUNT(CASE WHEN CAST(composite_score AS numeric) < 40 THEN 1 END)::int as below_threshold,
+          COUNT(CASE WHEN CAST(composite_score AS numeric) >= ${tierA} THEN 1 END)::int as tier_a,
+          COUNT(CASE WHEN CAST(composite_score AS numeric) >= ${tierB} AND CAST(composite_score AS numeric) < ${tierA} THEN 1 END)::int as tier_b,
+          COUNT(CASE WHEN CAST(composite_score AS numeric) >= ${tierC} AND CAST(composite_score AS numeric) < ${tierB} THEN 1 END)::int as tier_c,
+          COUNT(CASE WHEN CAST(composite_score AS numeric) < ${tierC} THEN 1 END)::int as below_threshold,
           (SELECT COUNT(*)::int FROM properties) as total_properties,
           (SELECT COUNT(*)::int FROM promoted_leads) as total_promoted
         FROM (
@@ -150,7 +156,8 @@ export async function scoringRoutes(app: FastifyInstance): Promise<void> {
         ) latest_scores
       `);
 
-      const stats = Array.isArray(result) ? result[0] : (result as any).rows?.[0] ?? {};
+      const rows = (result as unknown as { rows?: Record<string, unknown>[] }).rows ?? [];
+      const stats = rows[0] ?? {};
       return reply.send(stats);
     },
   );
@@ -160,7 +167,8 @@ export async function scoringRoutes(app: FastifyInstance): Promise<void> {
     '/api/scoring/:dominionLeadId',
     { preHandler: [requireRole('pipeline.run')] },
     async (request, reply) => {
-      const score = await getLatestScore(request.params.dominionLeadId);
+      const { dominionLeadId } = scoringParamsSchema.parse(request.params);
+      const score = await getLatestScore(dominionLeadId);
       if (!score) return reply.code(404).send({ error: 'No scoring record found' });
       return reply.send(score);
     },
@@ -171,7 +179,9 @@ export async function scoringRoutes(app: FastifyInstance): Promise<void> {
     '/api/scoring/:dominionLeadId/history',
     { preHandler: [requireRole('pipeline.run')] },
     async (request, reply) => {
-      const history = await getScoringHistory(request.params.dominionLeadId, request.query.limit ?? 20);
+      const { dominionLeadId } = scoringParamsSchema.parse(request.params);
+      const query = scoringHistoryQuery.parse(request.query);
+      const history = await getScoringHistory(dominionLeadId, query.limit ?? BUSINESS_RULES.pagination.defaultHistoryLimit);
       return reply.send({ history });
     },
   );

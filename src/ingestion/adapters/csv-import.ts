@@ -3,7 +3,10 @@ import { readdir, stat } from 'node:fs/promises';
 import { createInterface } from 'node:readline';
 import { join } from 'node:path';
 import type { IngestionAdapter, NormalizedRecord } from './interface.js';
+import type { DistressEvent } from '../../db/schema/index.js';
 import { logger } from '../../config/logger.js';
+
+type EventType = DistressEvent['eventType'];
 
 /**
  * CSV Ingestion Adapter
@@ -322,7 +325,7 @@ function normalizeRow(
       const recordingDateStr = getField(values, mapping, 'recordingDate');
 
       events.push({
-        eventType: mapping2.eventType as any,
+        eventType: mapping2.eventType as EventType,
         eventLayer: mapping2.eventLayer,
         triggerEventDate: filingDateStr ? parseDate(filingDateStr) : new Date(),
         filingDate: filingDateStr ? parseDate(filingDateStr) : null,
@@ -339,7 +342,7 @@ function normalizeRow(
   if (prTaxDelinquent && isTruthy(prTaxDelinquent)) {
     const lienAmt = getField(values, mapping, 'lienAmount');
     events.push({
-      eventType: 'TAX_DELINQUENCY' as any,
+      eventType: 'TAX_DELINQUENCY' as EventType,
       eventLayer: 'confirmed',
       triggerEventDate: new Date(),
       sourceName: `csv_import:${sourcefile.split(/[/\\]/).pop()}`,
@@ -351,7 +354,7 @@ function normalizeRow(
   const prForeclosure = getField(values, mapping, 'prForeclosure');
   if (prForeclosure && isTruthy(prForeclosure)) {
     events.push({
-      eventType: 'NOTICE_OF_DEFAULT' as any,
+      eventType: 'NOTICE_OF_DEFAULT' as EventType,
       eventLayer: 'confirmed',
       triggerEventDate: new Date(),
       sourceName: `csv_import:${sourcefile.split(/[/\\]/).pop()}`,
@@ -363,7 +366,7 @@ function normalizeRow(
   // If absentee but no other event, add predictive signal
   if (isAbsentee && events.length === 0) {
     events.push({
-      eventType: 'PREDICTIVE_ABSENTEE_DISTRESS' as any,
+      eventType: 'PREDICTIVE_ABSENTEE_DISTRESS' as EventType,
       eventLayer: 'predictive',
       triggerEventDate: new Date(),
       sourceName: `csv_import:${sourcefile.split(/[/\\]/).pop()}`,
@@ -460,6 +463,6 @@ function isTruthy(val: string): boolean {
   return ['yes', 'y', 'true', '1', 'x'].includes(val.toLowerCase().trim());
 }
 
-function isFalsy(val: string): boolean {
+function _isFalsy(val: string): boolean {
   return ['no', 'n', 'false', '0'].includes(val.toLowerCase().trim());
 }

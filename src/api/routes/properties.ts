@@ -6,6 +6,8 @@ import { getSignalAccumulation } from '../../modules/signals/index.js';
 import { getPromotionHistory } from '../../modules/promotion/index.js';
 import { getAuditTrail } from '../../modules/compliance/index.js';
 import { requireRole } from '../middleware/auth.js';
+import { BUSINESS_RULES } from '../../config/business-rules.js';
+import { propertyParamsSchema, propertyScoreHistoryQuery } from '../schemas/properties.js';
 
 export async function propertyRoutes(app: FastifyInstance): Promise<void> {
 
@@ -13,10 +15,11 @@ export async function propertyRoutes(app: FastifyInstance): Promise<void> {
   app.get<{ Params: { id: string } }>(
     '/api/properties/:id',
     { preHandler: [requireRole('properties.read')] },
-    async (request, reply) => {
-      const property = await getPropertyById(request.params.id);
-      const latestScore = await getLatestScore(request.params.id);
-      const signals = await getSignalAccumulation(request.params.id);
+    async (request) => {
+      const { id } = propertyParamsSchema.parse(request.params);
+      const property = await getPropertyById(id);
+      const latestScore = await getLatestScore(id);
+      const signals = await getSignalAccumulation(id);
 
       return {
         property,
@@ -31,7 +34,8 @@ export async function propertyRoutes(app: FastifyInstance): Promise<void> {
     '/api/properties/:id/events',
     { preHandler: [requireRole('events.read')] },
     async (request) => {
-      const events = await getEventsByProperty(request.params.id);
+      const { id } = propertyParamsSchema.parse(request.params);
+      const events = await getEventsByProperty(id);
       return { events, count: events.length };
     },
   );
@@ -41,8 +45,10 @@ export async function propertyRoutes(app: FastifyInstance): Promise<void> {
     '/api/properties/:id/scores',
     { preHandler: [requireRole('scoring.read')] },
     async (request) => {
-      const limit = parseInt(request.query.limit ?? '20', 10);
-      const scores = await getScoringHistory(request.params.id, limit);
+      const { id } = propertyParamsSchema.parse(request.params);
+      const query = propertyScoreHistoryQuery.parse(request.query);
+      const limit = query.limit ?? BUSINESS_RULES.pagination.defaultHistoryLimit;
+      const scores = await getScoringHistory(id, limit);
       return { scores, count: scores.length };
     },
   );
@@ -52,7 +58,8 @@ export async function propertyRoutes(app: FastifyInstance): Promise<void> {
     '/api/properties/:id/promotions',
     { preHandler: [requireRole('promotion.read')] },
     async (request) => {
-      const promotions = await getPromotionHistory(request.params.id);
+      const { id } = propertyParamsSchema.parse(request.params);
+      const promotions = await getPromotionHistory(id);
       return { promotions, count: promotions.length };
     },
   );
@@ -62,7 +69,8 @@ export async function propertyRoutes(app: FastifyInstance): Promise<void> {
     '/api/properties/:id/audit',
     { preHandler: [requireRole('audit.read')] },
     async (request) => {
-      const entries = await getAuditTrail(request.params.id);
+      const { id } = propertyParamsSchema.parse(request.params);
+      const entries = await getAuditTrail(id);
       return { entries, count: entries.length };
     },
   );

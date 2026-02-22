@@ -1,0 +1,118 @@
+name: Dominion Ranger CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+env:
+  NODE_VERSION: '20'
+
+jobs:
+  lint-typecheck:
+    name: Lint & Typecheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+
+  unit-tests:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - run: npm ci
+      - run: npx vitest run tests/unit/
+
+  integration-tests:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: ranger
+          POSTGRES_PASSWORD: ranger_test
+          POSTGRES_DB: ranger_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgresql://ranger:ranger_test@localhost:5432/ranger_test
+      TEST_DATABASE_URL: postgresql://ranger:ranger_test@localhost:5432/ranger_test
+      NODE_ENV: test
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - run: npm ci
+      - name: Push schema to test database
+        run: npx drizzle-kit push --force
+      - name: Seed test database
+        run: npx tsx src/db/seeds/run.ts
+      - name: Apply append-only invariants
+        run: npx tsx scripts/apply-invariants.ts
+      - run: npx vitest run tests/integration/
+
+  migration-check:
+    name: Migration Validation
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: ranger
+          POSTGRES_PASSWORD: ranger_test
+          POSTGRES_DB: ranger_migrate
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgresql://ranger:ranger_test@localhost:5432/ranger_migrate
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - run: npm ci
+      - name: Run migrations
+        run: npx drizzle-kit migrate
+      - name: Verify no pending changes
+        run: |
+          npx drizzle-kit generate 2>&1 | tee /tmp/drizzle-output.txt
+          if git diff --exit-code src/db/migrations/; then
+            echo "No pending migration changes detected"
+          else
+            echo "ERROR: Uncommitted migration changes detected. Run 'npx drizzle-kit generate' and commit."
+            exit 1
+          fi

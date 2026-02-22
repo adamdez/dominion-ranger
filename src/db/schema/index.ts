@@ -1,6 +1,9 @@
 // ─── Enums ─────────────────────────────────────────
 export * from './enums';
 
+// ─── Typed Constants ──────────────────────────────
+export * from './constants';
+
 // ─── Core Tables ───────────────────────────────────
 export { properties } from './properties';
 export type { Property, NewProperty } from './properties';
@@ -16,6 +19,9 @@ export type { SignalAccumulation, NewSignalAccumulation } from './signal-accumul
 
 export { promotedLeads } from './promoted-leads';
 export type { PromotedLead, NewPromotedLead } from './promoted-leads';
+
+export { leadInstances } from './lead-instances';
+export type { LeadInstance, NewLeadInstance } from './lead-instances';
 
 export { outcomeReservoir } from './outcome-reservoir';
 export type { OutcomeReservoir, NewOutcomeReservoir } from './outcome-reservoir';

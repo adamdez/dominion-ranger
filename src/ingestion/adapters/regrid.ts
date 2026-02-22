@@ -1,6 +1,9 @@
 import type { IngestionAdapter, NormalizedRecord } from './interface.js';
+import type { DistressEvent } from '../../db/schema/index.js';
 import { logger } from '../../config/logger.js';
 import { env } from '../../config/env.js';
+
+type EventType = DistressEvent['eventType'];
 
 /**
  * Regrid API v2 adapter — LIVE implementation.
@@ -223,7 +226,7 @@ export class RegridAdapter implements IngestionAdapter {
 
     if (isAbsentee) {
       events.push({
-        eventType: 'PREDICTIVE_ABSENTEE_DISTRESS' as any,
+        eventType: 'PREDICTIVE_ABSENTEE_DISTRESS' as EventType,
         eventLayer: 'predictive',
         triggerEventDate: new Date(),
         sourceName: 'regrid',
@@ -234,7 +237,7 @@ export class RegridAdapter implements IngestionAdapter {
 
     if (fields.usps_vacancy === 'Y') {
       events.push({
-        eventType: 'PREDICTIVE_VACANCY_SIGNAL' as any,
+        eventType: 'PREDICTIVE_VACANCY_SIGNAL' as EventType,
         eventLayer: 'predictive',
         triggerEventDate: new Date(),
         sourceName: 'regrid',

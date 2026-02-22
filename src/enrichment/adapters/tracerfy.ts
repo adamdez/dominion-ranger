@@ -381,7 +381,7 @@ async function fetchQueueResults(queueId: number, submittedRows: { dominionLeadI
  * Download and parse CSV results from a download_url.
  * Fallback for when we need CSV-based processing.
  */
-async function downloadResults(downloadUrl: string): Promise<Map<string, EnrichmentResult>> {
+async function _downloadResults(downloadUrl: string): Promise<Map<string, EnrichmentResult>> {
   const response = await fetch(downloadUrl);
   if (!response.ok) {
     throw new Error(`Failed to download Tracerfy results: ${response.status}`);
@@ -649,7 +649,9 @@ async function downloadAndApplyResults(queueId: number, traceType: "normal" | "e
     if (result.phones.length === 0 && result.emails.length === 0) continue;
 
     try {
-      const updates: Record<string, unknown> = {};
+      const updates: Partial<typeof properties.$inferInsert> = {
+        updatedAt: new Date(),
+      };
 
       if (result.phones.length > 0) {
         updates.phone = result.phones[0];
@@ -661,24 +663,9 @@ async function downloadAndApplyResults(queueId: number, traceType: "normal" | "e
         updates.mailingAddress = result.mailingAddress;
       }
 
-      // Store full contact stack in enrichment_data JSONB
-      updates.enrichmentData = JSON.stringify({
-        source: 'tracerfy',
-        traceType,
-        enrichedAt: new Date().toISOString(),
-        queueId,
-        phones: result.phones,
-        emails: result.emails,
-        relatives: result.relatives ?? [],
-        aliases: result.aliases ?? [],
-        pastAddresses: result.pastAddresses ?? [],
-        businesses: result.businesses ?? [],
-        raw: result.raw,
-      });
-
       await db
         .update(properties)
-        .set(updates as any)
+        .set(updates)
         .where(eq(properties.dominionLeadId, dominionLeadId));
 
       enrichedCount++;

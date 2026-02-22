@@ -7,6 +7,7 @@ import {
   timestamp,
   jsonb,
   index,
+  uniqueIndex,
 } from 'drizzle-orm/pg-core';
 import { eventTypeEnum, eventLayerEnum, freshnessEnum } from './enums';
 import { properties } from './properties';
@@ -30,6 +31,7 @@ export const distressEvents = pgTable(
 
     // Source provenance
     sourceName: varchar('source_name', { length: 128 }).notNull(),
+    fingerprint: varchar('fingerprint', { length: 64 }).notNull(),
     sourceUrl: text('source_url'),
     sourceLegitimacyNotes: text('source_legitimacy_notes'),
 
@@ -48,6 +50,7 @@ export const distressEvents = pgTable(
     index('idx_distress_events_dominion_lead_id').on(table.dominionLeadId),
     index('idx_distress_events_type').on(table.eventType),
     index('idx_distress_events_layer').on(table.eventLayer),
+    uniqueIndex('uq_distress_events_fingerprint').on(table.fingerprint),
     index('idx_distress_events_created_at').on(table.createdAt),
     index('idx_distress_events_lead_created').on(table.dominionLeadId, table.createdAt),
     index('idx_distress_events_type_layer').on(table.eventType, table.eventLayer),

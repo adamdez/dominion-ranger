@@ -16,8 +16,11 @@ import { createInterface } from 'node:readline';
 import { join } from 'node:path';
 import pg from 'pg';
 import { drizzle } from 'drizzle-orm/node-postgres';
-import { eq, and, sql } from 'drizzle-orm';
+import { eq, and } from 'drizzle-orm';
 import * as schema from '../db/schema/index.js';
+import type { DistressEvent } from '../db/schema/index.js';
+import { EventLayer } from '../db/schema/constants.js';
+import { generateEventFingerprint } from '../lib/fingerprint.js';
 import { env } from '../config/env.js';
 
 // Use a small pool to avoid Neon limits
@@ -241,7 +244,7 @@ async function main() {
     }
 
     // ── Build property_attributes JSONB ──
-    const attrs: Record<string, any> = {};
+    const attrs: Record<string, unknown> = {};
     const taxAmt = num(get(values, mapping, 'taxDelinquentAmt'));
     const estValue = num(get(values, mapping, 'estValue'));
     const estEquityDollar = num(get(values, mapping, 'estEquityDollar'));
@@ -310,8 +313,6 @@ async function main() {
       attrs.taxToValueRatio = +(taxAmt / estValue).toFixed(4);
     }
 
-    const attrJson = Object.keys(attrs).length > 0 ? attrs : null;
-
     try {
       // ── Find or create property ──
       let dominionLeadId: string;
@@ -335,7 +336,6 @@ async function main() {
             absenteeOwner: isAbsentee,
             equityEstimate: estEquityDollar?.toString() || undefined,
             ownershipDurationMonths: ownershipMonths,
-            propertyAttributes: attrJson,
             updatedAt: new Date(),
           }).where(eq(properties.dominionLeadId, dominionLeadId));
           updated++;
@@ -366,21 +366,32 @@ async function main() {
           equityEstimate: estEquityDollar?.toString() || null,
           ownershipDurationMonths: ownershipMonths,
           mortgageStatus: 'UNKNOWN',
-          propertyAttributes: attrJson,
         });
         created++;
       }
 
       // ── Create distress events ──
+      type EventType = DistressEvent['eventType'];
+      type EventLayerType = DistressEvent['eventLayer'];
+      interface EventDraft {
+        eventId: string;
+        dominionLeadId: string;
+        eventType: EventType;
+        eventLayer: EventLayerType;
+        triggerEventDate: Date;
+        sourceName: string;
+        reliabilityScore: string;
+        rawEventPayload: Record<string, unknown>;
+        freshnessCategory: 'same_day';
+      }
       const source = `csv_reimport:${fileName}`;
-      const newEvents: any[] = [];
+      const newEvents: EventDraft[] = [];
 
-      // Always add TAX_DELINQUENCY (this IS the tax delinquent list)
       newEvents.push({
         eventId: generateUUID(),
         dominionLeadId,
-        eventType: 'TAX_DELINQUENCY',
-        eventLayer: 'confirmed',
+        eventType: 'TAX_DELINQUENCY' as EventType,
+        eventLayer: EventLayer.CONFIRMED as EventLayerType,
         triggerEventDate: new Date(),
         sourceName: source,
         reliabilityScore: '0.85',
@@ -392,8 +403,8 @@ async function main() {
         newEvents.push({
           eventId: generateUUID(),
           dominionLeadId,
-          eventType: 'NOTICE_OF_DEFAULT',
-          eventLayer: 'confirmed',
+          eventType: 'NOTICE_OF_DEFAULT' as EventType,
+          eventLayer: EventLayer.CONFIRMED as EventLayerType,
           triggerEventDate: new Date(),
           sourceName: source,
           reliabilityScore: '0.90',
@@ -406,8 +417,8 @@ async function main() {
         newEvents.push({
           eventId: generateUUID(),
           dominionLeadId,
-          eventType: 'BANKRUPTCY',
-          eventLayer: 'confirmed',
+          eventType: 'BANKRUPTCY' as EventType,
+          eventLayer: EventLayer.CONFIRMED as EventLayerType,
           triggerEventDate: new Date(),
           sourceName: source,
           reliabilityScore: '0.90',
@@ -420,8 +431,8 @@ async function main() {
         newEvents.push({
           eventId: generateUUID(),
           dominionLeadId,
-          eventType: 'PREDICTIVE_DIVORCE_FILING',
-          eventLayer: 'predictive',
+          eventType: 'PREDICTIVE_DIVORCE_FILING' as EventType,
+          eventLayer: EventLayer.PREDICTIVE as EventLayerType,
           triggerEventDate: new Date(),
           sourceName: source,
           reliabilityScore: '0.60',
@@ -434,8 +445,8 @@ async function main() {
         newEvents.push({
           eventId: generateUUID(),
           dominionLeadId,
-          eventType: 'PROBATE',
-          eventLayer: 'confirmed',
+          eventType: 'PROBATE' as EventType,
+          eventLayer: EventLayer.CONFIRMED as EventLayerType,
           triggerEventDate: new Date(),
           sourceName: source,
           reliabilityScore: '0.80',
@@ -448,8 +459,8 @@ async function main() {
         newEvents.push({
           eventId: generateUUID(),
           dominionLeadId,
-          eventType: 'PREDICTIVE_VACANCY_SIGNAL',
-          eventLayer: 'predictive',
+          eventType: 'PREDICTIVE_VACANCY_SIGNAL' as EventType,
+          eventLayer: EventLayer.PREDICTIVE as EventLayerType,
           triggerEventDate: new Date(),
           sourceName: source,
           reliabilityScore: '0.50',
@@ -462,8 +473,8 @@ async function main() {
         newEvents.push({
           eventId: generateUUID(),
           dominionLeadId,
-          eventType: 'PREDICTIVE_ABSENTEE_DISTRESS',
-          eventLayer: 'predictive',
+          eventType: 'PREDICTIVE_ABSENTEE_DISTRESS' as EventType,
+          eventLayer: EventLayer.PREDICTIVE as EventLayerType,
           triggerEventDate: new Date(),
           sourceName: source,
           reliabilityScore: '0.30',
@@ -472,9 +483,16 @@ async function main() {
         });
       }
 
-      // Insert events one at a time to avoid connection issues
       for (const evt of newEvents) {
-        await db.insert(distressEvents).values(evt);
+        const fingerprint = generateEventFingerprint({
+          dominionLeadId: evt.dominionLeadId,
+          eventType: evt.eventType,
+          eventLayer: evt.eventLayer,
+          sourceName: evt.sourceName,
+          triggerEventDate: evt.triggerEventDate,
+        });
+        await db.insert(distressEvents).values({ ...evt, fingerprint })
+          .onConflictDoNothing({ target: [distressEvents.fingerprint] });
         eventsCreated++;
       }
 
@@ -486,10 +504,11 @@ async function main() {
         console.log(`  ⚡ ${processed} processed (${updated} updated, ${created} new) | ${eventsCreated} events | ${rate}/sec`);
       }
 
-    } catch (err: any) {
+    } catch (err: unknown) {
       errors++;
       if (errors <= 5) {
-        console.error(`  ❌ Error on line ${lineNum} (APN: ${apn}): ${err.message}`);
+        const message = err instanceof Error ? err.message : String(err);
+        console.error(`  ❌ Error on line ${lineNum} (APN: ${apn}): ${message}`);
       }
     }
   }

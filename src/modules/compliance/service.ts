@@ -4,7 +4,6 @@ import { auditLog } from '../../db/schema/index.js';
 import type { AuditLogEntry } from '../../db/schema/index.js';
 import { generateId } from '../../lib/index.js';
 import { domainEvents } from '../../events/bus.js';
-import { logger } from '../../config/logger.js';
 
 // ─── Audit Logging ─────────────────────────────────
 

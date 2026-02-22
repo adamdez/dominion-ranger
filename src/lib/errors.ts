@@ -33,3 +33,15 @@ export class AuthorizationError extends RangerError {
     super(message, 'UNAUTHORIZED', 403);
   }
 }
+
+export class ConcurrencyError extends RangerError {
+  constructor(resource: string, id: string) {
+    super(`Concurrent modification on ${resource} ${id}`, 'CONCURRENCY_ERROR', 409);
+  }
+}
+
+export class ComplianceError extends RangerError {
+  constructor(reason: string, dominionLeadId: string) {
+    super(`Compliance block: ${reason} for ${dominionLeadId}`, 'COMPLIANCE_ERROR', 403);
+  }
+}

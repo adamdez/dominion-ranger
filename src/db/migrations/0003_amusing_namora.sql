@@ -1,0 +1,1 @@
+ALTER TABLE "scoring_model_configs" ADD COLUMN "composite_weights" jsonb;

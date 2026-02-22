@@ -19,8 +19,10 @@ export const scoringRecords = pgTable(
       .notNull()
       .references(() => properties.dominionLeadId),
 
-    // Scores
+    // Charter-mandated tri-score model
     compositeScore: numeric('composite_score', { precision: 7, scale: 4 }).notNull(),
+    motivationScore: numeric('motivation_score', { precision: 7, scale: 4 }),
+    dealScore: numeric('deal_score', { precision: 7, scale: 4 }),
     confidenceScore: numeric('confidence_score', { precision: 5, scale: 4 }).notNull(),
 
     // Model versioning

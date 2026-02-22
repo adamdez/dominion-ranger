@@ -1,6 +1,7 @@
 import { domainEvents } from './bus.js';
 import { logger } from '../config/logger.js';
-import { logAudit } from '../modules/compliance/service.js';
+import { logAudit } from '../modules/compliance/index.js';
+import { createLeadInstance, getActiveLeadInstance } from '../modules/workflow/index.js';
 
 /**
  * Wire domain event handlers.
@@ -38,13 +39,22 @@ export function wireEventHandlers(): void {
     });
   });
 
-  // ─── Lead Promoted ─────────────────────────────
+  // ─── Lead Promoted → Create Lead Instance ──────
   domainEvents.on('lead.promoted', async ({ promotionId, dominionLeadId, compositeScore, marketingTier }) => {
     await logAudit({
       dominionLeadId,
       actionType: 'lead.promoted',
       metadata: { promotionId, compositeScore, marketingTier },
     });
+
+    try {
+      const existing = await getActiveLeadInstance(dominionLeadId);
+      if (!existing) {
+        await createLeadInstance({ dominionLeadId, promotionId });
+      }
+    } catch (err) {
+      logger.error({ err, dominionLeadId, promotionId }, 'Failed to create lead instance from promotion');
+    }
   });
 
   // ─── Sentinel Events ──────────────────────────

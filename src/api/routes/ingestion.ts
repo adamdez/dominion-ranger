@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { ingestionQueue } from '../../jobs/queues.js';
 import { getAllIngestionAdapters, getAllEnrichmentAdapters } from '../../ingestion/adapters/index.js';
 import { requireRole } from '../middleware/auth.js';
+import { ingestionRunBody } from '../schemas/ingestion.js';
 
 export async function ingestionRoutes(app: FastifyInstance): Promise<void> {
 
@@ -15,7 +16,8 @@ export async function ingestionRoutes(app: FastifyInstance): Promise<void> {
     '/api/ingestion/run',
     { preHandler: [requireRole('pipeline.run')] },
     async (request) => {
-      const { adapter, options } = request.body ?? {};
+      const body = ingestionRunBody.parse(request.body);
+      const { adapter, options } = body ?? {};
       const adapterName = adapter ?? '__all__';
 
       const job = await ingestionQueue.add('ingestion-run', {
