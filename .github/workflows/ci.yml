@@ -73,7 +73,7 @@ jobs:
       - name: Seed test database
         run: npx tsx src/db/seeds/run.ts
       - name: Apply append-only invariants
-        run: npx tsx -e "import { applyAppendOnlyInvariants } from './src/db/invariants.js'; await applyAppendOnlyInvariants();"
+        run: npx tsx scripts/apply-invariants.ts
       - run: npx vitest run tests/integration/
 
   migration-check:
@@ -108,4 +108,11 @@ jobs:
       - name: Run migrations
         run: npx drizzle-kit migrate
       - name: Verify no pending changes
-        run: npx drizzle-kit generate --dry-run 2>&1 | tee /dev/stderr | grep -q "No schema changes"
+        run: |
+          npx drizzle-kit generate 2>&1 | tee /tmp/drizzle-output.txt
+          if git diff --exit-code src/db/migrations/; then
+            echo "No pending migration changes detected"
+          else
+            echo "ERROR: Uncommitted migration changes detected. Run 'npx drizzle-kit generate' and commit."
+            exit 1
+          fi
