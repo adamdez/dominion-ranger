@@ -76,6 +76,21 @@ jobs:
         run: npx tsx scripts/apply-invariants.ts
       - run: npx vitest run tests/integration/
 
+  frontend-build:
+    name: Frontend Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - run: cd frontend && npm ci
+      - run: cd frontend && npm run lint
+      - run: cd frontend && npm run build
+
   migration-check:
     name: Migration Validation
     runs-on: ubuntu-latest

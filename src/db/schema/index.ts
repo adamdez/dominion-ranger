@@ -33,6 +33,9 @@ export type { ScoringModelConfig, NewScoringModelConfig } from './scoring-model-
 export { systemSettings } from './system-settings';
 export type { SystemSetting, NewSystemSetting } from './system-settings';
 
+export { dispositions } from './dispositions';
+export type { Disposition, NewDisposition } from './dispositions';
+
 // ─── Auth & Audit ──────────────────────────────────
 export { auditLog } from './audit-log';
 export type { AuditLogEntry, NewAuditLogEntry } from './audit-log';

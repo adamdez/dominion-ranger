@@ -93,6 +93,18 @@ export const leadInstanceStatusEnum = pgEnum('lead_instance_status', [
   'DEAD',
 ]);
 
+// ─── Dispositions ────────────────────────────────
+export const dispositionTypeEnum = pgEnum('disposition_type', [
+  'NO_ANSWER',
+  'LEFT_VOICEMAIL',
+  'CALLBACK_REQUESTED',
+  'NOT_INTERESTED',
+  'WRONG_NUMBER',
+  'DO_NOT_CALL',
+  'INTERESTED',
+  'APPOINTMENT_SET',
+]);
+
 // ─── RBAC ──────────────────────────────────────────
 export const userRoleEnum = pgEnum('user_role', [
   'ADMIN',

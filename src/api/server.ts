@@ -12,6 +12,7 @@ import { ingestionRoutes } from './routes/ingestion.js';
 import { systemRoutes } from './routes/system.js';
 import { enrichmentRoutes } from './routes/enrichment.js';
 import { scoringRoutes } from './routes/scoring.js';
+import { leadRoutes } from './routes/leads.js';
 import { RangerError } from '../lib/errors.js';
 import { ZodError } from 'zod';
 
@@ -24,7 +25,10 @@ export async function createServer() {
 
   // ─── Plugins ───────────────────────────────────
   await app.register(cors, {
-    origin: env.NODE_ENV === 'production' ? false : true,
+    origin: env.NODE_ENV === 'production'
+      ? (process.env.FRONTEND_URL ? [process.env.FRONTEND_URL] : false)
+      : true,
+    credentials: true,
   });
 
   await app.register(helmet);
@@ -79,6 +83,7 @@ export async function createServer() {
   await app.register(ingestionRoutes);
   await app.register(enrichmentRoutes);
   await app.register(scoringRoutes);
+  await app.register(leadRoutes);
 
   return app;
 }
