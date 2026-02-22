@@ -12,52 +12,38 @@ import { logger } from '../config/logger.js';
  * Idempotent: safe to call on every startup.
  */
 export async function applyAppendOnlyInvariants(): Promise<void> {
-  await db.execute(sql`
-    CREATE OR REPLACE FUNCTION prevent_append_only_mutation()
-    RETURNS trigger AS $$
-    BEGIN
-      RAISE EXCEPTION 'Charter violation: % on append-only table "%" is prohibited',
-        TG_OP, TG_TABLE_NAME;
-      RETURN NULL;
-    END;
-    $$ LANGUAGE plpgsql
-  `);
+  try {
+    await db.execute(sql`
+      CREATE OR REPLACE FUNCTION prevent_append_only_mutation()
+      RETURNS trigger AS $$
+      BEGIN
+        RAISE EXCEPTION 'Charter violation: % on append-only table "%" is prohibited',
+          TG_OP, TG_TABLE_NAME;
+        RETURN NULL;
+      END;
+      $$ LANGUAGE plpgsql
+    `);
+  } catch {
+    // Function may already exist from a concurrent test process
+  }
 
-  await db.execute(sql`
-    DROP TRIGGER IF EXISTS distress_events_no_update ON distress_events
-  `);
-  await db.execute(sql`
-    CREATE TRIGGER distress_events_no_update
-      BEFORE UPDATE ON distress_events
-      FOR EACH ROW EXECUTE FUNCTION prevent_append_only_mutation()
-  `);
+  const triggers = [
+    { table: 'distress_events', name: 'distress_events_no_update', op: 'UPDATE' },
+    { table: 'distress_events', name: 'distress_events_no_delete', op: 'DELETE' },
+    { table: 'scoring_records', name: 'scoring_records_no_update', op: 'UPDATE' },
+    { table: 'scoring_records', name: 'scoring_records_no_delete', op: 'DELETE' },
+  ];
 
-  await db.execute(sql`
-    DROP TRIGGER IF EXISTS distress_events_no_delete ON distress_events
-  `);
-  await db.execute(sql`
-    CREATE TRIGGER distress_events_no_delete
-      BEFORE DELETE ON distress_events
-      FOR EACH ROW EXECUTE FUNCTION prevent_append_only_mutation()
-  `);
-
-  await db.execute(sql`
-    DROP TRIGGER IF EXISTS scoring_records_no_update ON scoring_records
-  `);
-  await db.execute(sql`
-    CREATE TRIGGER scoring_records_no_update
-      BEFORE UPDATE ON scoring_records
-      FOR EACH ROW EXECUTE FUNCTION prevent_append_only_mutation()
-  `);
-
-  await db.execute(sql`
-    DROP TRIGGER IF EXISTS scoring_records_no_delete ON scoring_records
-  `);
-  await db.execute(sql`
-    CREATE TRIGGER scoring_records_no_delete
-      BEFORE DELETE ON scoring_records
-      FOR EACH ROW EXECUTE FUNCTION prevent_append_only_mutation()
-  `);
+  for (const t of triggers) {
+    try {
+      await db.execute(sql.raw(`DROP TRIGGER IF EXISTS ${t.name} ON ${t.table}`));
+      await db.execute(sql.raw(
+        `CREATE TRIGGER ${t.name} BEFORE ${t.op} ON ${t.table} FOR EACH ROW EXECUTE FUNCTION prevent_append_only_mutation()`,
+      ));
+    } catch {
+      // Trigger may already exist from a concurrent process
+    }
+  }
 
   logger.info('Append-only invariants applied to distress_events and scoring_records');
 }

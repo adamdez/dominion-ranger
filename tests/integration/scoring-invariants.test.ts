@@ -45,9 +45,9 @@ describe.skipIf(!canRun)('Scoring Record Invariants', () => {
   });
 
   beforeEach(async () => {
-    await db.execute(sql`ALTER TABLE scoring_records DISABLE TRIGGER ALL`);
+    await db.execute(sql`ALTER TABLE scoring_records DISABLE TRIGGER USER`);
     await db.execute(sql`DELETE FROM scoring_records`);
-    await db.execute(sql`ALTER TABLE scoring_records ENABLE TRIGGER ALL`);
+    await db.execute(sql`ALTER TABLE scoring_records ENABLE TRIGGER USER`);
   });
 
   describe('Append-Only Enforcement', () => {

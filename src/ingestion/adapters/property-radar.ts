@@ -1,6 +1,9 @@
 import type { IngestionAdapter, NormalizedRecord } from './interface.js';
+import type { DistressEvent } from '../../db/schema/index.js';
 import { logger } from '../../config/logger.js';
 import { env } from '../../config/env.js';
+
+type EventType = DistressEvent['eventType'];
 
 /**
  * PropertyRadar API adapter.
@@ -60,7 +63,7 @@ export class PropertyRadarAdapter implements IngestionAdapter {
     this.apiKey = env.PROPERTY_RADAR_API_KEY ?? '';
   }
 
-  async *fetchRecords(options?: Record<string, unknown>): AsyncGenerator<NormalizedRecord[], void, unknown> {
+  async *fetchRecords(_options?: Record<string, unknown>): AsyncGenerator<NormalizedRecord[], void, unknown> {
     if (!this.apiKey) {
       logger.warn('PropertyRadar API key not configured, skipping');
       return;
@@ -112,7 +115,7 @@ export class PropertyRadarAdapter implements IngestionAdapter {
     const events: NormalizedRecord['events'] = [];
     if (eventMapping) {
       events.push({
-        eventType: eventMapping.type as any,
+        eventType: eventMapping.type as EventType,
         eventLayer: eventMapping.layer,
         filingDate: raw.filing_date ? new Date(raw.filing_date) : null,
         recordedDate: raw.recorded_date ? new Date(raw.recorded_date) : null,

@@ -166,7 +166,7 @@ export async function systemRoutes(app: FastifyInstance): Promise<void> {
         LIMIT ${limit}
       `);
 
-      const leads = ((results as { rows?: unknown[] }).rows ?? results) as Record<string, unknown>[];
+      const leads = ((results as unknown as { rows?: Record<string, unknown>[] }).rows ?? []) as Record<string, unknown>[];
 
       return {
         leads,

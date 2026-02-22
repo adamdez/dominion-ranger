@@ -39,14 +39,14 @@ describe.skipIf(!canRun)('Scoring Replay Determinism', () => {
   });
 
   beforeEach(async () => {
-    await db.execute(sql`ALTER TABLE scoring_records DISABLE TRIGGER ALL`);
-    await db.execute(sql`ALTER TABLE distress_events DISABLE TRIGGER ALL`);
+    await db.execute(sql`ALTER TABLE scoring_records DISABLE TRIGGER USER`);
+    await db.execute(sql`ALTER TABLE distress_events DISABLE TRIGGER USER`);
     await db.execute(sql`DELETE FROM scoring_records`);
     await db.execute(sql`DELETE FROM signal_accumulation`);
     await db.execute(sql`DELETE FROM distress_events`);
     await db.execute(sql`DELETE FROM properties`);
-    await db.execute(sql`ALTER TABLE distress_events ENABLE TRIGGER ALL`);
-    await db.execute(sql`ALTER TABLE scoring_records ENABLE TRIGGER ALL`);
+    await db.execute(sql`ALTER TABLE distress_events ENABLE TRIGGER USER`);
+    await db.execute(sql`ALTER TABLE scoring_records ENABLE TRIGGER USER`);
 
     testPropertyId = generateId();
     await db.insert(properties).values({

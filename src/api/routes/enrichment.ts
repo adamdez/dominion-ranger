@@ -56,7 +56,7 @@ export async function enrichmentRoutes(app: FastifyInstance): Promise<void> {
           status: 'processing',
           message: `Enrichment pipeline started. Processing up to ${limit ?? BUSINESS_RULES.batch.defaultEnrichmentLimit} properties.`,
         });
-      } catch (err) {
+      } catch (err: unknown) {
         logger.error({ err }, 'Failed to start enrichment');
         return reply.code(500).send({
           error: 'ENRICHMENT_FAILED',
@@ -74,7 +74,7 @@ export async function enrichmentRoutes(app: FastifyInstance): Promise<void> {
       try {
         const balance = await getTracerFyBalance();
         return reply.send(balance);
-      } catch (err) {
+      } catch (err: unknown) {
         return reply.code(500).send({
           error: 'BALANCE_CHECK_FAILED',
           message: err instanceof Error ? err.message : 'Unknown error',
@@ -94,7 +94,7 @@ export async function enrichmentRoutes(app: FastifyInstance): Promise<void> {
         const { queueId } = dncScrubBody.parse(request.body);
         const result = await submitDncScrub(queueId);
         return reply.send(result);
-      } catch (err) {
+      } catch (err: unknown) {
         return reply.code(500).send({
           error: 'DNC_SCRUB_FAILED',
           message: err instanceof Error ? err.message : 'Unknown error',
@@ -114,7 +114,7 @@ export async function enrichmentRoutes(app: FastifyInstance): Promise<void> {
         const { queueId } = dncResultsParams.parse(request.params);
         const results = await getDncResults(queueId);
         return reply.send(results);
-      } catch (err) {
+      } catch (err: unknown) {
         return reply.code(500).send({
           error: 'DNC_RESULTS_FAILED',
           message: err instanceof Error ? err.message : 'Unknown error',

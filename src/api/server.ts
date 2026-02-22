@@ -89,7 +89,7 @@ export async function startServer() {
   try {
     await app.listen({ port: env.PORT, host: env.HOST });
     logger.info({ port: env.PORT, host: env.HOST }, 'Dominion Ranger API server started');
-  } catch (err) {
+  } catch (err: unknown) {
     logger.fatal({ err }, 'Failed to start server');
     process.exit(1);
   }

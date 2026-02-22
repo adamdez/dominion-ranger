@@ -32,7 +32,8 @@ export async function recalculateSignalAccumulation(dominionLeadId: string): Pro
     .from(distressEvents)
     .where(eq(distressEvents.dominionLeadId, dominionLeadId));
 
-  const firstSignalDate = firstSignal?.minDate ?? now;
+  const rawDate = firstSignal?.minDate;
+  const firstSignalDate = rawDate ? new Date(rawDate) : now;
 
   // Acceleration: ratio of 7d signals to 30d signals
   // High ratio = signals are accelerating recently

@@ -3,7 +3,6 @@ import { db } from '../../db/connection.js';
 import {
   systemSettings,
   promotedLeads,
-  properties,
   outcomeReservoir,
   auditLog,
 } from '../../db/schema/index.js';

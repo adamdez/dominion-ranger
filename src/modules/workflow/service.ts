@@ -4,7 +4,6 @@ import { leadInstances, properties, LeadStatus } from '../../db/schema/index.js'
 import type { LeadInstance } from '../../db/schema/index.js';
 import { generateId } from '../../lib/index.js';
 import { checkDnc, checkLitigator, logAudit } from '../compliance/index.js';
-import { domainEvents } from '../../events/bus.js';
 import { logger } from '../../config/logger.js';
 import { NotFoundError, ValidationError, ConcurrencyError, ComplianceError } from '../../lib/errors.js';
 
@@ -25,7 +24,7 @@ const VALID_TRANSITIONS: Record<string, LeadStatusType[]> = {
   [LeadStatus.DEAD]:                [],
 };
 
-const TERMINAL_STATUSES: LeadStatusType[] = [LeadStatus.CLOSED, LeadStatus.DEAD];
+const _TERMINAL_STATUSES: LeadStatusType[] = [LeadStatus.CLOSED, LeadStatus.DEAD];
 
 function isValidTransition(from: LeadStatusType, to: LeadStatusType): boolean {
   return VALID_TRANSITIONS[from]?.includes(to) ?? false;

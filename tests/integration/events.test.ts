@@ -38,9 +38,9 @@ describe.skipIf(!canRun)('Event Store Integrity', () => {
   });
 
   beforeEach(async () => {
-    await db.execute(sql`ALTER TABLE distress_events DISABLE TRIGGER ALL`);
+    await db.execute(sql`ALTER TABLE distress_events DISABLE TRIGGER USER`);
     await db.execute(sql`DELETE FROM distress_events`);
-    await db.execute(sql`ALTER TABLE distress_events ENABLE TRIGGER ALL`);
+    await db.execute(sql`ALTER TABLE distress_events ENABLE TRIGGER USER`);
   });
 
   describe('Fingerprint Dedup', () => {

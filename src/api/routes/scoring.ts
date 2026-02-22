@@ -156,7 +156,7 @@ export async function scoringRoutes(app: FastifyInstance): Promise<void> {
         ) latest_scores
       `);
 
-      const rows = (result as { rows?: Record<string, unknown>[] }).rows ?? [];
+      const rows = (result as unknown as { rows?: Record<string, unknown>[] }).rows ?? [];
       const stats = rows[0] ?? {};
       return reply.send(stats);
     },
