@@ -1,5 +1,5 @@
-import type { PropertyData } from '../modules/properties/service.js';
-import type { DistressEventInput } from '../modules/distress-events/service.js';
+import type { PropertyData } from '../../modules/properties/service.js';
+import type { DistressEventInput } from '../../modules/distress-events/service.js';
 
 /**
  * Normalized record from any data source adapter.

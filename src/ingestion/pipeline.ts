@@ -79,7 +79,7 @@ export async function runAdapterPipeline(adapterName: string, options?: Record<s
 
   await logAudit({
     actionType: 'pipeline.run_completed',
-    metadata: stats,
+    metadata: stats as unknown as Record<string, unknown>,
   });
 
   logger.info({ stats }, 'Pipeline run completed');

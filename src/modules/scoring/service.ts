@@ -143,6 +143,8 @@ export async function scoreProperty(dominionLeadId: string): Promise<ScoringResu
   const equityConfig = (config.equityMultiplierConfig as EquityMultiplierConfig | null) ?? DEFAULT_EQUITY_CONFIG;
   const dealWeights = (config.dealScoreWeights as DealScoreWeights | null) ?? DEFAULT_DEAL_WEIGHTS;
   const suppressionConfig = (config.suppressionConfig as SuppressionConfig | null) ?? null;
+  const compositeWeights = (config.compositeWeights as { motivation_weight: number; deal_weight: number } | null)
+    ?? { motivation_weight: 0.65, deal_weight: 0.35 };
   const now = new Date();
 
   const [property] = await db
@@ -237,7 +239,7 @@ export async function scoreProperty(dominionLeadId: string): Promise<ScoringResu
   const equityMultiplier = resolveEquityMultiplier(property.equityEstimate, equityConfig);
 
   // ── Composite: weighted combination ──
-  const rawComposite = (motivationScore * 0.65 + dealScore * 0.35);
+  const rawComposite = (motivationScore * compositeWeights.motivation_weight + dealScore * compositeWeights.deal_weight);
   const compositeScore = Math.min(100, rawComposite * equityMultiplier);
 
   // ── Confidence (independent) ──

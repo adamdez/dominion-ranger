@@ -106,6 +106,11 @@ export async function seedScoringModel(): Promise<void> {
       },
     },
 
+    compositeWeights: {
+      motivation_weight: 0.65,
+      deal_weight: 0.35,
+    },
+
     suppressionConfig: {
       mortgage_statuses: [],
       custom_flags: [],

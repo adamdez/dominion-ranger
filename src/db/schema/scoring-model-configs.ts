@@ -47,6 +47,9 @@ export const scoringModelConfigs = pgTable('scoring_model_configs', {
   // Deal score: weights for property economics factors
   dealScoreWeights: jsonb('deal_score_weights'),
 
+  // Composite score weights: motivation vs deal score ratio
+  compositeWeights: jsonb('composite_weights'),
+
   // Negative-stack suppression: conditions that zero-out a property
   suppressionConfig: jsonb('suppression_config'),
 

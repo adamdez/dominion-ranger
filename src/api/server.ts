@@ -44,7 +44,7 @@ export async function createServer() {
   });
 
   // ─── Error Handler ─────────────────────────────
-  app.setErrorHandler((error, request, reply) => {
+  app.setErrorHandler((error: Error, request, reply) => {
     if (error instanceof RangerError) {
       logger.warn({ err: error, url: request.url }, 'Ranger error');
       reply.code(error.statusCode).send({

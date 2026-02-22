@@ -22,6 +22,13 @@
       "when": 1771736004148,
       "tag": "0002_smiling_mandarin",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1771783638916,
+      "tag": "0003_amusing_namora",
+      "breakpoints": true
     }
   ]
 }

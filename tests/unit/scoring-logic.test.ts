@@ -224,3 +224,55 @@ describe('Deal Score Components', () => {
     expect(score).toBeLessThan(50);
   });
 });
+
+describe('Composite Score Weights (Config-Driven)', () => {
+  function computeComposite(
+    motivationScore: number,
+    dealScore: number,
+    weights: { motivation_weight: number; deal_weight: number },
+    equityMultiplier: number = 1.0,
+  ): number {
+    const raw = motivationScore * weights.motivation_weight + dealScore * weights.deal_weight;
+    return Math.min(100, raw * equityMultiplier);
+  }
+
+  it('uses config weights instead of hardcoded 0.65/0.35', () => {
+    const customWeights = { motivation_weight: 0.80, deal_weight: 0.20 };
+    const defaultWeights = { motivation_weight: 0.65, deal_weight: 0.35 };
+
+    const motivation = 70;
+    const deal = 50;
+
+    const customResult = computeComposite(motivation, deal, customWeights);
+    const defaultResult = computeComposite(motivation, deal, defaultWeights);
+
+    expect(customResult).not.toBe(defaultResult);
+    expect(customResult).toBeCloseTo(70 * 0.80 + 50 * 0.20, 4);
+    expect(defaultResult).toBeCloseTo(70 * 0.65 + 50 * 0.35, 4);
+  });
+
+  it('default weights produce expected 65/35 split', () => {
+    const weights = { motivation_weight: 0.65, deal_weight: 0.35 };
+    const result = computeComposite(80, 60, weights);
+    expect(result).toBeCloseTo(80 * 0.65 + 60 * 0.35, 4);
+  });
+
+  it('weights summing to 1.0 produce bounded output', () => {
+    const weights = { motivation_weight: 0.50, deal_weight: 0.50 };
+    const result = computeComposite(100, 100, weights);
+    expect(result).toBe(100);
+  });
+
+  it('applies equity multiplier after weighting', () => {
+    const weights = { motivation_weight: 0.65, deal_weight: 0.35 };
+    const withoutMult = computeComposite(80, 60, weights, 1.0);
+    const withMult = computeComposite(80, 60, weights, 1.15);
+    expect(withMult).toBeCloseTo(withoutMult * 1.15, 4);
+  });
+
+  it('caps at 100 even with high multiplier', () => {
+    const weights = { motivation_weight: 0.65, deal_weight: 0.35 };
+    const result = computeComposite(100, 100, weights, 2.0);
+    expect(result).toBe(100);
+  });
+});

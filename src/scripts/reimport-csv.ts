@@ -335,7 +335,6 @@ async function main() {
             absenteeOwner: isAbsentee,
             equityEstimate: estEquityDollar?.toString() || undefined,
             ownershipDurationMonths: ownershipMonths,
-            propertyAttributes: attrJson,
             updatedAt: new Date(),
           }).where(eq(properties.dominionLeadId, dominionLeadId));
           updated++;
@@ -366,7 +365,6 @@ async function main() {
           equityEstimate: estEquityDollar?.toString() || null,
           ownershipDurationMonths: ownershipMonths,
           mortgageStatus: 'UNKNOWN',
-          propertyAttributes: attrJson,
         });
         created++;
       }
