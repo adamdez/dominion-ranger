@@ -21,16 +21,20 @@ async function main(): Promise<void> {
   }
   logger.info('Database connected');
 
-  // Step 2: Initialize data source adapters
+  // Step 2: Apply database invariants (append-only triggers)
+  const { applyAppendOnlyInvariants } = await import('./db/invariants.js');
+  await applyAppendOnlyInvariants();
+
+  // Step 3: Initialize data source adapters
   initializeAdapters();
 
-  // Step 3: Wire domain event handlers
+  // Step 4: Wire domain event handlers
   wireEventHandlers();
 
- // Step 3.5: Start BullMQ workers
+  // Step 5: Start BullMQ workers
   await startWorkers();
 
-  // Step 4: Schedule recurring jobs
+  // Step 6: Schedule recurring jobs
   try {
     await scheduleIngestionJobs();
     logger.info('Ingestion jobs scheduled');
@@ -39,7 +43,7 @@ async function main(): Promise<void> {
     logger.warn({ err }, 'Could not schedule BullMQ jobs (Redis may be unavailable)');
   }
 
-  // Step 5: Start API server
+  // Step 7: Start API server
   const app = await startServer();
 
   // ─── Graceful Shutdown ─────────────────────────

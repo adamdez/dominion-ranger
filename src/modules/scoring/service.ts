@@ -5,8 +5,9 @@ import {
   scoringModelConfigs,
   distressEvents,
   signalAccumulation,
+  properties,
 } from '../../db/schema/index.js';
-import type { ScoringRecord, ScoringModelConfig, DistressEvent } from '../../db/schema/index.js';
+import type { ScoringRecord, ScoringModelConfig, DistressEvent, Property } from '../../db/schema/index.js';
 import { generateId, exponentialDecay, daysBetween } from '../../lib/index.js';
 import { domainEvents } from '../../events/bus.js';
 import { logger } from '../../config/logger.js';
@@ -16,6 +17,7 @@ import { logger } from '../../config/logger.js';
 interface WeightEntry {
   base_weight: number;
   half_life_days: number;
+  severity?: number;
 }
 
 interface DecayConfig {
@@ -30,10 +32,31 @@ interface ConfidenceConfig {
   source_count_weight: number;
 }
 
-interface TierThresholds {
-  A: number;
-  B: number;
-  C: number;
+interface EquityMultiplierRange {
+  min: number;
+  max?: number;
+  multiplier: number;
+}
+
+interface EquityMultiplierConfig {
+  ranges: EquityMultiplierRange[];
+  default_multiplier: number;
+}
+
+interface DealScoreWeights {
+  equity_weight: number;
+  ownership_weight: number;
+  absentee_weight: number;
+  mortgage_weight: number;
+  equity_thresholds: { low: number; mid: number; high: number };
+  ownership_thresholds: { short_months: number; long_months: number };
+  mortgage_severity: Record<string, number>;
+}
+
+interface SuppressionConfig {
+  mortgage_statuses?: string[];
+  max_ownership_months?: number;
+  custom_flags?: string[];
 }
 
 interface SignalContribution {
@@ -41,6 +64,7 @@ interface SignalContribution {
   eventType: string;
   eventLayer: string;
   baseWeight: number;
+  severityMultiplier: number;
   reliabilityScore: number;
   timeDecay: number;
   finalContribution: number;
@@ -49,7 +73,12 @@ interface SignalContribution {
 
 export interface ScoringResult {
   compositeScore: number;
+  motivationScore: number;
+  dealScore: number;
   confidenceScore: number;
+  equityMultiplier: number;
+  suppressed: boolean;
+  suppressionReason: string | null;
   signalContributions: SignalContribution[];
   timeDecayFactor: number;
   scoreDecayRate: number;
@@ -62,7 +91,7 @@ export interface ScoringResult {
 
 let cachedConfig: ScoringModelConfig | null = null;
 let configLoadedAt: number = 0;
-const CONFIG_TTL_MS = 60_000; // Reload config every 60s
+const CONFIG_TTL_MS = 60_000;
 
 async function getActiveConfig(): Promise<ScoringModelConfig> {
   const now = Date.now();
@@ -93,17 +122,17 @@ export function invalidateConfigCache(): void {
 // ─── Core Scoring ──────────────────────────────────
 
 /**
- * Score a property based on all its distress events.
+ * Score a property using the Charter-mandated tri-score model:
  *
- * Algorithm:
- * 1. Load active scoring config
- * 2. Fetch all events for property (within scoring window)
- * 3. For each event: contribution = base_weight × reliability × time_decay
- * 4. Sum contributions → raw score
- * 5. Apply signal accumulation bonuses
- * 6. Normalize to 0–100 range
- * 7. Calculate confidence independently
- * 8. Store versioned scoring record (append-only)
+ *   Motivation Score — distress signal intensity (urgency to sell)
+ *   Deal Score — property economics viability (equity, ownership, market)
+ *   Composite Score — weighted combination × equity multiplier
+ *
+ * Includes:
+ *   - Config-driven severity multipliers per event type
+ *   - Config-driven equity multiplier based on equity range
+ *   - Negative-stack suppression check before scoring
+ *   - Versioned, append-only scoring records
  */
 export async function scoreProperty(dominionLeadId: string): Promise<ScoringResult> {
   const config = await getActiveConfig();
@@ -111,9 +140,28 @@ export async function scoreProperty(dominionLeadId: string): Promise<ScoringResu
   const predictiveWeights = config.predictiveWeights as Record<string, WeightEntry>;
   const decayConfig = config.decayConfig as DecayConfig;
   const confidenceConfig = config.confidenceConfig as ConfidenceConfig;
+  const equityConfig = (config.equityMultiplierConfig as EquityMultiplierConfig | null) ?? DEFAULT_EQUITY_CONFIG;
+  const dealWeights = (config.dealScoreWeights as DealScoreWeights | null) ?? DEFAULT_DEAL_WEIGHTS;
+  const suppressionConfig = (config.suppressionConfig as SuppressionConfig | null) ?? null;
   const now = new Date();
 
-  // Fetch events (last 365 days for scoring window)
+  const [property] = await db
+    .select()
+    .from(properties)
+    .where(eq(properties.dominionLeadId, dominionLeadId));
+
+  if (!property) {
+    return createZeroScore(dominionLeadId, config.version);
+  }
+
+  // Negative-stack suppression check
+  const suppressionReason = checkSuppression(property, suppressionConfig);
+  if (suppressionReason) {
+    const result = createSuppressedScore(dominionLeadId, config.version, suppressionReason);
+    await storeScoringRecord(dominionLeadId, result, config.version);
+    return result;
+  }
+
   const events = await db
     .select()
     .from(distressEvents)
@@ -124,13 +172,12 @@ export async function scoreProperty(dominionLeadId: string): Promise<ScoringResu
     return createZeroScore(dominionLeadId, config.version);
   }
 
-  // Fetch signal accumulation
   const [signals] = await db
     .select()
     .from(signalAccumulation)
     .where(eq(signalAccumulation.dominionLeadId, dominionLeadId));
 
-  // Calculate per-event contributions
+  // ── Motivation Score (distress signal intensity) ──
   const contributions: SignalContribution[] = [];
   let totalContribution = 0;
   let earliestTrigger: Date | null = null;
@@ -151,8 +198,9 @@ export async function scoreProperty(dominionLeadId: string): Promise<ScoringResu
     const days = daysBetween(referenceDate, now);
     const decay = exponentialDecay(days, weightEntry.half_life_days, decayConfig.floor);
     const reliability = parseFloat(event.reliabilityScore);
+    const severity = weightEntry.severity ?? 1.0;
 
-    const contribution = weightEntry.base_weight * reliability * decay;
+    const contribution = weightEntry.base_weight * reliability * decay * severity;
     totalContribution += contribution;
 
     if (!earliestTrigger || referenceDate < earliestTrigger) {
@@ -164,6 +212,7 @@ export async function scoreProperty(dominionLeadId: string): Promise<ScoringResu
       eventType: event.eventType,
       eventLayer: event.eventLayer,
       baseWeight: weightEntry.base_weight,
+      severityMultiplier: severity,
       reliabilityScore: reliability,
       timeDecay: decay,
       finalContribution: contribution,
@@ -171,7 +220,6 @@ export async function scoreProperty(dominionLeadId: string): Promise<ScoringResu
     });
   }
 
-  // Signal accumulation bonus
   const accelerationBonus = signals
     ? parseFloat(signals.signalAccelerationRate ?? '0') * 0.05
     : 0;
@@ -180,12 +228,19 @@ export async function scoreProperty(dominionLeadId: string): Promise<ScoringResu
     : 0;
 
   totalContribution *= (1 + accelerationBonus + densityBonus);
+  const motivationScore = Math.min(100, (totalContribution / 3.0) * 100);
 
-  // Normalize to 0–100
-  // Max theoretical score ~ 5.0 for extreme multi-signal confirmed distress
-  const compositeScore = Math.min(100, (totalContribution / 3.0) * 100);
+  // ── Deal Score (property economics) ──
+  const dealScore = calculateDealScore(property, dealWeights);
 
-  // Confidence scoring (independent of composite)
+  // ── Equity Multiplier ──
+  const equityMultiplier = resolveEquityMultiplier(property.equityEstimate, equityConfig);
+
+  // ── Composite: weighted combination ──
+  const rawComposite = (motivationScore * 0.65 + dealScore * 0.35);
+  const compositeScore = Math.min(100, rawComposite * equityMultiplier);
+
+  // ── Confidence (independent) ──
   const confidence = calculateConfidence(
     events.length,
     uniqueTypes.size,
@@ -194,57 +249,19 @@ export async function scoreProperty(dominionLeadId: string): Promise<ScoringResu
     confidenceConfig,
   );
 
-  // Average time decay across contributions
   const avgDecay = contributions.length > 0
     ? contributions.reduce((sum, c) => sum + c.timeDecay, 0) / contributions.length
     : 0;
-
   const daysSinceTrigger = earliestTrigger ? daysBetween(earliestTrigger, now) : 0;
 
-  // Store scoring record (append-only, versioned)
-  const scoreId = generateId();
-  await db.insert(scoringRecords).values({
-    scoreId,
-    dominionLeadId,
-    compositeScore: compositeScore.toFixed(4),
-    confidenceScore: confidence.toFixed(4),
-    scoreModelVersion: config.version,
-    scoreInputsSnapshot: {
-      eventCount: events.length,
-      uniqueTypes: Array.from(uniqueTypes),
-      uniqueSources: Array.from(uniqueSources),
-      hasConfirmedEvent,
-      accelerationBonus,
-      densityBonus,
-    },
-    signalContributions: contributions,
-    timeDecayFactor: avgDecay.toFixed(4),
-    scoreDecayRate: (1 - avgDecay).toFixed(4),
-    daysSinceTrigger,
-    firstDetectedAt: earliestTrigger,
-    lastScoredAt: now,
-  });
-
-  logger.info(
-    {
-      dominionLeadId,
-      compositeScore: compositeScore.toFixed(2),
-      confidence: confidence.toFixed(2),
-      eventCount: events.length,
-      modelVersion: config.version,
-    },
-    'Property scored',
-  );
-
-  domainEvents.emit('scoring.completed', {
-    dominionLeadId,
-    scoreId,
+  const result: ScoringResult = {
     compositeScore,
-  });
-
-  return {
-    compositeScore,
+    motivationScore,
+    dealScore,
     confidenceScore: confidence,
+    equityMultiplier,
+    suppressed: false,
+    suppressionReason: null,
     signalContributions: contributions,
     timeDecayFactor: avgDecay,
     scoreDecayRate: 1 - avgDecay,
@@ -252,6 +269,98 @@ export async function scoreProperty(dominionLeadId: string): Promise<ScoringResu
     firstDetectedAt: earliestTrigger,
     modelVersion: config.version,
   };
+
+  await storeScoringRecord(dominionLeadId, result, config.version);
+
+  logger.info(
+    {
+      dominionLeadId,
+      composite: compositeScore.toFixed(2),
+      motivation: motivationScore.toFixed(2),
+      deal: dealScore.toFixed(2),
+      equityMult: equityMultiplier.toFixed(2),
+      confidence: confidence.toFixed(2),
+      eventCount: events.length,
+      modelVersion: config.version,
+    },
+    'Property scored (tri-score)',
+  );
+
+  domainEvents.emit('scoring.completed', {
+    dominionLeadId,
+    scoreId: generateId(),
+    compositeScore,
+  });
+
+  return result;
+}
+
+// ─── Sub-Score Calculators ─────────────────────────
+
+function calculateDealScore(property: Property, weights: DealScoreWeights): number {
+  let score = 0;
+
+  // Equity factor
+  const equity = property.equityEstimate ? parseFloat(property.equityEstimate) : 0;
+  const { low, mid, high } = weights.equity_thresholds;
+  let equityFactor = 0;
+  if (equity >= high) equityFactor = 1.0;
+  else if (equity >= mid) equityFactor = 0.7;
+  else if (equity >= low) equityFactor = 0.4;
+  else equityFactor = 0.15;
+  score += equityFactor * weights.equity_weight;
+
+  // Ownership duration factor (long ownership = more motivated to sell)
+  const months = property.ownershipDurationMonths ?? 0;
+  const { short_months, long_months } = weights.ownership_thresholds;
+  let ownershipFactor = 0;
+  if (months >= long_months) ownershipFactor = 1.0;
+  else if (months >= short_months) ownershipFactor = 0.5;
+  else ownershipFactor = 0.2;
+  score += ownershipFactor * weights.ownership_weight;
+
+  // Absentee owner bonus
+  if (property.absenteeOwner) {
+    score += weights.absentee_weight;
+  }
+
+  // Mortgage status factor
+  const mortgageStatus = property.mortgageStatus ?? 'UNKNOWN';
+  const mortgageFactor = weights.mortgage_severity[mortgageStatus] ?? 0;
+  score += mortgageFactor * weights.mortgage_weight;
+
+  return Math.min(100, score * 100);
+}
+
+function resolveEquityMultiplier(equityEstimate: string | null, config: EquityMultiplierConfig): number {
+  if (!equityEstimate) return config.default_multiplier;
+
+  const equity = parseFloat(equityEstimate);
+  if (isNaN(equity)) return config.default_multiplier;
+
+  for (const range of config.ranges) {
+    const aboveMin = equity >= range.min;
+    const belowMax = range.max === undefined || equity < range.max;
+    if (aboveMin && belowMax) return range.multiplier;
+  }
+
+  return config.default_multiplier;
+}
+
+function checkSuppression(property: Property, config: SuppressionConfig | null): string | null {
+  if (!config) return null;
+
+  if (config.mortgage_statuses?.includes(property.mortgageStatus ?? '')) {
+    return `Suppressed: mortgage status ${property.mortgageStatus}`;
+  }
+
+  if (config.max_ownership_months && property.ownershipDurationMonths) {
+    if (property.ownershipDurationMonths < config.max_ownership_months) {
+      return `Suppressed: ownership duration ${property.ownershipDurationMonths}mo < ${config.max_ownership_months}mo minimum`;
+    }
+  }
+
+  return null;
 }
 
 function calculateConfidence(
@@ -262,29 +371,102 @@ function calculateConfidence(
   config: ConfidenceConfig,
 ): number {
   let confidence = 0;
-
-  // Base confidence from signal count (diminishing returns)
   const signalFactor = Math.min(eventCount / config.min_signals_for_high, 1.0);
   confidence += signalFactor * 0.4;
-
-  // Diversity bonus
   confidence += Math.min(typeCount * config.diversity_bonus, 0.2);
-
-  // Source diversity
   confidence += Math.min(sourceCount * config.source_count_weight, 0.15);
-
-  // Confirmed event presence is a strong confidence signal
-  if (hasConfirmed) {
-    confidence += config.confirmed_presence_bonus;
-  }
-
+  if (hasConfirmed) confidence += config.confirmed_presence_bonus;
   return Math.min(confidence, 1.0);
 }
+
+// ─── Storage ───────────────────────────────────────
+
+async function storeScoringRecord(dominionLeadId: string, result: ScoringResult, modelVersion: string): Promise<void> {
+  const scoreId = generateId();
+  await db.insert(scoringRecords).values({
+    scoreId,
+    dominionLeadId,
+    compositeScore: result.compositeScore.toFixed(4),
+    motivationScore: result.motivationScore.toFixed(4),
+    dealScore: result.dealScore.toFixed(4),
+    confidenceScore: result.confidenceScore.toFixed(4),
+    scoreModelVersion: modelVersion,
+    scoreInputsSnapshot: {
+      eventCount: result.signalContributions.length,
+      uniqueTypes: [...new Set(result.signalContributions.map((c) => c.eventType))],
+      uniqueSources: [...new Set(result.signalContributions.map((c) => c.eventId))],
+      hasConfirmedEvent: result.signalContributions.some((c) => c.eventLayer === 'confirmed'),
+      equityMultiplier: result.equityMultiplier,
+      suppressed: result.suppressed,
+      suppressionReason: result.suppressionReason,
+    },
+    signalContributions: result.signalContributions,
+    timeDecayFactor: result.timeDecayFactor.toFixed(4),
+    scoreDecayRate: result.scoreDecayRate.toFixed(4),
+    daysSinceTrigger: result.daysSinceTrigger,
+    firstDetectedAt: result.firstDetectedAt,
+    lastScoredAt: new Date(),
+  });
+}
+
+// ─── Defaults ──────────────────────────────────────
+
+const DEFAULT_EQUITY_CONFIG: EquityMultiplierConfig = {
+  ranges: [
+    { min: 0, max: 25000, multiplier: 0.7 },
+    { min: 25000, max: 75000, multiplier: 0.85 },
+    { min: 75000, max: 200000, multiplier: 1.0 },
+    { min: 200000, multiplier: 1.15 },
+  ],
+  default_multiplier: 1.0,
+};
+
+const DEFAULT_DEAL_WEIGHTS: DealScoreWeights = {
+  equity_weight: 0.35,
+  ownership_weight: 0.25,
+  absentee_weight: 0.15,
+  mortgage_weight: 0.25,
+  equity_thresholds: { low: 25000, mid: 75000, high: 200000 },
+  ownership_thresholds: { short_months: 24, long_months: 120 },
+  mortgage_severity: {
+    FREE_AND_CLEAR: 0.3,
+    CURRENT: 0.2,
+    LATE_30: 0.5,
+    LATE_60: 0.7,
+    LATE_90: 0.85,
+    DEFAULT: 0.95,
+    FORECLOSURE: 1.0,
+    UNKNOWN: 0.1,
+  },
+};
 
 function createZeroScore(dominionLeadId: string, modelVersion: string): ScoringResult {
   return {
     compositeScore: 0,
+    motivationScore: 0,
+    dealScore: 0,
     confidenceScore: 0,
+    equityMultiplier: 1.0,
+    suppressed: false,
+    suppressionReason: null,
+    signalContributions: [],
+    timeDecayFactor: 0,
+    scoreDecayRate: 1,
+    daysSinceTrigger: 0,
+    firstDetectedAt: null,
+    modelVersion,
+  };
+}
+
+function createSuppressedScore(dominionLeadId: string, modelVersion: string, reason: string): ScoringResult {
+  return {
+    compositeScore: 0,
+    motivationScore: 0,
+    dealScore: 0,
+    confidenceScore: 0,
+    equityMultiplier: 1.0,
+    suppressed: true,
+    suppressionReason: reason,
     signalContributions: [],
     timeDecayFactor: 0,
     scoreDecayRate: 1,
@@ -296,9 +478,6 @@ function createZeroScore(dominionLeadId: string, modelVersion: string): ScoringR
 
 // ─── Query Helpers ─────────────────────────────────
 
-/**
- * Get the latest scoring record for a property.
- */
 export async function getLatestScore(dominionLeadId: string): Promise<ScoringRecord | null> {
   const [record] = await db
     .select()
@@ -309,9 +488,6 @@ export async function getLatestScore(dominionLeadId: string): Promise<ScoringRec
   return record ?? null;
 }
 
-/**
- * Get scoring history for a property (for trend analysis).
- */
 export async function getScoringHistory(
   dominionLeadId: string,
   limit: number = 20,

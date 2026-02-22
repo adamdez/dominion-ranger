@@ -1,7 +1,7 @@
 import { eq, and, sql } from 'drizzle-orm';
 import { db } from '../../db/connection.js';
 import { properties } from '../../db/schema/index.js';
-import type { Property, NewProperty } from '../../db/schema/index.js';
+import type { Property } from '../../db/schema/index.js';
 import { generateId, standardizeAddress } from '../../lib/index.js';
 import { NotFoundError } from '../../lib/errors.js';
 import { domainEvents } from '../../events/bus.js';
@@ -31,41 +31,94 @@ export interface PropertyData extends PropertyIdentity {
 }
 
 /**
- * Find or create a property. This is the primary identity resolution path.
+ * Charter-mandated atomic upsert for property identity resolution.
  *
- * Resolution order:
- * 1. APN + County (strongest — parcel-level unique)
- * 2. If no match, create new property with UUID v7 dominion_lead_id
+ * When APN + County present: INSERT ... ON CONFLICT (apn, county) DO UPDATE
+ * When either absent: INSERT only (no identity dedup possible)
  *
- * The dominion_lead_id is immutable once created. This is charter-mandated.
+ * Never uses SELECT-then-INSERT. The dominion_lead_id is immutable once assigned.
  */
 export async function findOrCreateProperty(data: PropertyData): Promise<{ property: Property; created: boolean }> {
-  // Attempt match on APN + County
   if (data.apn && data.county) {
-    const existing = await db
-      .select()
-      .from(properties)
-      .where(and(eq(properties.apn, data.apn), eq(properties.county, data.county)))
-      .limit(1);
+    return atomicUpsertByApnCounty(data);
+  }
+  return insertNewProperty(data);
+}
 
-    if (existing.length > 0) {
-      // Update enrichable fields (never overwrite dominion_lead_id)
-      const updated = await updatePropertyFields(existing[0].dominionLeadId, data);
-      return { property: updated, created: false };
-    }
+async function atomicUpsertByApnCounty(data: PropertyData): Promise<{ property: Property; created: boolean }> {
+  const candidateId = generateId();
+  const candidatePropertyId = generateId();
+  const standardized = buildStandardizedAddress(data);
+
+  const [result] = await db
+    .insert(properties)
+    .values({
+      dominionLeadId: candidateId,
+      propertyId: candidatePropertyId,
+      apn: data.apn!,
+      county: data.county!,
+      state: data.state ?? null,
+      standardizedAddress: standardized,
+      streetAddress: data.streetAddress ?? null,
+      city: data.city ?? null,
+      zip: data.zip ?? null,
+      ownerName: data.ownerName ?? null,
+      ownerFirst: data.ownerFirst ?? null,
+      ownerLast: data.ownerLast ?? null,
+      phone: data.phone ?? null,
+      email: data.email ?? null,
+      mailingAddress: data.mailingAddress ?? null,
+      ownershipDurationMonths: data.ownershipDurationMonths ?? null,
+      absenteeOwner: data.absenteeOwner ?? false,
+      equityEstimate: data.equityEstimate ?? null,
+      mortgageStatus: data.mortgageStatus ?? 'UNKNOWN',
+    })
+    .onConflictDoUpdate({
+      target: [properties.apn, properties.county],
+      set: {
+        phone: sql`COALESCE(excluded.phone, ${properties.phone})`,
+        email: sql`COALESCE(excluded.email, ${properties.email})`,
+        mailingAddress: sql`COALESCE(excluded.mailing_address, ${properties.mailingAddress})`,
+        ownerFirst: sql`COALESCE(excluded.owner_first, ${properties.ownerFirst})`,
+        ownerLast: sql`COALESCE(excluded.owner_last, ${properties.ownerLast})`,
+        ownerName: sql`COALESCE(excluded.owner_name, ${properties.ownerName})`,
+        equityEstimate: sql`COALESCE(excluded.equity_estimate, ${properties.equityEstimate})`,
+        ownershipDurationMonths: sql`COALESCE(excluded.ownership_duration_months, ${properties.ownershipDurationMonths})`,
+        absenteeOwner: sql`COALESCE(excluded.absentee_owner, ${properties.absenteeOwner})`,
+        mortgageStatus: sql`COALESCE(excluded.mortgage_status, ${properties.mortgageStatus})`,
+        standardizedAddress: sql`COALESCE(excluded.standardized_address, ${properties.standardizedAddress})`,
+        streetAddress: sql`COALESCE(excluded.street_address, ${properties.streetAddress})`,
+        city: sql`COALESCE(excluded.city, ${properties.city})`,
+        zip: sql`COALESCE(excluded.zip, ${properties.zip})`,
+        state: sql`COALESCE(excluded.state, ${properties.state})`,
+        updatedAt: new Date(),
+      },
+    })
+    .returning();
+
+  const created = result.dominionLeadId === candidateId;
+
+  if (created) {
+    logger.info({ dominionLeadId: result.dominionLeadId, apn: data.apn, county: data.county }, 'Property created');
+    domainEvents.emit('property.created', { dominionLeadId: result.dominionLeadId });
+  } else {
+    const enrichableFields = [
+      'phone', 'email', 'mailingAddress', 'ownerFirst', 'ownerLast', 'ownerName',
+      'equityEstimate', 'ownershipDurationMonths', 'absenteeOwner', 'mortgageStatus',
+      'standardizedAddress', 'streetAddress', 'city', 'zip', 'state',
+    ];
+    domainEvents.emit('property.updated', { dominionLeadId: result.dominionLeadId, fields: enrichableFields });
   }
 
-  // No match — create new property
+  return { property: result, created };
+}
+
+async function insertNewProperty(data: PropertyData): Promise<{ property: Property; created: boolean }> {
   const dominionLeadId = generateId();
   const propertyId = generateId();
+  const standardized = buildStandardizedAddress(data);
 
-  const standardized = data.streetAddress
-    ? standardizeAddress(
-        [data.streetAddress, data.city, data.state, data.zip].filter(Boolean).join(', '),
-      )
-    : null;
-
-  const newProp: NewProperty = {
+  const [created] = await db.insert(properties).values({
     dominionLeadId,
     propertyId,
     apn: data.apn ?? null,
@@ -85,59 +138,19 @@ export async function findOrCreateProperty(data: PropertyData): Promise<{ proper
     absenteeOwner: data.absenteeOwner ?? false,
     equityEstimate: data.equityEstimate ?? null,
     mortgageStatus: data.mortgageStatus ?? 'UNKNOWN',
-  };
-
-  const [created] = await db.insert(properties).values(newProp).returning();
+  }).returning();
 
   logger.info({ dominionLeadId, apn: data.apn, county: data.county }, 'Property created');
   domainEvents.emit('property.created', { dominionLeadId });
-
   return { property: created, created: true };
 }
 
-/**
- * Update enrichable fields on an existing property.
- * Only updates fields that are currently null or explicitly provided.
- * Never overwrites dominion_lead_id or property_id.
- */
-async function updatePropertyFields(dominionLeadId: string, data: PropertyData): Promise<Property> {
-  const updates: Record<string, unknown> = {};
-  const changedFields: string[] = [];
-
-  const enrichable: (keyof PropertyData)[] = [
-    'phone', 'email', 'mailingAddress', 'ownerFirst', 'ownerLast',
-    'ownerName', 'ownershipDurationMonths', 'absenteeOwner',
-    'equityEstimate', 'mortgageStatus', 'propertyAttributes',
-  ];
-
-  for (const field of enrichable) {
-    if (data[field] !== undefined && data[field] !== null) {
-      updates[field] = data[field];
-      changedFields.push(field);
-    }
-  }
-
-  if (changedFields.length === 0) {
-    const [existing] = await db
-      .select()
-      .from(properties)
-      .where(eq(properties.dominionLeadId, dominionLeadId));
-    return existing;
-  }
-
-  updates.updatedAt = new Date();
-
-  const [updated] = await db
-    .update(properties)
-    .set(updates)
-    .where(eq(properties.dominionLeadId, dominionLeadId))
-    .returning();
-
-  if (changedFields.length > 0) {
-    domainEvents.emit('property.updated', { dominionLeadId, fields: changedFields });
-  }
-
-  return updated;
+function buildStandardizedAddress(data: PropertyData): string | null {
+  return data.streetAddress
+    ? standardizeAddress(
+        [data.streetAddress, data.city, data.state, data.zip].filter(Boolean).join(', '),
+      )
+    : null;
 }
 
 export async function getPropertyById(dominionLeadId: string): Promise<Property> {
@@ -160,9 +173,6 @@ export async function getPropertyByApnCounty(apn: string, county: string): Promi
   return property ?? null;
 }
 
-/**
- * Get total property count — used for health checks and monitoring.
- */
 export async function getPropertyCount(): Promise<number> {
   const [result] = await db
     .select({ count: sql<number>`count(*)::int` })

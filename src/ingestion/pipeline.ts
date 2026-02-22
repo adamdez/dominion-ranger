@@ -1,7 +1,7 @@
 import type { NormalizedRecord } from './adapters/interface.js';
 import { getAllIngestionAdapters } from './adapters/registry.js';
 import { findOrCreateProperty } from '../modules/properties/service.js';
-import { ingestDistressEvent, isDuplicateEvent } from '../modules/distress-events/service.js';
+import { ingestDistressEvent } from '../modules/distress-events/service.js';
 import { recalculateSignalAccumulation } from '../modules/signals/service.js';
 import { scoreProperty } from '../modules/scoring/service.js';
 import { evaluateForPromotion } from '../modules/promotion/service.js';
@@ -27,14 +27,14 @@ export interface PipelineStats {
  * Run the full ingestion pipeline for a single adapter.
  *
  * Flow per record:
- * 1. Find or create property (identity resolution)
- * 2. Ingest distress events (dedup check, append-only)
+ * 1. Find or create property (atomic ON CONFLICT upsert)
+ * 2. Ingest distress events (atomic fingerprint dedup)
  * 3. Recalculate signal accumulation
  * 4. Re-score property
  * 5. Evaluate for promotion
  * 6. Dispatch to Sentinel if promoted
  *
- * Charter doctrine: Signal → Score → Rank → Promote
+ * Charter doctrine: Signal -> Score -> Rank -> Promote
  */
 export async function runAdapterPipeline(adapterName: string, options?: Record<string, unknown>): Promise<PipelineStats> {
   const adapter = getAllIngestionAdapters().find((a) => a.name === adapterName);
@@ -77,7 +77,6 @@ export async function runAdapterPipeline(adapterName: string, options?: Record<s
 
   stats.durationMs = Date.now() - startTime;
 
-  // Audit the pipeline run
   await logAudit({
     actionType: 'pipeline.run_completed',
     metadata: stats,
@@ -89,14 +88,16 @@ export async function runAdapterPipeline(adapterName: string, options?: Record<s
 
 /**
  * Process a single normalized record through the full pipeline.
- * Can also be called directly for manual/batch ingestion.
+ *
+ * Atomic operations throughout:
+ *   - Property identity via ON CONFLICT DO UPDATE (no SELECT-then-INSERT)
+ *   - Event dedup via fingerprint ON CONFLICT DO NOTHING (no SELECT-then-INSERT)
  */
 export async function processRecord(record: NormalizedRecord, stats?: PipelineStats): Promise<void> {
   const s = stats ?? createEmptyStats();
 
   s.recordsProcessed++;
 
-  // Step 1: Identity resolution
   const { property, created } = await findOrCreateProperty(record.property);
   if (created) {
     s.propertiesCreated++;
@@ -104,46 +105,32 @@ export async function processRecord(record: NormalizedRecord, stats?: PipelineSt
     s.propertiesUpdated++;
   }
 
-  // Step 2: Ingest distress events
   let newEventsIngested = false;
   for (const eventInput of record.events) {
-    // Dedup check
-    const isDupe = await isDuplicateEvent(
-      property.dominionLeadId,
-      eventInput.eventType,
-      eventInput.sourceName,
-      eventInput.triggerEventDate ?? null,
-    );
-
-    if (isDupe) {
-      s.eventsDeduplicated++;
-      continue;
-    }
-
-    await ingestDistressEvent({
+    const event = await ingestDistressEvent({
       ...eventInput,
       dominionLeadId: property.dominionLeadId,
     });
-    s.eventsIngested++;
-    newEventsIngested = true;
+
+    if (event) {
+      s.eventsIngested++;
+      newEventsIngested = true;
+    } else {
+      s.eventsDeduplicated++;
+    }
   }
 
-  // Only re-score if new events were ingested (performance optimization)
   if (!newEventsIngested) return;
 
-  // Step 3: Recalculate signal accumulation
   await recalculateSignalAccumulation(property.dominionLeadId);
 
-  // Step 4: Score property
   const scoringResult = await scoreProperty(property.dominionLeadId);
   s.propertiesScored++;
 
-  // Step 5: Evaluate for promotion
   const promotion = await evaluateForPromotion(property.dominionLeadId, scoringResult);
   if (promotion) {
     s.leadsPromoted++;
 
-    // Step 6: Dispatch to Sentinel
     const dispatched = await dispatchToSentinel(promotion, property);
     if (dispatched) {
       s.sentinelDispatched++;

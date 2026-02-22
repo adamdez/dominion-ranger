@@ -48,6 +48,14 @@ export async function evaluateForPromotion(
   const promotionThreshold = parseFloat(config.promotionThreshold);
   const tierThresholds = config.tierThresholds as TierThresholds;
 
+  if (scoringResult.suppressed) {
+    logger.debug(
+      { dominionLeadId, reason: scoringResult.suppressionReason },
+      'Suppressed property — promotion blocked',
+    );
+    return null;
+  }
+
   if (scoringResult.compositeScore < promotionThreshold) {
     logger.debug(
       { dominionLeadId, score: scoringResult.compositeScore, threshold: promotionThreshold },
@@ -147,6 +155,9 @@ function buildSignalSummary(result: ScoringResult): Record<string, unknown> {
 
   return {
     totalSignals: result.signalContributions.length,
+    motivationScore: result.motivationScore,
+    dealScore: result.dealScore,
+    equityMultiplier: result.equityMultiplier,
     topSignals: topContributions.map((c) => ({
       type: c.eventType,
       layer: c.eventLayer,

@@ -79,6 +79,20 @@ export const outcomeStatusEnum = pgEnum('outcome_status', [
   'SOLD',
 ]);
 
+// ─── Workflow ─────────────────────────────────────
+export const leadInstanceStatusEnum = pgEnum('lead_instance_status', [
+  'PROMOTED',
+  'ASSIGNED',
+  'COMPLIANCE_PENDING',
+  'DIAL_READY',
+  'DIALING',
+  'CONTACTED',
+  'OFFER_SENT',
+  'CONTRACTED',
+  'CLOSED',
+  'DEAD',
+]);
+
 // ─── RBAC ──────────────────────────────────────────
 export const userRoleEnum = pgEnum('user_role', [
   'ADMIN',

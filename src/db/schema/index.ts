@@ -17,6 +17,9 @@ export type { SignalAccumulation, NewSignalAccumulation } from './signal-accumul
 export { promotedLeads } from './promoted-leads';
 export type { PromotedLead, NewPromotedLead } from './promoted-leads';
 
+export { leadInstances } from './lead-instances';
+export type { LeadInstance, NewLeadInstance } from './lead-instances';
+
 export { outcomeReservoir } from './outcome-reservoir';
 export type { OutcomeReservoir, NewOutcomeReservoir } from './outcome-reservoir';
 

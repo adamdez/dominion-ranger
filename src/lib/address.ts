@@ -48,6 +48,7 @@ export function standardizeAddress(raw: string): string {
 
   let addr = raw
     .toUpperCase()
+    .replace(/#(\d)/g, 'UNIT $1')
     .replace(/[.,#]/g, '')
     .replace(/\s+/g, ' ')
     .trim();
