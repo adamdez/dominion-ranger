@@ -11,6 +11,8 @@ import type { PromotedLead, Property } from '../../db/schema/index.js';
 import { generateId } from '../../lib/index.js';
 import { domainEvents } from '../../events/bus.js';
 import { logger } from '../../config/logger.js';
+import { BUSINESS_RULES } from '../../config/business-rules.js';
+import { OutcomeStatus } from '../../db/schema/constants.js';
 
 // ─── Sentinel Payload (Charter VIII.3) ─────────────
 
@@ -64,7 +66,7 @@ export async function dispatchToSentinel(
         'X-Dominion-Lead-Id': promotion.dominionLeadId,
       },
       body: JSON.stringify(payload),
-      signal: AbortSignal.timeout(10_000),
+      signal: AbortSignal.timeout(BUSINESS_RULES.sentinel.webhookTimeoutMs),
     });
 
     if (!response.ok) {
@@ -149,16 +151,16 @@ export async function receiveSentinelStatus(input: StatusSyncInput): Promise<voi
   };
 
   // Map status to specific timestamp fields
-  if (input.status === 'DIALED' || input.status === 'CLAIMED') {
+  if (input.status === OutcomeStatus.DIALED || input.status === OutcomeStatus.CLAIMED) {
     outcomeUpdates.contactedAt = now;
-  } else if (input.status === 'CONTRACTED') {
+  } else if (input.status === OutcomeStatus.CONTRACTED) {
     outcomeUpdates.contractSignedAt = now;
-  } else if (input.status === 'CLOSED') {
+  } else if (input.status === OutcomeStatus.CLOSED) {
     outcomeUpdates.dealClosedAt = now;
     if (input.metadata?.assignmentFee) {
       outcomeUpdates.assignmentFee = String(input.metadata.assignmentFee);
     }
-  } else if (input.status === 'DEAD') {
+  } else if (input.status === OutcomeStatus.DEAD) {
     outcomeUpdates.lostReason = (input.metadata?.reason as string) ?? 'Unknown';
   }
 

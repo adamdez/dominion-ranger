@@ -1,6 +1,8 @@
 import type { FastifyInstance } from 'fastify';
 import { requireRole } from '../middleware/auth.js';
 import { logger } from '../../config/logger.js';
+import { BUSINESS_RULES } from '../../config/business-rules.js';
+import { enrichmentRunBody, dncScrubBody, dncResultsParams } from '../schemas/enrichment.js';
 import {
   runTracerFyEnrichment,
   getTracerFyBalance,
@@ -23,7 +25,8 @@ export async function enrichmentRoutes(app: FastifyInstance): Promise<void> {
     { preHandler: [requireRole('pipeline.run')] },
     async (request, reply) => {
       try {
-        const { limit, county, minScore, forceAll } = request.body ?? {};
+        const body = enrichmentRunBody.parse(request.body);
+        const { limit, county, minScore, forceAll } = body ?? {};
 
         logger.info({ limit, county, minScore, forceAll }, 'Enrichment pipeline triggered via API');
 
@@ -32,7 +35,7 @@ export async function enrichmentRoutes(app: FastifyInstance): Promise<void> {
         const resultPromise = runTracerFyEnrichment({ limit, county, minScore, forceAll });
 
         // If batch is small (< 100), wait for it
-        if (limit && limit <= 100) {
+        if (limit && limit <= BUSINESS_RULES.batch.smallBatchThreshold) {
           const result = await resultPromise;
           return reply.send({
             status: 'completed',
@@ -51,7 +54,7 @@ export async function enrichmentRoutes(app: FastifyInstance): Promise<void> {
 
         return reply.send({
           status: 'processing',
-          message: `Enrichment pipeline started. Processing up to ${limit ?? 5000} properties.`,
+          message: `Enrichment pipeline started. Processing up to ${limit ?? BUSINESS_RULES.batch.defaultEnrichmentLimit} properties.`,
         });
       } catch (err) {
         logger.error({ err }, 'Failed to start enrichment');
@@ -88,11 +91,7 @@ export async function enrichmentRoutes(app: FastifyInstance): Promise<void> {
     { preHandler: [requireRole('pipeline.run')] },
     async (request, reply) => {
       try {
-        const { queueId } = request.body;
-        if (!queueId) {
-          return reply.code(400).send({ error: 'queueId required' });
-        }
-
+        const { queueId } = dncScrubBody.parse(request.body);
         const result = await submitDncScrub(queueId);
         return reply.send(result);
       } catch (err) {
@@ -112,7 +111,7 @@ export async function enrichmentRoutes(app: FastifyInstance): Promise<void> {
     { preHandler: [requireRole('pipeline.run')] },
     async (request, reply) => {
       try {
-        const queueId = parseInt(request.params.queueId, 10);
+        const { queueId } = dncResultsParams.parse(request.params);
         const results = await getDncResults(queueId);
         return reply.send(results);
       } catch (err) {

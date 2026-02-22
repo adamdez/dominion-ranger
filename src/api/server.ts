@@ -13,6 +13,7 @@ import { systemRoutes } from './routes/system.js';
 import { enrichmentRoutes } from './routes/enrichment.js';
 import { scoringRoutes } from './routes/scoring.js';
 import { RangerError } from '../lib/errors.js';
+import { ZodError } from 'zod';
 
 export async function createServer() {
   const app = Fastify({
@@ -45,6 +46,14 @@ export async function createServer() {
 
   // ─── Error Handler ─────────────────────────────
   app.setErrorHandler((error: Error, request, reply) => {
+    if (error instanceof ZodError) {
+      reply.code(400).send({
+        error: 'VALIDATION_ERROR',
+        details: error.errors.map(e => ({ path: e.path.join('.'), message: e.message })),
+      });
+      return;
+    }
+
     if (error instanceof RangerError) {
       logger.warn({ err: error, url: request.url }, 'Ranger error');
       reply.code(error.statusCode).send({

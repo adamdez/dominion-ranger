@@ -114,29 +114,38 @@ stateDiagram-v2
 dominion-ranger/
 ├── .github/workflows/ci.yml    # CI pipeline (lint, typecheck, test, migration check)
 ├── src/
-│   ├── api/                     # Fastify HTTP routes (thin — delegates to services)
-│   │   ├── middleware/auth.ts
-│   │   └── routes/              # 7 route files
-│   ├── config/                  # Environment, logging
+│   ├── api/
+│   │   ├── middleware/auth.ts   # Token-based auth with role checking
+│   │   ├── routes/              # 7 route files (thin — delegates to services)
+│   │   ├── schemas/             # Zod validation schemas for every route
+│   │   └── types.ts             # Shared API response types + pagination helper
+│   ├── config/
+│   │   ├── env.ts               # Zod-validated environment config
+│   │   ├── logger.ts            # Pino logger
+│   │   └── business-rules.ts    # ALL tunable thresholds, limits, defaults
 │   ├── db/
-│   │   ├── schema/              # 11 Drizzle table definitions
+│   │   ├── schema/
+│   │   │   ├── constants.ts     # Typed enum constant objects (LeadStatus, EventLayer, etc.)
+│   │   │   ├── enums.ts         # PostgreSQL enum definitions
+│   │   │   └── ...              # 11 Drizzle table definitions
 │   │   ├── seeds/               # Scoring model v1.0 seed
 │   │   ├── migrations/          # 4 SQL migration files (0000–0003)
 │   │   ├── invariants.ts        # Append-only trigger application
 │   │   └── connection.ts
-│   ├── events/                  # Domain event bus + wiring
+│   ├── events/                  # Domain event bus + cross-module wiring
 │   ├── ingestion/               # Signal domain — adapters + pipeline
-│   │   └── adapters/            # PropertyRadar, Regrid, ForeclosureRadar, REISkip
+│   │   └── adapters/            # PropertyRadar, Regrid, ForeclosureRadar, REISkip, CSV
 │   ├── jobs/                    # BullMQ queues + workers
-│   ├── lib/                     # Shared utilities (address, dates, ids, fingerprint, errors)
-│   ├── modules/                 # Domain services
+│   ├── lib/                     # Shared utilities (address, dates, ids, fingerprint)
+│   │   └── errors.ts            # Typed error hierarchy (RangerError, ConcurrencyError, etc.)
+│   ├── modules/                 # Domain services (barrel exports via index.ts)
 │   │   ├── compliance/          # DNC, litigator, audit logging
 │   │   ├── distress-events/     # Event store (append-only)
 │   │   ├── promotion/           # Threshold evaluation, replay
 │   │   ├── properties/          # Identity resolution, atomic upsert
 │   │   ├── scoring/             # Tri-score engine, replay
 │   │   ├── signals/             # Signal accumulation
-│   │   └── workflow/            # Lead instance lifecycle
+│   │   └── workflow/            # Lead instance lifecycle (state machine)
 │   └── scripts/                 # CLI tools (CSV reimport)
 ├── tests/
 │   ├── unit/                    # 6 test files, 89 tests
@@ -144,6 +153,43 @@ dominion-ranger/
 │   └── helpers/test-db.ts
 └── docs/                        # Schema, replay guide, migration history
 ```
+
+## Maintainability Architecture
+
+### Central Configuration
+
+All business-rule constants live in `src/config/business-rules.ts`:
+- Tier thresholds (A: 80, B: 60, C: 40)
+- Pagination defaults and limits
+- Batch processing thresholds
+- Scoring fallback values
+- Urgency classification parameters
+
+To change any threshold: edit one value in `business-rules.ts`.
+
+### Typed Error Hierarchy
+
+All services throw typed errors from `src/lib/errors.ts`:
+- `NotFoundError` → 404
+- `ValidationError` → 400
+- `DuplicateError` → 409
+- `ConcurrencyError` → 409 (optimistic locking failures)
+- `ComplianceError` → 403 (DNC/litigator blocks)
+- `AuthorizationError` → 403
+
+The Fastify error handler automatically maps `RangerError.statusCode` to HTTP responses.
+
+### Input Validation
+
+Every API route validates input through Zod schemas in `src/api/schemas/`. Invalid requests receive structured 400 errors with field-level details.
+
+### Enum Constants
+
+Raw status strings are never used in business logic. Instead, typed constant objects (`LeadStatus`, `EventLayer`, `MortgageStatus`, etc.) from `src/db/schema/constants.ts` are used everywhere. TypeScript catches stale references when enum values change.
+
+### Module Boundaries
+
+Each domain module exports its public API through an `index.ts` barrel file. Cross-module imports always go through the barrel, never directly into `service.ts` files.
 
 ## Scoring Model v1.0
 

@@ -7,9 +7,12 @@ import {
   distressEvents,
   scoringRecords,
   promotedLeads,
+  EventLayer,
 } from '../../db/schema/index.js';
 import { getPropertyCount } from '../../modules/properties/index.js';
 import { requireRole } from '../middleware/auth.js';
+import { BUSINESS_RULES } from '../../config/business-rules.js';
+import { topLeadsQuery } from '../schemas/system.js';
 
 export async function systemRoutes(app: FastifyInstance): Promise<void> {
 
@@ -40,8 +43,8 @@ export async function systemRoutes(app: FastifyInstance): Promise<void> {
       .from(distressEvents)
       .groupBy(distressEvents.eventLayer);
 
-    const confirmedEvents = eventStats.find((e) => e.eventLayer === 'confirmed')?.count ?? 0;
-    const predictiveEvents = eventStats.find((e) => e.eventLayer === 'predictive')?.count ?? 0;
+    const confirmedEvents = eventStats.find((e) => e.eventLayer === EventLayer.CONFIRMED)?.count ?? 0;
+    const predictiveEvents = eventStats.find((e) => e.eventLayer === EventLayer.PREDICTIVE)?.count ?? 0;
 
     // Event counts by type (top 10)
     const eventsByType = await db
@@ -52,7 +55,7 @@ export async function systemRoutes(app: FastifyInstance): Promise<void> {
       .from(distressEvents)
       .groupBy(distressEvents.eventType)
       .orderBy(sql`count(*) DESC`)
-      .limit(10);
+      .limit(BUSINESS_RULES.system.topEventTypesLimit);
 
     // Scoring distribution
     const scoringStats = await db
@@ -115,9 +118,10 @@ export async function systemRoutes(app: FastifyInstance): Promise<void> {
     '/api/leads/top',
     { preHandler: [requireRole('properties.read')] },
     async (request) => {
-      const limit = Math.min(parseInt(request.query.limit ?? '25', 10), 200);
-      const minScore = parseFloat(request.query.minScore ?? '0');
-      const absenteeOnly = request.query.absenteeOnly === 'true';
+      const query = topLeadsQuery.parse(request.query);
+      const limit = query.limit;
+      const minScore = query.minScore;
+      const absenteeOnly = query.absenteeOnly === 'true';
 
       const absenteeClause = absenteeOnly ? sql`AND p.absentee_owner = true` : sql``;
 
@@ -162,11 +166,11 @@ export async function systemRoutes(app: FastifyInstance): Promise<void> {
         LIMIT ${limit}
       `);
 
-      const leads = results.rows ?? results;
+      const leads = ((results as { rows?: unknown[] }).rows ?? results) as Record<string, unknown>[];
 
       return {
         leads,
-        count: (leads as any[]).length,
+        count: leads.length,
         filters: { minScore, absenteeOnly, limit },
       };
     },

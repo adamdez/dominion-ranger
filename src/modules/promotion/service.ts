@@ -1,17 +1,17 @@
-import { eq, desc, sql } from 'drizzle-orm';
+import { eq, desc } from 'drizzle-orm';
 import { db } from '../../db/connection.js';
 import {
   promotedLeads,
   scoringModelConfigs,
   properties,
-  scoringRecords,
-  distressEvents,
 } from '../../db/schema/index.js';
 import type { PromotedLead, Property } from '../../db/schema/index.js';
 import { generateId } from '../../lib/index.js';
 import { domainEvents } from '../../events/bus.js';
 import { logger } from '../../config/logger.js';
-import type { ScoringResult } from '../scoring/service.js';
+import { BUSINESS_RULES } from '../../config/business-rules.js';
+import { EventLayer, UrgencyLevel } from '../../db/schema/constants.js';
+import type { ScoringResult } from '../scoring/index.js';
 
 interface TierThresholds {
   A: number;
@@ -120,21 +120,20 @@ function assignTier(score: number, thresholds: TierThresholds): 'A' | 'B' | 'C' 
 }
 
 function determineUrgency(result: ScoringResult): 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW' {
-  // Confirmed events with high score and recent activity = critical
-  const hasConfirmed = result.signalContributions.some((c) => c.eventLayer === 'confirmed');
-  const isRecent = result.daysSinceTrigger <= 7;
-  const isHighScore = result.compositeScore >= 80;
+  const hasConfirmed = result.signalContributions.some((c) => c.eventLayer === EventLayer.CONFIRMED);
+  const isRecent = result.daysSinceTrigger <= BUSINESS_RULES.urgency.recentDays;
+  const isHighScore = result.compositeScore >= BUSINESS_RULES.urgency.highScoreThreshold;
 
-  if (hasConfirmed && isRecent && isHighScore) return 'CRITICAL';
-  if (hasConfirmed && isHighScore) return 'HIGH';
-  if (result.compositeScore >= 65) return 'MEDIUM';
-  return 'LOW';
+  if (hasConfirmed && isRecent && isHighScore) return UrgencyLevel.CRITICAL;
+  if (hasConfirmed && isHighScore) return UrgencyLevel.HIGH;
+  if (result.compositeScore >= BUSINESS_RULES.urgency.mediumScoreThreshold) return UrgencyLevel.MEDIUM;
+  return UrgencyLevel.LOW;
 }
 
 function recommendAction(
   tier: string,
   urgency: string,
-  result: ScoringResult,
+  _result: ScoringResult,
 ): string {
   if (urgency === 'CRITICAL') {
     return 'Immediate outreach. Confirmed distress with high score and recent activity. Priority dial.';
@@ -151,7 +150,7 @@ function recommendAction(
 function buildSignalSummary(result: ScoringResult): Record<string, unknown> {
   const topContributions = result.signalContributions
     .sort((a, b) => b.finalContribution - a.finalContribution)
-    .slice(0, 5);
+    .slice(0, BUSINESS_RULES.promotionSliceLimit);
 
   return {
     totalSignals: result.signalContributions.length,
@@ -163,7 +162,7 @@ function buildSignalSummary(result: ScoringResult): Record<string, unknown> {
       layer: c.eventLayer,
       contribution: c.finalContribution.toFixed(4),
     })),
-    hasConfirmedDistress: result.signalContributions.some((c) => c.eventLayer === 'confirmed'),
+    hasConfirmedDistress: result.signalContributions.some((c) => c.eventLayer === EventLayer.CONFIRMED),
     avgTimeDecay: result.timeDecayFactor.toFixed(4),
     daysSinceFirstSignal: result.daysSinceTrigger,
   };
@@ -179,7 +178,7 @@ export async function getRankedLeads(options: {
   limit?: number;
   offset?: number;
 }): Promise<(PromotedLead & { property: Property })[]> {
-  const { tier, limit = 50, offset = 0 } = options;
+  const { tier, limit = BUSINESS_RULES.pagination.defaultPageSize, offset = 0 } = options;
 
   let query = db
     .select({

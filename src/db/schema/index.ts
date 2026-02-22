@@ -1,6 +1,9 @@
 // ─── Enums ─────────────────────────────────────────
 export * from './enums';
 
+// ─── Typed Constants ──────────────────────────────
+export * from './constants';
+
 // ─── Core Tables ───────────────────────────────────
 export { properties } from './properties';
 export type { Property, NewProperty } from './properties';

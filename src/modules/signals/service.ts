@@ -3,6 +3,7 @@ import { db } from '../../db/connection.js';
 import { signalAccumulation, distressEvents } from '../../db/schema/index.js';
 import type { SignalAccumulation } from '../../db/schema/index.js';
 import { logger } from '../../config/logger.js';
+import { BUSINESS_RULES } from '../../config/business-rules.js';
 
 /**
  * Recalculate signal accumulation metrics for a property.
@@ -37,7 +38,7 @@ export async function recalculateSignalAccumulation(dominionLeadId: string): Pro
   // High ratio = signals are accelerating recently
   const acceleration = counts.last30d > 0
     ? (counts.last7d / counts.last30d) * (30 / 7) // Normalized: 1.0 = uniform, >1.0 = accelerating
-    : counts.last7d > 0 ? 2.0 : 0;
+    : counts.last7d > 0 ? BUSINESS_RULES.scoring.defaultAccelerationFallback : 0;
 
   // Density: signals per 30-day period, weighted by diversity
   const uniqueTypes = await db
@@ -52,7 +53,7 @@ export async function recalculateSignalAccumulation(dominionLeadId: string): Pro
 
   const typeCount = uniqueTypes[0]?.count ?? 0;
   // Density = count × diversity bonus (multiple signal types = stronger signal)
-  const density = counts.last30d * (1 + (typeCount - 1) * 0.15);
+  const density = counts.last30d * (1 + (typeCount - 1) * BUSINESS_RULES.scoring.signalDensityDiversityBonus);
 
   // Upsert
   const result = await db

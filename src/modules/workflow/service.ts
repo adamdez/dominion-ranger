@@ -1,32 +1,33 @@
 import { eq, and, sql, ne } from 'drizzle-orm';
 import { db } from '../../db/connection.js';
-import { leadInstances, properties } from '../../db/schema/index.js';
+import { leadInstances, properties, LeadStatus } from '../../db/schema/index.js';
 import type { LeadInstance } from '../../db/schema/index.js';
 import { generateId } from '../../lib/index.js';
-import { checkDnc, checkLitigator, logAudit } from '../compliance/service.js';
+import { checkDnc, checkLitigator, logAudit } from '../compliance/index.js';
 import { domainEvents } from '../../events/bus.js';
 import { logger } from '../../config/logger.js';
+import { NotFoundError, ValidationError, ConcurrencyError, ComplianceError } from '../../lib/errors.js';
 
 // ─── State Machine ─────────────────────────────────
 
-type LeadStatus = LeadInstance['status'];
+type LeadStatusType = LeadInstance['status'];
 
-const VALID_TRANSITIONS: Record<string, LeadStatus[]> = {
-  PROMOTED:            ['ASSIGNED', 'DEAD'],
-  ASSIGNED:            ['COMPLIANCE_PENDING', 'DEAD'],
-  COMPLIANCE_PENDING:  ['DIAL_READY', 'DEAD'],
-  DIAL_READY:          ['DIALING', 'DEAD'],
-  DIALING:             ['CONTACTED', 'DIAL_READY', 'DEAD'],
-  CONTACTED:           ['OFFER_SENT', 'DEAD'],
-  OFFER_SENT:          ['CONTRACTED', 'DEAD'],
-  CONTRACTED:          ['CLOSED', 'DEAD'],
-  CLOSED:              [],
-  DEAD:                [],
+const VALID_TRANSITIONS: Record<string, LeadStatusType[]> = {
+  [LeadStatus.PROMOTED]:            [LeadStatus.ASSIGNED, LeadStatus.DEAD],
+  [LeadStatus.ASSIGNED]:            [LeadStatus.COMPLIANCE_PENDING, LeadStatus.DEAD],
+  [LeadStatus.COMPLIANCE_PENDING]:  [LeadStatus.DIAL_READY, LeadStatus.DEAD],
+  [LeadStatus.DIAL_READY]:          [LeadStatus.DIALING, LeadStatus.DEAD],
+  [LeadStatus.DIALING]:             [LeadStatus.CONTACTED, LeadStatus.DIAL_READY, LeadStatus.DEAD],
+  [LeadStatus.CONTACTED]:           [LeadStatus.OFFER_SENT, LeadStatus.DEAD],
+  [LeadStatus.OFFER_SENT]:          [LeadStatus.CONTRACTED, LeadStatus.DEAD],
+  [LeadStatus.CONTRACTED]:          [LeadStatus.CLOSED, LeadStatus.DEAD],
+  [LeadStatus.CLOSED]:              [],
+  [LeadStatus.DEAD]:                [],
 };
 
-const TERMINAL_STATUSES: LeadStatus[] = ['CLOSED', 'DEAD'];
+const TERMINAL_STATUSES: LeadStatusType[] = [LeadStatus.CLOSED, LeadStatus.DEAD];
 
-function isValidTransition(from: LeadStatus, to: LeadStatus): boolean {
+function isValidTransition(from: LeadStatusType, to: LeadStatusType): boolean {
   return VALID_TRANSITIONS[from]?.includes(to) ?? false;
 }
 
@@ -46,13 +47,13 @@ export async function createLeadInstance(input: {
     .where(
       and(
         eq(leadInstances.dominionLeadId, input.dominionLeadId),
-        ne(leadInstances.status, 'CLOSED'),
-        ne(leadInstances.status, 'DEAD'),
+        ne(leadInstances.status, LeadStatus.CLOSED),
+        ne(leadInstances.status, LeadStatus.DEAD),
       ),
     );
 
   if (activeInstances[0].count > 0) {
-    throw new Error(`Active lead instance already exists for property ${input.dominionLeadId}`);
+    throw new ValidationError(`Active lead instance already exists for property ${input.dominionLeadId}`);
   }
 
   const leadInstanceId = generateId();
@@ -62,7 +63,7 @@ export async function createLeadInstance(input: {
       leadInstanceId,
       dominionLeadId: input.dominionLeadId,
       promotionId: input.promotionId,
-      status: 'PROMOTED',
+      status: LeadStatus.PROMOTED,
       version: 1,
     })
     .returning();
@@ -91,7 +92,7 @@ export async function claimLead(input: {
     .update(leadInstances)
     .set({
       assignedTo: input.userId,
-      status: 'ASSIGNED',
+      status: LeadStatus.ASSIGNED,
       version: sql`${leadInstances.version} + 1`,
       claimedAt: new Date(),
       updatedAt: new Date(),
@@ -100,16 +101,13 @@ export async function claimLead(input: {
       and(
         eq(leadInstances.leadInstanceId, input.leadInstanceId),
         eq(leadInstances.version, input.expectedVersion),
-        eq(leadInstances.status, 'PROMOTED'),
+        eq(leadInstances.status, LeadStatus.PROMOTED),
       ),
     )
     .returning();
 
   if (result.length === 0) {
-    throw new Error(
-      `Claim failed for lead ${input.leadInstanceId}. ` +
-      'Either the version changed (concurrent modification) or the lead is not in PROMOTED status.',
-    );
+    throw new ConcurrencyError('lead_instance', input.leadInstanceId);
   }
 
   const instance = result[0];
@@ -135,10 +133,10 @@ export async function runComplianceGating(leadInstanceId: string): Promise<LeadI
     .from(leadInstances)
     .where(eq(leadInstances.leadInstanceId, leadInstanceId));
 
-  if (!instance) throw new Error(`Lead instance not found: ${leadInstanceId}`);
+  if (!instance) throw new NotFoundError('LeadInstance', leadInstanceId);
 
-  if (!isValidTransition(instance.status, 'COMPLIANCE_PENDING')) {
-    throw new Error(`Cannot run compliance from status ${instance.status}`);
+  if (!isValidTransition(instance.status, LeadStatus.COMPLIANCE_PENDING)) {
+    throw new ValidationError(`Cannot run compliance from status ${instance.status}`);
   }
 
   const [property] = await db
@@ -155,7 +153,7 @@ export async function runComplianceGating(leadInstanceId: string): Promise<LeadI
     : { isLitigator: false, checkedAt: new Date() };
 
   const complianceCleared = !dncResult.isOnDnc && !litigatorResult.isLitigator;
-  const nextStatus: LeadStatus = complianceCleared ? 'DIAL_READY' : 'DEAD';
+  const nextStatus: LeadStatusType = complianceCleared ? LeadStatus.DIAL_READY : LeadStatus.DEAD;
 
   const [updated] = await db
     .update(leadInstances)
@@ -175,7 +173,7 @@ export async function runComplianceGating(leadInstanceId: string): Promise<LeadI
     )
     .returning();
 
-  if (!updated) throw new Error(`Concurrent modification on lead ${leadInstanceId}`);
+  if (!updated) throw new ConcurrencyError('lead_instance', leadInstanceId);
 
   if (!complianceCleared) {
     const reason = dncResult.isOnDnc ? 'DNC' : 'LITIGATOR';
@@ -196,7 +194,7 @@ export async function runComplianceGating(leadInstanceId: string): Promise<LeadI
  */
 export async function transitionLead(input: {
   leadInstanceId: string;
-  toStatus: LeadStatus;
+  toStatus: LeadStatusType;
   expectedVersion: number;
   userId?: string;
   notes?: string;
@@ -206,17 +204,17 @@ export async function transitionLead(input: {
     .from(leadInstances)
     .where(eq(leadInstances.leadInstanceId, input.leadInstanceId));
 
-  if (!current) throw new Error(`Lead instance not found: ${input.leadInstanceId}`);
+  if (!current) throw new NotFoundError('LeadInstance', input.leadInstanceId);
 
   if (!isValidTransition(current.status, input.toStatus)) {
-    throw new Error(
+    throw new ValidationError(
       `Invalid transition: ${current.status} -> ${input.toStatus}. ` +
       `Valid targets: ${VALID_TRANSITIONS[current.status]?.join(', ') || 'none'}`,
     );
   }
 
-  if (input.toStatus === 'DIALING' && !current.complianceCleared) {
-    throw new Error('Cannot dial: compliance not cleared. Run compliance gating first.');
+  if (input.toStatus === LeadStatus.DIALING && !current.complianceCleared) {
+    throw new ComplianceError('Compliance not cleared', current.dominionLeadId);
   }
 
   const timestampField = STATUS_TIMESTAMP_MAP[input.toStatus];
@@ -241,10 +239,7 @@ export async function transitionLead(input: {
     .returning();
 
   if (result.length === 0) {
-    throw new Error(
-      `Transition failed for lead ${input.leadInstanceId}. ` +
-      `Expected version ${input.expectedVersion} but it has changed (concurrent modification).`,
-    );
+    throw new ConcurrencyError('lead_instance', input.leadInstanceId);
   }
 
   const updated = result[0];
@@ -269,12 +264,12 @@ export async function transitionLead(input: {
   return updated;
 }
 
-const STATUS_TIMESTAMP_MAP: Partial<Record<LeadStatus, string>> = {
-  DIALING: 'dialedAt',
-  CONTACTED: 'contactedAt',
-  OFFER_SENT: 'offerSentAt',
-  CONTRACTED: 'contractedAt',
-  CLOSED: 'closedAt',
+const STATUS_TIMESTAMP_MAP: Partial<Record<LeadStatusType, string>> = {
+  [LeadStatus.DIALING]: 'dialedAt',
+  [LeadStatus.CONTACTED]: 'contactedAt',
+  [LeadStatus.OFFER_SENT]: 'offerSentAt',
+  [LeadStatus.CONTRACTED]: 'contractedAt',
+  [LeadStatus.CLOSED]: 'closedAt',
 };
 
 // ─── Query Helpers ─────────────────────────────────
@@ -294,14 +289,14 @@ export async function getActiveLeadInstance(dominionLeadId: string): Promise<Lea
     .where(
       and(
         eq(leadInstances.dominionLeadId, dominionLeadId),
-        ne(leadInstances.status, 'CLOSED'),
-        ne(leadInstances.status, 'DEAD'),
+        ne(leadInstances.status, LeadStatus.CLOSED),
+        ne(leadInstances.status, LeadStatus.DEAD),
       ),
     );
   return instance ?? null;
 }
 
-export async function getLeadsByStatus(status: LeadStatus): Promise<LeadInstance[]> {
+export async function getLeadsByStatus(status: LeadStatusType): Promise<LeadInstance[]> {
   return db
     .select()
     .from(leadInstances)
@@ -310,7 +305,7 @@ export async function getLeadsByStatus(status: LeadStatus): Promise<LeadInstance
 }
 
 export async function getDialQueue(userId?: string): Promise<LeadInstance[]> {
-  const conditions = [eq(leadInstances.status, 'DIAL_READY')];
+  const conditions = [eq(leadInstances.status, LeadStatus.DIAL_READY)];
   if (userId) conditions.push(eq(leadInstances.assignedTo, userId));
 
   return db

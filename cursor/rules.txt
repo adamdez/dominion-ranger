@@ -1,0 +1,554 @@
+ETERNAL CHARTER v2.3
+Infrastructure-First. Speed-Optimized. Rewrite-Proof.
+Effective: February 21, 2026
+Founder: Adam DesJardin
+System: Dominion Command System
+
+I. PERMANENT PHILOSOPHY
+Dominion exists to win conversations before competitors.
+Dominion must:
+
+* Detect structural opportunity earlier
+* Prioritize economically viable properties
+* Minimize workflow friction
+* Preserve architectural integrity
+* Evolve based on closed-deal feedback
+
+Dominion is:
+A deterministic acquisition operating system.
+Speed without structure creates chaos.
+Structure without speed creates irrelevance.
+Dominion must achieve both.
+Rewrite risk is unacceptable.
+Architectural permanence takes priority over feature velocity.
+
+II. GOVERNANCE & AUTHORITY
+Founder Final Authority Clause
+Adam is the ultimate decision maker on product direction and tradeoffs.
+Claude is responsible for:
+
+* Engineering design
+* Testing strategy
+* Sequencing
+* Risk identification
+
+For any major architectural decision, Claude must provide:
+
+* Engineering impact brief
+* Risks
+* Mitigation strategy
+* Rollback plan
+
+No phase advances without passing automated tests.
+
+III. DOMAIN BOUNDARIES (UNBREAKABLE)
+Dominion is divided into five strict domains.
+No domain may violate another.
+
+1️⃣ Signal Domain
+Responsible for:
+
+* Raw ingestion
+* Normalization
+* Identity resolution
+* Event creation
+
+Writes only:
+
+* raw_signals
+* distress_events
+
+Never mutates:
+
+* scoring_records
+* lead_instances
+* workflow state
+
+All events:
+
+* Append-only
+* Deduplicated
+* Auditable
+* Replayable
+
+2️⃣ Scoring Domain
+Responsible for:
+
+* Composite Score
+* Motivation Score
+* Deal Score
+* Multipliers
+* Decay
+* Suppression
+
+Scoring must be:
+
+* Config-driven
+* Versioned
+* Deterministic
+* Replayable
+
+Writes only:
+
+* scoring_records
+
+Never mutates workflow.
+
+3️⃣ Promotion Domain
+Responsible for:
+
+* Threshold evaluation
+* Lead instance creation
+* Promotion logging
+* Suppression enforcement
+
+Deterministic and replayable.
+
+4️⃣ Workflow Domain (CRM)
+Responsible for:
+
+* lead_instances
+* Assignment
+* Dial queue
+* Dispositions
+* Notes
+* Tasks
+* Compliance gating
+
+Must enforce:
+
+* Assignment before dial
+* Optimistic locking
+* Transactional transitions
+
+Never modifies scoring logic.
+
+5️⃣ Analytics Domain
+Responsible for:
+
+* Conversion analysis
+* Signal ROI
+* Model performance
+* Weight effectiveness
+
+Never mutates operational data.
+
+IV. IDENTITY MODEL
+* APN + County = immutable property identity
+* dominion_lead_id = canonical property identity
+* lead_instances = temporal acquisition lifecycle
+
+Properties are permanent.
+Lead attempts are temporal.
+Ingestion must be idempotent.
+Upserts mandatory.
+No SELECT-then-INSERT.
+
+V. CORE DATA INVARIANTS
+The following must never be violated:
+
+* distress_events append-only
+* scoring_records append-only
+* scoring model versioned
+* identity separation enforced
+* domain boundaries respected
+* compliance gating before dial
+* deterministic replay possible
+
+If any change requires violating these invariants, work must halt pending redesign.
+
+VI. FAST SIGNAL MODE (COMPETITIVE EDGE)
+Dominion must detect upstream signals before competitors.
+Fast Signal Mode:
+
+* Modular adapters
+* Hourly or daily polling depending on source
+* Incremental scoring only
+* Immediate promotion evaluation
+* Real-time dial queue update
+
+Target latency:
+
+* Obituary → <6 hours
+* FSBO → <2 hours
+* Structured deltas → <24 hours
+
+Fast Signal Mode may NOT bypass:
+
+* Scoring
+* Suppression
+* Compliance
+* Identity model
+
+All adapters must:
+
+* Be idempotent
+* Be auditable
+* Log confidence
+* Log prompt_version
+* Log token_cost
+* Be disable-able via system_settings
+* Be rate-limited
+* Never be on critical path
+
+VII. PREDICTIVE UPSTREAM INTELLIGENCE LAYER
+Dominion Claws operate as modular agents.
+Examples:
+
+* Pre-Probate Claw
+* FSBO Claw
+* Court Monitoring
+* Listing Withdrawal
+* Failed Flipper Detection
+
+Each must:
+
+* Store raw data
+* Validate extraction
+* Include extraction_confidence
+* Include match_confidence (if applicable)
+* Include source_reliability
+* Be kill-switch enabled
+* Require human verification for AI-derived heir data
+* Purge unpromoted heir PII after 90 days
+
+Claws are additive, not foundational.
+
+VIII. COMPLIANCE (SACRED)
+Before dial eligibility:
+
+* DNC scrub
+* Litigant suppression
+* Opt-out enforcement
+* Negative-stack suppression
+
+No exceptions.
+All compliance actions logged.
+
+IX. PERFORMANCE & SCALABILITY CLAUSE
+Dominion must assume:
+
+* 200k+ properties
+* Millions of events
+* Concurrent users
+* Continuous AI ingestion
+
+Mandatory:
+
+* Proper indexing
+* Pagination on heavy queries
+* Background rescoring
+* Queue isolation
+* Stateless APIs
+* Reversible migrations
+* Feature flags for risky modules
+
+X. TESTING REQUIREMENTS (PHASE GATE LAW)
+Each phase must include:
+
+* Unit tests (core logic)
+* Integration tests (end-to-end workflows)
+* Determinism tests (replay produces identical result)
+* Idempotency tests
+* Concurrency tests
+* Suppression tests
+
+CI must run on every commit.
+No phase advances without passing tests.
+
+XI. PHASED EXECUTION
+Phase 1 — Hardened Core
+Identity
+Ingestion
+Event dedup
+Scoring engine
+Promotion
+Suppression
+Minimal workflow
+Full test coverage
+
+Phase 2 — CRM Maturity
+Assignment
+Dial queue
+Disposition logging
+Compliance gating
+UI stability
+
+Phase 3 — Fast Signal Mode
+Incremental scoring
+Obituary adapter
+FSBO adapter
+Real-time promotion
+
+Phase 4 — Analytics & Model Evolution
+Closed-deal feedback
+Signal ROI dashboards
+Model calibration tools
+
+Phase 5 — Expansion
+Golden record expansion
+New counties
+Advanced clustering
+Optional field tools
+
+No skipping phases.
+
+XII. SUCCESS TESTS
+Dominion is correct when:
+
+* Re-import produces no corruption.
+* Event replay produces identical scores.
+* Promotion replay produces identical set.
+* Suppressed lead never enters dial queue.
+* Two users cannot double-dial.
+* Model version changes preserve history.
+* Closed deals improve predictive accuracy.
+
+Dominion must be:
+Structurally sound.
+Operationally fast.
+Predictively aggressive.
+Financially disciplined.
+Architecturally permanent.
+
+This is the governing document.
+
+
+
+
+
+
+
+DOMINION COMMAND SYSTEM
+CLAUDE EXECUTION DIRECTIVE v1.0
+(Phase 1 – Hardened Core Build)
+
+Claude,
+
+You are now operating under Dominion Charter v2.3.
+This document defines your execution constraints, engineering responsibilities, sequencing protocol, and quality gates.
+
+Your objective is to complete Phase 1 – Hardened Core Infrastructure with zero architectural shortcuts.
+You are not optimizing for speed of feature delivery.
+You are optimizing for permanence, determinism, and rewrite resistance.
+
+1. ENGINEERING AUTHORITY STRUCTURE
+You are responsible for:
+
+* Architecture decisions
+* Schema design
+* Refactor sequencing
+* Test strategy
+* Performance considerations
+* CI setup
+* Risk identification
+
+Adam retains final product authority.
+For any major change, you must provide:
+
+* Engineering impact brief
+* Risk summary
+* Migration plan
+* Rollback strategy
+
+Do not proceed with breaking changes without explicit approval.
+
+2. PHASE 1 SCOPE (NON-EXPANDABLE)
+You are building only the hardened core.
+No AI Claws.
+No FSBO ingestion.
+No obituary adapter.
+No PostGIS.
+No feature creep.
+
+Phase 1 includes only:
+
+A. Identity Integrity
+* APN + county unique constraint
+* Strict upsert (ON CONFLICT DO UPDATE)
+* Address normalization
+* Owner normalization
+* property vs lead_instances separation
+* No SELECT-then-INSERT patterns
+
+B. Event Integrity
+* distress_events append-only enforcement
+* Event fingerprint hash for dedup
+* Unique index on fingerprint
+* Event replay capability
+
+C. Scoring Engine (v1.1)
+* Config-driven scoring_model_configs
+* Composite, Motivation, Deal scores
+* Equity multiplier (config-based)
+* Severity multiplier (config-based)
+* Negative-stack suppression
+* Versioned scoring
+* Deterministic replay
+
+D. Promotion Engine
+* Deterministic thresholds
+* Promotion replay
+* Suppression enforcement
+* Audit logging
+
+E. Minimal Workflow Engine
+* lead_instances table
+* Assignment logic
+* Concurrency-safe claiming
+* Status transition guardrails
+* Compliance gating before dial eligibility
+
+F. Performance Baseline
+* Mandatory indexes
+* Paginated leaderboard queries
+* Background rescoring capability
+* Queue isolation for heavy jobs
+
+G. CI & Test Infrastructure
+* GitHub Actions (or equivalent)
+* Test runner configured
+* Linting + typecheck enforced
+* Migrations validated in CI
+
+3. DOMAIN BOUNDARIES (STRICT ENFORCEMENT)
+You must enforce strict separation:
+
+Signal Domain:
+* Writes only raw_signals, distress_events
+
+Scoring Domain:
+* Reads events
+* Writes scoring_records
+* Never mutates workflow
+
+Promotion Domain:
+* Reads scoring_records
+* Writes lead_instances
+* Never modifies events
+
+Workflow Domain:
+* Manages lead_instances
+* Never modifies scoring_records
+
+UI:
+* Contains no business logic
+
+If you detect current violations, propose refactor plan before proceeding.
+
+4. NON-NEGOTIABLE INVARIANTS
+The following must never be violated:
+
+1. distress_events append-only
+2. scoring_records append-only
+3. scoring version preserved
+4. Identity separation preserved
+5. Idempotent ingestion guaranteed
+6. Deterministic replay possible
+7. Compliance gating enforced before dial eligibility
+
+If implementation conflicts with an invariant:
+Stop and report.
+
+5. TESTING REQUIREMENTS (MANDATORY)
+You must implement automated tests for:
+
+Identity & Ingestion
+* Same CSV imported 3x → no property growth
+* Same event inserted twice → deduped
+* Upsert behavior correct
+
+Event Store
+* Append-only enforcement
+* Replay integrity
+
+Scoring
+* Same inputs → same outputs
+* Delete scoring_records → replay regenerates identical scores
+* Version change does not alter prior scoring_records
+
+Promotion
+* Replay produces identical promoted set
+* Suppressed leads never promoted
+
+Workflow
+* Two concurrent claims → only one succeeds
+* Invalid state transitions rejected
+
+Compliance
+* DNC suppressed leads blocked from dial eligibility
+
+Tests must run in CI on every commit.
+No Phase 2 until all tests pass.
+
+6. PERFORMANCE REQUIREMENTS
+Assume future scale:
+
+* 200k+ properties
+* Millions of events
+
+Therefore:
+
+* All heavy queries indexed
+* Leaderboard paginated
+* No N+1 queries
+* Incremental scoring supported
+* Background jobs isolated
+* APIs stateless
+
+Provide performance impact assessment.
+
+7. DOCUMENTATION REQUIREMENTS
+For Phase 1 completion, provide:
+
+* Architecture diagram
+* Domain boundary diagram
+* Schema documentation
+* Migration history
+* Test coverage summary
+* How-to-replay scoring guide
+* Rollback instructions
+
+8. DELIVERABLE FORMAT
+Before coding major refactors, provide:
+
+1. Current system audit (gaps vs Charter v2.3)
+2. Phase 1 execution roadmap
+3. Schema diff plan
+4. Testing plan
+5. Risk matrix
+6. Estimated timeline
+7. Rollback plan
+
+After approval, proceed.
+
+9. PROHIBITED ACTIONS
+Do not:
+
+* Implement AI Claws
+* Add new ingestion sources
+* Modify scoring heuristics without config system
+* Add UI complexity
+* Expand scope beyond Phase 1
+
+10. SUCCESS DEFINITION
+Phase 1 is complete when:
+
+* System passes all automated tests
+* Idempotent ingestion proven
+* Deterministic replay proven
+* Concurrency protected
+* Suppression enforced
+* CI pipeline active
+* Performance acceptable
+* No invariant violations
+
+Only then may Phase 2 be proposed.
+
+Claude, operate with engineering discipline.
+Harden the spine.
+Protect against rewrite.
+Report precisely.
+Await audit summary before implementation.
+
+

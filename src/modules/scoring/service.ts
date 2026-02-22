@@ -7,10 +7,13 @@ import {
   signalAccumulation,
   properties,
 } from '../../db/schema/index.js';
-import type { ScoringRecord, ScoringModelConfig, DistressEvent, Property } from '../../db/schema/index.js';
+import type { ScoringRecord, ScoringModelConfig, Property } from '../../db/schema/index.js';
 import { generateId, exponentialDecay, daysBetween } from '../../lib/index.js';
 import { domainEvents } from '../../events/bus.js';
 import { logger } from '../../config/logger.js';
+import { BUSINESS_RULES } from '../../config/business-rules.js';
+import { EventLayer } from '../../db/schema/constants.js';
+import { ValidationError } from '../../lib/errors.js';
 
 // ─── Types ─────────────────────────────────────────
 
@@ -91,11 +94,10 @@ export interface ScoringResult {
 
 let cachedConfig: ScoringModelConfig | null = null;
 let configLoadedAt: number = 0;
-const CONFIG_TTL_MS = 60_000;
 
 async function getActiveConfig(): Promise<ScoringModelConfig> {
   const now = Date.now();
-  if (cachedConfig && now - configLoadedAt < CONFIG_TTL_MS) {
+  if (cachedConfig && now - configLoadedAt < BUSINESS_RULES.scoring.configCacheTtlMs) {
     return cachedConfig;
   }
 
@@ -106,7 +108,7 @@ async function getActiveConfig(): Promise<ScoringModelConfig> {
     .limit(1);
 
   if (!config) {
-    throw new Error('No active scoring model configuration found. Seed the database first.');
+    throw new ValidationError('No active scoring model configuration found. Seed the database first.');
   }
 
   cachedConfig = config;
@@ -144,7 +146,7 @@ export async function scoreProperty(dominionLeadId: string): Promise<ScoringResu
   const dealWeights = (config.dealScoreWeights as DealScoreWeights | null) ?? DEFAULT_DEAL_WEIGHTS;
   const suppressionConfig = (config.suppressionConfig as SuppressionConfig | null) ?? null;
   const compositeWeights = (config.compositeWeights as { motivation_weight: number; deal_weight: number } | null)
-    ?? { motivation_weight: 0.65, deal_weight: 0.35 };
+    ?? BUSINESS_RULES.scoring.defaultCompositeWeights;
   const now = new Date();
 
   const [property] = await db
@@ -188,11 +190,11 @@ export async function scoreProperty(dominionLeadId: string): Promise<ScoringResu
   const uniqueTypes = new Set<string>();
 
   for (const event of events) {
-    const weights = event.eventLayer === 'confirmed' ? confirmedWeights : predictiveWeights;
+    const weights = event.eventLayer === EventLayer.CONFIRMED ? confirmedWeights : predictiveWeights;
     const weightEntry = weights[event.eventType];
     if (!weightEntry) continue;
 
-    if (event.eventLayer === 'confirmed') hasConfirmedEvent = true;
+    if (event.eventLayer === EventLayer.CONFIRMED) hasConfirmedEvent = true;
     uniqueSources.add(event.sourceName);
     uniqueTypes.add(event.eventType);
 
@@ -200,7 +202,7 @@ export async function scoreProperty(dominionLeadId: string): Promise<ScoringResu
     const days = daysBetween(referenceDate, now);
     const decay = exponentialDecay(days, weightEntry.half_life_days, decayConfig.floor);
     const reliability = parseFloat(event.reliabilityScore);
-    const severity = weightEntry.severity ?? 1.0;
+    const severity = weightEntry.severity ?? BUSINESS_RULES.scoring.defaultSeverity;
 
     const contribution = weightEntry.base_weight * reliability * decay * severity;
     totalContribution += contribution;
@@ -223,14 +225,14 @@ export async function scoreProperty(dominionLeadId: string): Promise<ScoringResu
   }
 
   const accelerationBonus = signals
-    ? parseFloat(signals.signalAccelerationRate ?? '0') * 0.05
+    ? parseFloat(signals.signalAccelerationRate ?? '0') * BUSINESS_RULES.scoring.accelerationRateMultiplier
     : 0;
   const densityBonus = signals
-    ? Math.min(parseFloat(signals.signalDensityScore ?? '0') * 0.02, 0.15)
+    ? Math.min(parseFloat(signals.signalDensityScore ?? '0') * BUSINESS_RULES.scoring.densityBonusMultiplier, BUSINESS_RULES.scoring.maxDensityBonus)
     : 0;
 
   totalContribution *= (1 + accelerationBonus + densityBonus);
-  const motivationScore = Math.min(100, (totalContribution / 3.0) * 100);
+  const motivationScore = Math.min(100, (totalContribution / BUSINESS_RULES.scoring.normalizationDivisor) * 100);
 
   // ── Deal Score (property economics) ──
   const dealScore = calculateDealScore(property, dealWeights);
@@ -305,20 +307,22 @@ function calculateDealScore(property: Property, weights: DealScoreWeights): numb
   // Equity factor
   const equity = property.equityEstimate ? parseFloat(property.equityEstimate) : 0;
   const { low, mid, high } = weights.equity_thresholds;
+  const ef = BUSINESS_RULES.scoring.equityFactors;
   let equityFactor = 0;
-  if (equity >= high) equityFactor = 1.0;
-  else if (equity >= mid) equityFactor = 0.7;
-  else if (equity >= low) equityFactor = 0.4;
-  else equityFactor = 0.15;
+  if (equity >= high) equityFactor = ef.high;
+  else if (equity >= mid) equityFactor = ef.mid;
+  else if (equity >= low) equityFactor = ef.low;
+  else equityFactor = ef.floor;
   score += equityFactor * weights.equity_weight;
 
   // Ownership duration factor (long ownership = more motivated to sell)
   const months = property.ownershipDurationMonths ?? 0;
   const { short_months, long_months } = weights.ownership_thresholds;
+  const of_ = BUSINESS_RULES.scoring.ownershipFactors;
   let ownershipFactor = 0;
-  if (months >= long_months) ownershipFactor = 1.0;
-  else if (months >= short_months) ownershipFactor = 0.5;
-  else ownershipFactor = 0.2;
+  if (months >= long_months) ownershipFactor = of_.long;
+  else if (months >= short_months) ownershipFactor = of_.short;
+  else ownershipFactor = of_.floor;
   score += ownershipFactor * weights.ownership_weight;
 
   // Absentee owner bonus
@@ -372,11 +376,12 @@ function calculateConfidence(
   hasConfirmed: boolean,
   config: ConfidenceConfig,
 ): number {
+  const cw = BUSINESS_RULES.scoring.confidenceWeights;
   let confidence = 0;
   const signalFactor = Math.min(eventCount / config.min_signals_for_high, 1.0);
-  confidence += signalFactor * 0.4;
-  confidence += Math.min(typeCount * config.diversity_bonus, 0.2);
-  confidence += Math.min(sourceCount * config.source_count_weight, 0.15);
+  confidence += signalFactor * cw.signalFactor;
+  confidence += Math.min(typeCount * config.diversity_bonus, cw.maxDiversityBonus);
+  confidence += Math.min(sourceCount * config.source_count_weight, cw.maxSourceBonus);
   if (hasConfirmed) confidence += config.confirmed_presence_bonus;
   return Math.min(confidence, 1.0);
 }
@@ -397,7 +402,7 @@ async function storeScoringRecord(dominionLeadId: string, result: ScoringResult,
       eventCount: result.signalContributions.length,
       uniqueTypes: [...new Set(result.signalContributions.map((c) => c.eventType))],
       uniqueSources: [...new Set(result.signalContributions.map((c) => c.eventId))],
-      hasConfirmedEvent: result.signalContributions.some((c) => c.eventLayer === 'confirmed'),
+      hasConfirmedEvent: result.signalContributions.some((c) => c.eventLayer === EventLayer.CONFIRMED),
       equityMultiplier: result.equityMultiplier,
       suppressed: result.suppressed,
       suppressionReason: result.suppressionReason,

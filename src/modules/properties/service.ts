@@ -6,6 +6,8 @@ import { generateId, standardizeAddress } from '../../lib/index.js';
 import { NotFoundError } from '../../lib/errors.js';
 import { domainEvents } from '../../events/bus.js';
 import { logger } from '../../config/logger.js';
+import type { MortgageStatusValue } from '../../db/schema/constants.js';
+import { MortgageStatus } from '../../db/schema/constants.js';
 
 export interface PropertyIdentity {
   apn?: string | null;
@@ -26,8 +28,8 @@ export interface PropertyData extends PropertyIdentity {
   ownershipDurationMonths?: number | null;
   absenteeOwner?: boolean | null;
   equityEstimate?: string | null;
-  mortgageStatus?: 'CURRENT' | 'LATE_30' | 'LATE_60' | 'LATE_90' | 'DEFAULT' | 'FORECLOSURE' | 'FREE_AND_CLEAR' | 'UNKNOWN';
-  propertyAttributes?: Record<string, any> | null;
+  mortgageStatus?: MortgageStatusValue;
+  propertyAttributes?: Record<string, unknown> | null;
 }
 
 /**
@@ -71,7 +73,7 @@ async function atomicUpsertByApnCounty(data: PropertyData): Promise<{ property: 
       ownershipDurationMonths: data.ownershipDurationMonths ?? null,
       absenteeOwner: data.absenteeOwner ?? false,
       equityEstimate: data.equityEstimate ?? null,
-      mortgageStatus: data.mortgageStatus ?? 'UNKNOWN',
+      mortgageStatus: data.mortgageStatus ?? MortgageStatus.UNKNOWN,
     })
     .onConflictDoUpdate({
       target: [properties.apn, properties.county],
@@ -137,7 +139,7 @@ async function insertNewProperty(data: PropertyData): Promise<{ property: Proper
     ownershipDurationMonths: data.ownershipDurationMonths ?? null,
     absenteeOwner: data.absenteeOwner ?? false,
     equityEstimate: data.equityEstimate ?? null,
-    mortgageStatus: data.mortgageStatus ?? 'UNKNOWN',
+    mortgageStatus: data.mortgageStatus ?? MortgageStatus.UNKNOWN,
   }).returning();
 
   logger.info({ dominionLeadId, apn: data.apn, county: data.county }, 'Property created');

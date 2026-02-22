@@ -3,6 +3,11 @@ import { hasPermission, getUserById } from '../../modules/rbac/service.js';
 import type { Role } from '../../modules/rbac/service.js';
 import { env } from '../../config/env.js';
 
+interface RequestUser {
+  userId: string;
+  role: Role;
+}
+
 /**
  * Attach user context to request.
  *
@@ -20,10 +25,10 @@ export async function authMiddleware(request: FastifyRequest, reply: FastifyRepl
 
   // Bootstrap admin token check
   if (env.ADMIN_BOOTSTRAP_TOKEN && apiKey === env.ADMIN_BOOTSTRAP_TOKEN) {
-    (request as any).user = {
+    (request as unknown as Record<string, unknown>).user = {
       userId: 'admin-bootstrap',
       role: 'ADMIN' as Role,
-    };
+    } satisfies RequestUser;
     return;
   }
 
@@ -34,10 +39,10 @@ export async function authMiddleware(request: FastifyRequest, reply: FastifyRepl
     return;
   }
 
-  (request as any).user = {
+  (request as unknown as Record<string, unknown>).user = {
     userId: user.userId,
     role: user.role as Role,
-  };
+  } satisfies RequestUser;
 }
 
 /**
@@ -45,7 +50,7 @@ export async function authMiddleware(request: FastifyRequest, reply: FastifyRepl
  */
 export function requireRole(permission: string) {
   return async function (request: FastifyRequest, reply: FastifyReply): Promise<void> {
-    const user = (request as any).user as { userId: string; role: Role } | undefined;
+    const user = (request as unknown as Record<string, unknown>).user as RequestUser | undefined;
 
     if (!user) {
       reply.code(401).send({ error: 'Not authenticated' });

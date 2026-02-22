@@ -1,9 +1,9 @@
 import { db } from '../../db/connection.js';
-import { scoringRecords, promotedLeads, scoringModelConfigs } from '../../db/schema/index.js';
-import { eq, desc, sql } from 'drizzle-orm';
+import { scoringRecords } from '../../db/schema/index.js';
+import { eq, desc } from 'drizzle-orm';
 import { evaluateForPromotion } from './service.js';
 import { logger } from '../../config/logger.js';
-import type { ScoringResult } from '../scoring/service.js';
+import type { ScoringResult } from '../scoring/index.js';
 
 /**
  * Replay promotion evaluation for a single property using its latest score.
@@ -27,7 +27,7 @@ export async function replayPropertyPromotion(dominionLeadId: string): Promise<b
     equityMultiplier: 1.0,
     suppressed: false,
     suppressionReason: null,
-    signalContributions: (latestScore.signalContributions as any[]) ?? [],
+    signalContributions: (latestScore.signalContributions as ScoringResult['signalContributions']) ?? [],
     timeDecayFactor: parseFloat(latestScore.timeDecayFactor ?? '0'),
     scoreDecayRate: parseFloat(latestScore.scoreDecayRate ?? '1'),
     daysSinceTrigger: latestScore.daysSinceTrigger ?? 0,

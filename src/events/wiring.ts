@@ -1,7 +1,7 @@
 import { domainEvents } from './bus.js';
 import { logger } from '../config/logger.js';
-import { logAudit } from '../modules/compliance/service.js';
-import { createLeadInstance, getActiveLeadInstance } from '../modules/workflow/service.js';
+import { logAudit } from '../modules/compliance/index.js';
+import { createLeadInstance, getActiveLeadInstance } from '../modules/workflow/index.js';
 
 /**
  * Wire domain event handlers.

@@ -1,7 +1,7 @@
 import { db } from '../../db/connection.js';
 import { distressEvents } from '../../db/schema/index.js';
 import { scoreProperty, invalidateConfigCache } from './service.js';
-import { recalculateSignalAccumulation } from '../signals/service.js';
+import { recalculateSignalAccumulation } from '../signals/index.js';
 import { logger } from '../../config/logger.js';
 import type { ScoringResult } from './service.js';
 
