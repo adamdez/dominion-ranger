@@ -51,3 +51,16 @@ export type { User, NewUser } from './users';
 export * from './activity-log-v2';
 export * from './deals';
 export * from './marketing';
+
+// ─── Communication ─────────────────────────────────
+export { callLogs } from './call-logs';
+export type { CallLog, NewCallLog } from './call-logs';
+
+export { smsLogs } from './sms-logs';
+export type { SmsLog, NewSmsLog } from './sms-logs';
+
+// ─── Phase 3: Intelligence & Pipeline ──────────────
+export * from './property-contacts';
+export * from './lead-tags';
+export * from './tasks';
+export * from './saved-filters';

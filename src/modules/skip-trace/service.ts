@@ -12,7 +12,7 @@
  */
 import { eq } from 'drizzle-orm';
 import { db } from '../../db/connection.js';
-import { properties } from '../../db/schema/index.js';
+import { properties, propertyContacts } from '../../db/schema/index.js';
 import { logger } from '../../config/logger.js';
 import { env } from '../../config/env.js';
 import { NotFoundError } from '../../lib/errors.js';
@@ -271,6 +271,68 @@ export async function skipTraceProperty(
     if (result.mailingAddress) updates.mailingAddress = result.mailingAddress;
 
     await db.update(properties).set(updates).where(eq(properties.dominionLeadId, dominionLeadId));
+
+    // Insert into property_contacts for multi-contact support
+    const contactRows: Array<{
+      dominionLeadId: string;
+      contactName: string | null;
+      contactType: string;
+      phone: string | null;
+      phoneType: string | null;
+      email: string | null;
+      source: string;
+      isPrimary: boolean;
+      isOwnerMatch: boolean;
+      rawData: Record<string, unknown>;
+    }> = [];
+
+    const phones = [
+      { phone: result.phone, type: result.phoneType, primary: true },
+      { phone: result.phone2, type: result.phone2Type, primary: false },
+      { phone: result.phone3, type: result.phone3Type, primary: false },
+    ].filter(p => p.phone);
+
+    for (const p of phones) {
+      contactRows.push({
+        dominionLeadId,
+        contactName: property.ownerName,
+        contactType: 'OWNER',
+        phone: p.phone ?? null,
+        phoneType: p.type ?? null,
+        email: null,
+        source: result.source,
+        isPrimary: p.primary,
+        isOwnerMatch: true,
+        rawData: result.rawResponse,
+      });
+    }
+
+    const emails = [result.email, result.email2].filter(Boolean);
+    if (emails.length > 0 && phones.length === 0) {
+      contactRows.push({
+        dominionLeadId,
+        contactName: property.ownerName,
+        contactType: 'OWNER',
+        phone: null,
+        phoneType: null,
+        email: emails[0] ?? null,
+        source: result.source,
+        isPrimary: true,
+        isOwnerMatch: true,
+        rawData: result.rawResponse,
+      });
+    } else {
+      // Attach emails to existing phone-based contact rows
+      for (let i = 0; i < Math.min(emails.length, contactRows.length); i++) {
+        contactRows[i].email = emails[i] ?? null;
+      }
+    }
+
+    if (contactRows.length > 0) {
+      await db.insert(propertyContacts).values(contactRows).catch(err => {
+        logger.error({ err, dominionLeadId }, 'Failed to insert property contacts from skip trace');
+      });
+    }
   }
 
   // Log activity for cost tracking (PART 3)

@@ -15,6 +15,13 @@ import { scoringRoutes } from './routes/scoring.js';
 import { leadRoutes } from './routes/leads.js';
 import { inboundRoutes } from './routes/inbound.js';
 import { skipTraceRoutes } from './routes/skip-trace.js';
+import { dialerRoutes } from './routes/dialer.js';
+import { smsRoutes } from './routes/sms.js';
+import { propertyDetailRoutes } from './routes/property-detail.js';
+import { tagRoutes } from './routes/tags.js';
+import { taskRoutes } from './routes/tasks.js';
+import { contactRoutes } from './routes/contacts.js';
+import { savedFilterRoutes } from './routes/saved-filters.js';
 import { RangerError } from '../lib/errors.js';
 import { ZodError } from 'zod';
 
@@ -48,6 +55,9 @@ export async function createServer() {
     if (request.url === '/api/inbound/website-lead') return;
     // Skip auth for system stats in dev
     if (request.url === '/api/system/stats' && env.NODE_ENV === 'development') return;
+    // Skip auth for Twilio webhooks (validated via X-Twilio-Signature)
+    if (request.url.startsWith('/api/dialer/voice') || request.url === '/api/dialer/status' || request.url === '/api/dialer/recording') return;
+    if (request.url === '/api/sms/status' || request.url === '/api/sms/inbound') return;
 
     await authMiddleware(request, reply);
   });
@@ -90,6 +100,13 @@ export async function createServer() {
   await app.register(leadRoutes);
   await app.register(inboundRoutes);
   await app.register(skipTraceRoutes);
+  await app.register(dialerRoutes);
+  await app.register(smsRoutes);
+  await app.register(propertyDetailRoutes);
+  await app.register(tagRoutes);
+  await app.register(taskRoutes);
+  await app.register(contactRoutes);
+  await app.register(savedFilterRoutes);
 
   return app;
 }
