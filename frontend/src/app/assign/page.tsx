@@ -1,6 +1,7 @@
 'use client';
 
-import { UserPlus, Shield } from 'lucide-react';
+import { useState } from 'react';
+import { UserPlus, Shield, CheckCircle, XCircle } from 'lucide-react';
 import {
   Table,
   TableBody,
@@ -10,12 +11,18 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ScoreBadge } from '@/components/ui/score-badge';
 import { EmptyState } from '@/components/ui/empty-state';
 import { ErrorState } from '@/components/ui/error-state';
 import { useLeads, useClaimLead, useRunCompliance } from '@/hooks/use-leads';
 import { formatDistanceToNow } from 'date-fns';
+
+interface ComplianceResult {
+  leadInstanceId: string;
+  cleared: boolean;
+}
 
 export default function AssignPage() {
   const { data, isLoading, error, refetch } = useLeads({
@@ -27,6 +34,28 @@ export default function AssignPage() {
 
   const claimMutation = useClaimLead();
   const complianceMutation = useRunCompliance();
+  const [complianceResults, setComplianceResults] = useState<Record<string, ComplianceResult>>({});
+
+  const handleClaim = (leadInstanceId: string, expectedVersion: number) => {
+    claimMutation.mutate(
+      { leadInstanceId, expectedVersion },
+      {
+        onSuccess: (result) => {
+          complianceMutation.mutate(result.leadInstanceId, {
+            onSuccess: (compResult) => {
+              setComplianceResults(prev => ({
+                ...prev,
+                [leadInstanceId]: {
+                  leadInstanceId,
+                  cleared: compResult.complianceCleared,
+                },
+              }));
+            },
+          });
+        },
+      }
+    );
+  };
 
   if (error) {
     return <ErrorState message="Failed to load unassigned leads" onRetry={() => refetch()} />;
@@ -46,8 +75,8 @@ export default function AssignPage() {
     return (
       <EmptyState
         icon={UserPlus}
-        title="No unassigned leads"
-        description="All promoted leads have been claimed. Run promotion to generate new leads."
+        title="No promoted leads available"
+        description="Run promotion from the Settings page to generate leads for assignment."
       />
     );
   }
@@ -69,48 +98,58 @@ export default function AssignPage() {
               <TableHead>County</TableHead>
               <TableHead>Score</TableHead>
               <TableHead>Promoted</TableHead>
+              <TableHead>Compliance</TableHead>
               <TableHead className="text-right">Action</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {data.data.map((lead) => (
-              <TableRow key={lead.leadInstanceId}>
-                <TableCell className="font-medium max-w-[200px] truncate">
-                  {lead.streetAddress ?? '—'}
-                </TableCell>
-                <TableCell className="max-w-[150px] truncate">
-                  {lead.ownerName ?? '—'}
-                </TableCell>
-                <TableCell>{lead.county ?? '—'}</TableCell>
-                <TableCell>
-                  <ScoreBadge score={lead.compositeScore} />
-                </TableCell>
-                <TableCell className="text-sm text-muted-foreground">
-                  {formatDistanceToNow(new Date(lead.createdAt), { addSuffix: true })}
-                </TableCell>
-                <TableCell className="text-right">
-                  <div className="flex items-center justify-end gap-2">
+            {data.data.map((lead) => {
+              const compResult = complianceResults[lead.leadInstanceId];
+              return (
+                <TableRow key={lead.leadInstanceId}>
+                  <TableCell className="font-medium max-w-[200px] truncate">
+                    {lead.streetAddress ?? '—'}
+                  </TableCell>
+                  <TableCell className="max-w-[150px] truncate">
+                    {lead.ownerName ?? '—'}
+                  </TableCell>
+                  <TableCell>{lead.county ?? '—'}</TableCell>
+                  <TableCell>
+                    <ScoreBadge score={lead.compositeScore} />
+                  </TableCell>
+                  <TableCell className="text-sm text-muted-foreground">
+                    {formatDistanceToNow(new Date(lead.createdAt), { addSuffix: true })}
+                  </TableCell>
+                  <TableCell>
+                    {compResult ? (
+                      compResult.cleared ? (
+                        <Badge variant="outline" className="bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400">
+                          <CheckCircle className="mr-1 h-3 w-3" />
+                          Cleared
+                        </Badge>
+                      ) : (
+                        <Badge variant="outline" className="bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400">
+                          <XCircle className="mr-1 h-3 w-3" />
+                          Blocked
+                        </Badge>
+                      )
+                    ) : (
+                      <span className="text-xs text-muted-foreground">—</span>
+                    )}
+                  </TableCell>
+                  <TableCell className="text-right">
                     <Button
                       size="sm"
-                      disabled={claimMutation.isPending}
-                      onClick={() =>
-                        claimMutation.mutate(
-                          { leadInstanceId: lead.leadInstanceId, expectedVersion: lead.version },
-                          {
-                            onSuccess: (result) => {
-                              complianceMutation.mutate(result.leadInstanceId);
-                            },
-                          }
-                        )
-                      }
+                      disabled={claimMutation.isPending || !!compResult}
+                      onClick={() => handleClaim(lead.leadInstanceId, lead.version)}
                     >
                       <UserPlus className="mr-1.5 h-3.5 w-3.5" />
-                      Claim
+                      {compResult ? 'Claimed' : 'Claim'}
                     </Button>
-                  </div>
-                </TableCell>
-              </TableRow>
-            ))}
+                  </TableCell>
+                </TableRow>
+              );
+            })}
           </TableBody>
         </Table>
       </div>

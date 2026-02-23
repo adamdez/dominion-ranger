@@ -12,7 +12,7 @@ import {
 } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { ScoreBadge } from '@/components/ui/score-badge';
@@ -26,7 +26,7 @@ import { formatDistanceToNow } from 'date-fns';
 
 export default function LeadsPage() {
   const [page, setPage] = useState(1);
-  const [status, setStatus] = useState<string>('');
+  const [selectedStatuses, setSelectedStatuses] = useState<string[]>([]);
   const [search, setSearch] = useState('');
   const [searchInput, setSearchInput] = useState('');
   const [sortBy, setSortBy] = useState<string>('createdAt');
@@ -36,7 +36,7 @@ export default function LeadsPage() {
   const { data, isLoading, error, refetch } = useLeads({
     page,
     pageSize: 25,
-    status: status || undefined,
+    status: selectedStatuses.length > 0 ? selectedStatuses.join(',') : undefined,
     search: search || undefined,
     sortBy,
     sortOrder,
@@ -48,9 +48,16 @@ export default function LeadsPage() {
   }, [searchInput]);
 
   const clearFilters = useCallback(() => {
-    setStatus('');
+    setSelectedStatuses([]);
     setSearch('');
     setSearchInput('');
+    setPage(1);
+  }, []);
+
+  const toggleStatus = useCallback((status: string) => {
+    setSelectedStatuses(prev =>
+      prev.includes(status) ? prev.filter(s => s !== status) : [...prev, status]
+    );
     setPage(1);
   }, []);
 
@@ -64,13 +71,15 @@ export default function LeadsPage() {
     setPage(1);
   }, [sortBy]);
 
+  const hasFilters = selectedStatuses.length > 0 || search;
+
   if (error) {
     return <ErrorState message="Failed to load leads" onRetry={() => refetch()} />;
   }
 
   return (
     <div className="space-y-4">
-      {/* Filters */}
+      {/* Search + Clear */}
       <div className="flex flex-wrap items-center gap-3">
         <div className="flex items-center gap-2">
           <Input
@@ -85,28 +94,35 @@ export default function LeadsPage() {
           </Button>
         </div>
 
-        <Select value={status} onValueChange={(v) => { setStatus(v === 'ALL' ? '' : v); setPage(1); }}>
-          <SelectTrigger className="w-44">
-            <SelectValue placeholder="All Statuses" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="ALL">All Statuses</SelectItem>
-            {Object.entries(LEAD_STATUS).map(([key, config]) => (
-              <SelectItem key={key} value={key}>{config.label}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-
-        {(status || search) && (
+        {hasFilters && (
           <Button variant="ghost" size="sm" onClick={clearFilters}>
             <X className="mr-1 h-3 w-3" />
-            Clear
+            Clear All
           </Button>
         )}
 
         <span className="ml-auto text-sm text-muted-foreground">
           {data?.pagination.total ?? 0} leads
         </span>
+      </div>
+
+      {/* Multi-Status Filter */}
+      <div className="flex flex-wrap gap-1.5">
+        {Object.entries(LEAD_STATUS).map(([key, config]) => {
+          const isSelected = selectedStatuses.includes(key);
+          return (
+            <Badge
+              key={key}
+              variant={isSelected ? 'default' : 'outline'}
+              className={`cursor-pointer select-none transition-colors ${
+                isSelected ? '' : 'opacity-60 hover:opacity-100'
+              }`}
+              onClick={() => toggleStatus(key)}
+            >
+              {config.label}
+            </Badge>
+          );
+        })}
       </div>
 
       {/* Table */}
@@ -119,8 +135,10 @@ export default function LeadsPage() {
       ) : data?.data.length === 0 ? (
         <EmptyState
           icon={Users}
-          title="No leads found"
-          description="No lead instances match your filters. Import properties and run scoring + promotion first."
+          title="No leads match your filters"
+          description={hasFilters
+            ? 'Try adjusting your filters or search terms.'
+            : 'No lead instances exist. Import properties and run scoring + promotion first.'}
         />
       ) : (
         <>
@@ -165,7 +183,6 @@ export default function LeadsPage() {
             </Table>
           </div>
 
-          {/* Pagination */}
           {data && data.pagination.totalPages > 1 && (
             <div className="flex items-center justify-between">
               <span className="text-sm text-muted-foreground">

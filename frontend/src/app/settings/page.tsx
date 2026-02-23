@@ -43,6 +43,7 @@ export default function SettingsPage() {
               <SettingRow label="Properties w/ Phone" value={(stats.data?.overview?.withPhone ?? 0).toLocaleString()} />
               <SettingRow label="Absentee Owners" value={(stats.data?.overview?.absenteeOwners ?? 0).toLocaleString()} />
               <SettingRow label="Uptime" value={stats.data ? formatUptime(stats.data.uptime) : '—'} />
+              <SettingRow label="Last Updated" value={stats.data?.timestamp ? new Date(stats.data.timestamp).toLocaleString() : '—'} />
             </div>
           )}
         </CardContent>
@@ -71,7 +72,7 @@ export default function SettingsPage() {
                     <div className={`h-2.5 w-2.5 rounded-full ${config.color}`} />
                     <span>{config.label}</span>
                   </div>
-                  <span className="text-muted-foreground">≥ {config.min}</span>
+                  <span className="text-muted-foreground">&ge; {config.min}</span>
                 </div>
               ))}
             </div>
@@ -85,6 +86,15 @@ export default function SettingsPage() {
                 <SettingRow label="Properties Scored" value={(scoringStats.data?.propertiesScored ?? 0).toLocaleString()} />
                 <SettingRow label="Average Score" value={(scoringStats.data?.avgScore ?? 0).toFixed(1)} />
                 <SettingRow label="Max Score" value={(scoringStats.data?.maxScore ?? 0).toFixed(1)} />
+                <SettingRow label="Total Records" value={(scoringStats.data?.totalRecords ?? 0).toLocaleString()} />
+              </div>
+              <Separator />
+              <div className="space-y-2 text-sm">
+                <h4 className="font-semibold text-xs text-muted-foreground uppercase">Tier Breakdown</h4>
+                <SettingRow label="Tier A" value={String(scoringStats.data?.tierA ?? 0)} />
+                <SettingRow label="Tier B" value={String(scoringStats.data?.tierB ?? 0)} />
+                <SettingRow label="Tier C" value={String(scoringStats.data?.tierC ?? 0)} />
+                <SettingRow label="Below Threshold" value={String(scoringStats.data?.belowThreshold ?? 0)} />
               </div>
             </>
           )}
@@ -113,16 +123,16 @@ export default function SettingsPage() {
               disabled={runScoring.isPending}
               onClick={() => runScoring.mutate({ rescore: true })}
             >
-              <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
+              <RefreshCw className={`mr-1.5 h-3.5 w-3.5 ${runScoring.isPending ? 'animate-spin' : ''}`} />
               Rescore
             </Button>
           </div>
           <Separator />
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium">Run Scoring Batch</p>
+              <p className="text-sm font-medium">Score New Properties</p>
               <p className="text-xs text-muted-foreground">
-                Score unscored properties only
+                Score only unscored properties
               </p>
             </div>
             <Button
@@ -138,7 +148,7 @@ export default function SettingsPage() {
           <Separator />
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium">Run Promotion</p>
+              <p className="text-sm font-medium">Replay Promotions</p>
               <p className="text-xs text-muted-foreground">
                 Evaluate all scored properties for lead promotion
               </p>
@@ -149,7 +159,7 @@ export default function SettingsPage() {
               disabled={runPromotion.isPending}
               onClick={() => runPromotion.mutate()}
             >
-              <ArrowUpCircle className="mr-1.5 h-3.5 w-3.5" />
+              <ArrowUpCircle className={`mr-1.5 h-3.5 w-3.5 ${runPromotion.isPending ? 'animate-spin' : ''}`} />
               Promote
             </Button>
           </div>

@@ -53,10 +53,10 @@ export function useLeadAudit(dominionLeadId: string | null) {
   return useQuery({
     queryKey: ['leadAudit', dominionLeadId],
     queryFn: async () => {
-      const { data } = await api.get<AuditLogEntry[]>(
+      const { data } = await api.get<{ entries: AuditLogEntry[]; count: number }>(
         `/api/properties/${dominionLeadId}/audit`
       );
-      return data;
+      return data.entries;
     },
     enabled: !!dominionLeadId,
   });

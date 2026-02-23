@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useCallback } from 'react';
-import { Phone, SkipForward } from 'lucide-react';
+import { Phone, SkipForward, PhoneOff } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -33,12 +33,17 @@ export default function DialQueuePage() {
 
   const handleStartCall = useCallback(() => {
     if (!currentLead) return;
-    transitionLead.mutate({
-      leadInstanceId: currentLead.leadInstanceId,
-      toStatus: 'DIALING',
-      expectedVersion: currentLead.version,
-    });
-    setIsDialing(true);
+    transitionLead.mutate(
+      {
+        leadInstanceId: currentLead.leadInstanceId,
+        toStatus: 'DIALING',
+        expectedVersion: currentLead.version,
+      },
+      {
+        onSuccess: () => setIsDialing(true),
+        onError: () => setIsDialing(false),
+      }
+    );
   }, [currentLead, transitionLead]);
 
   const handleSubmitDisposition = useCallback(
@@ -73,14 +78,20 @@ export default function DialQueuePage() {
             setNotes('');
             setIsDialing(false);
 
-            if (advance && currentIndex < leads.length - 1) {
-              setCurrentIndex((i) => i + 1);
+            if (advance) {
+              refetch().then(() => {
+                if (currentIndex < leads.length - 1) {
+                  setCurrentIndex(i => i + 1);
+                } else {
+                  setCurrentIndex(0);
+                }
+              });
             }
           },
         }
       );
     },
-    [currentLead, disposition, notes, logDisposition, transitionLead, currentIndex, leads.length]
+    [currentLead, disposition, notes, logDisposition, transitionLead, currentIndex, leads.length, refetch]
   );
 
   if (error) {
@@ -101,7 +112,7 @@ export default function DialQueuePage() {
       <EmptyState
         icon={Phone}
         title="No leads in dial queue"
-        description="Import properties, run scoring, and promote leads to populate the dial queue."
+        description="Assign leads and run compliance first. Leads must be DIAL_READY to appear here."
       />
     );
   }
@@ -146,10 +157,17 @@ export default function DialQueuePage() {
                 </div>
               )}
 
+              {!currentLead.phone && (
+                <div className="flex items-center gap-2 rounded-lg bg-destructive/10 p-3 text-destructive">
+                  <PhoneOff className="h-4 w-4" />
+                  <span className="text-sm font-medium">No phone number on file</span>
+                </div>
+              )}
+
               <Separator />
 
               {!isDialing ? (
-                <Button className="w-full" size="lg" onClick={handleStartCall}>
+                <Button className="w-full" size="lg" onClick={handleStartCall} disabled={transitionLead.isPending}>
                   <Phone className="mr-2 h-4 w-4" />
                   Start Call
                 </Button>
@@ -228,7 +246,7 @@ export default function DialQueuePage() {
         <CardHeader className="pb-3">
           <CardTitle className="text-base flex items-center justify-between">
             <span>Queue</span>
-            <span className="text-sm font-normal text-muted-foreground">
+            <span className="text-sm font-normal text-muted-foreground tabular-nums">
               {data?.pagination.total ?? 0} leads
             </span>
           </CardTitle>

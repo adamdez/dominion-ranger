@@ -32,7 +32,11 @@ describe.skipIf(!canRun)('Workflow Concurrency', () => {
   });
 
   beforeEach(async () => {
+    await db.execute(sql`ALTER TABLE activity_log DISABLE TRIGGER USER`);
+    await db.execute(sql`DELETE FROM activity_log`);
+    await db.execute(sql`ALTER TABLE activity_log ENABLE TRIGGER USER`);
     await db.execute(sql`DELETE FROM audit_log`);
+    await db.execute(sql`DELETE FROM dispositions`);
     await db.execute(sql`DELETE FROM lead_instances`);
     await db.execute(sql`DELETE FROM promoted_leads`);
     await db.execute(sql`DELETE FROM users`);

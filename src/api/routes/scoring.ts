@@ -205,8 +205,19 @@ export async function scoringRoutes(app: FastifyInstance): Promise<void> {
       `);
 
       const rows = (result as unknown as { rows?: Record<string, unknown>[] }).rows ?? [];
-      const stats = rows[0] ?? {};
-      return reply.send(stats);
+      const raw = rows[0] ?? {};
+      return reply.send({
+        propertiesScored: raw.properties_scored ?? 0,
+        totalRecords: raw.total_records ?? 0,
+        avgScore: Number(raw.avg_score ?? 0),
+        maxScore: Number(raw.max_score ?? 0),
+        tierA: raw.tier_a ?? 0,
+        tierB: raw.tier_b ?? 0,
+        tierC: raw.tier_c ?? 0,
+        belowThreshold: raw.below_threshold ?? 0,
+        totalProperties: raw.total_properties ?? 0,
+        totalPromoted: raw.total_promoted ?? 0,
+      });
     },
   );
 

@@ -278,12 +278,34 @@ export async function leadRoutes(app: FastifyInstance): Promise<void> {
           ),
         );
 
+      const [staleResult] = await db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(leadInstances)
+        .where(
+          and(
+            sql`${leadInstances.status} NOT IN ('CLOSED', 'DEAD')`,
+            sql`${leadInstances.updatedAt} < now() - interval '5 days'`,
+          ),
+        );
+
+      const recentActivity = await db
+        .select({
+          leadInstanceId: leadInstances.leadInstanceId,
+          status: leadInstances.status,
+          updatedAt: leadInstances.updatedAt,
+        })
+        .from(leadInstances)
+        .orderBy(desc(leadInstances.updatedAt))
+        .limit(10);
+
       return {
         total,
         active,
         dialReady,
         promoted,
         closedThisMonth: closedThisMonth.count,
+        staleCount: staleResult.count,
+        recentActivity,
         byStatus: statuses,
       };
     },

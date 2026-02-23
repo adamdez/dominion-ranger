@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import {
   Sheet,
   SheetContent,
@@ -10,6 +11,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Textarea } from '@/components/ui/textarea';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { ScoreBadge } from '@/components/ui/score-badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -31,6 +33,7 @@ import {
   CheckCircle,
   XCircle,
   AlertTriangle,
+  StickyNote,
 } from 'lucide-react';
 import {
   AlertDialog,
@@ -55,8 +58,21 @@ export function LeadDetailSheet({ lead, open, onClose }: LeadDetailSheetProps) {
   const transitionMutation = useTransitionLead();
   const complianceMutation = useRunCompliance();
   const auditQuery = useLeadAudit(lead?.dominionLeadId ?? null);
+  const [noteText, setNoteText] = useState('');
 
   if (!lead) return null;
+
+  const handleAddNote = () => {
+    if (!noteText.trim()) return;
+    transitionMutation.mutate({
+      leadInstanceId: lead.leadInstanceId,
+      toStatus: lead.status,
+      expectedVersion: lead.version,
+      notes: noteText.trim(),
+    }, {
+      onSuccess: () => setNoteText(''),
+    });
+  };
 
   return (
     <Sheet open={open} onOpenChange={(v) => !v && onClose()}>
@@ -72,28 +88,32 @@ export function LeadDetailSheet({ lead, open, onClose }: LeadDetailSheetProps) {
 
         <ScrollArea className="flex-1 -mx-6 px-6">
           <div className="space-y-6 pb-6">
-            {/* Score Section */}
+            {/* Score Section with Visual Bars */}
             <section>
               <h3 className="text-sm font-semibold text-muted-foreground mb-3">SCORING</h3>
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-3 gap-3 mb-3">
                 <ScoreCard label="Composite" score={lead.compositeScore} />
                 <ScoreCard label="Motivation" score={lead.motivationScore} />
                 <ScoreCard label="Deal" score={lead.dealScore} />
               </div>
-              {lead.confidenceScore !== null && lead.confidenceScore !== undefined && (
-                <div className="mt-2">
-                  <div className="flex justify-between text-xs text-muted-foreground mb-1">
-                    <span>Confidence</span>
-                    <span>{Math.round(lead.confidenceScore * 100)}%</span>
+              <div className="space-y-2">
+                <ScoreBar label="Motivation" score={lead.motivationScore} />
+                <ScoreBar label="Deal" score={lead.dealScore} />
+                {lead.confidenceScore !== null && lead.confidenceScore !== undefined && (
+                  <div>
+                    <div className="flex justify-between text-xs text-muted-foreground mb-1">
+                      <span>Confidence</span>
+                      <span>{Math.round(lead.confidenceScore * 100)}%</span>
+                    </div>
+                    <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-primary rounded-full transition-all"
+                        style={{ width: `${Math.round(lead.confidenceScore * 100)}%` }}
+                      />
+                    </div>
                   </div>
-                  <div className="h-1.5 bg-muted rounded-full overflow-hidden">
-                    <div
-                      className="h-full bg-primary rounded-full transition-all"
-                      style={{ width: `${Math.round(lead.confidenceScore * 100)}%` }}
-                    />
-                  </div>
-                </div>
-              )}
+                )}
+              </div>
             </section>
 
             <Separator />
@@ -136,12 +156,45 @@ export function LeadDetailSheet({ lead, open, onClose }: LeadDetailSheetProps) {
               <div className="space-y-1 text-sm">
                 <InfoRow label="Phone" value={lead.phone} />
                 <InfoRow label="Assigned To" value={lead.assignedTo} />
+                <InfoRow label="Events" value={String(lead.eventCount ?? 0)} />
               </div>
             </section>
 
             <Separator />
 
-            {/* Audit History */}
+            {/* Notes Section */}
+            <section>
+              <h3 className="text-sm font-semibold text-muted-foreground mb-3 flex items-center gap-1.5">
+                <StickyNote className="h-3.5 w-3.5" />
+                NOTES
+              </h3>
+              {lead.notes && (
+                <div className="rounded-md border bg-muted/50 p-3 text-sm mb-3 whitespace-pre-wrap">
+                  {lead.notes}
+                </div>
+              )}
+              <div className="flex gap-2">
+                <Textarea
+                  placeholder="Add a note..."
+                  value={noteText}
+                  onChange={e => setNoteText(e.target.value)}
+                  rows={2}
+                  className="flex-1"
+                />
+                <Button
+                  size="sm"
+                  disabled={!noteText.trim() || transitionMutation.isPending}
+                  onClick={handleAddNote}
+                  className="self-end"
+                >
+                  Add
+                </Button>
+              </div>
+            </section>
+
+            <Separator />
+
+            {/* Status History Timeline */}
             <section>
               <h3 className="text-sm font-semibold text-muted-foreground mb-3">HISTORY</h3>
               {auditQuery.isLoading ? (
@@ -151,15 +204,18 @@ export function LeadDetailSheet({ lead, open, onClose }: LeadDetailSheetProps) {
               ) : (auditQuery.data ?? []).length === 0 ? (
                 <p className="text-sm text-muted-foreground">No history available</p>
               ) : (
-                <div className="space-y-2">
-                  {(auditQuery.data ?? []).slice(0, 15).map((entry: AuditLogEntry) => (
-                    <div key={entry.logId} className="flex items-start gap-2 text-xs">
-                      <span className="mt-0.5 h-1.5 w-1.5 rounded-full bg-muted-foreground shrink-0" />
-                      <div className="flex-1 min-w-0">
-                        <span className="font-medium">{entry.actionType}</span>
-                        <span className="text-muted-foreground ml-1">
+                <div className="relative pl-4 border-l-2 border-muted space-y-3">
+                  {(auditQuery.data ?? []).slice(0, 20).map((entry: AuditLogEntry) => (
+                    <div key={entry.logId} className="relative">
+                      <span className="absolute -left-[calc(0.25rem+1px)] top-1.5 h-2 w-2 rounded-full bg-primary" />
+                      <div className="ml-2">
+                        <span className="text-xs font-medium">{entry.actionType}</span>
+                        <span className="text-xs text-muted-foreground ml-2">
                           {format(new Date(entry.createdAt), 'MMM d, h:mm a')}
                         </span>
+                        {entry.userId && (
+                          <span className="text-xs text-muted-foreground ml-1">by {entry.userId}</span>
+                        )}
                       </div>
                     </div>
                   ))}
@@ -170,6 +226,22 @@ export function LeadDetailSheet({ lead, open, onClose }: LeadDetailSheetProps) {
         </ScrollArea>
       </SheetContent>
     </Sheet>
+  );
+}
+
+function ScoreBar({ label, score }: { label: string; score: number | null }) {
+  const pct = score != null ? Math.min(Math.round(score), 100) : 0;
+  const color = pct >= 80 ? 'bg-green-500' : pct >= 60 ? 'bg-yellow-500' : pct >= 40 ? 'bg-orange-500' : 'bg-red-500';
+  return (
+    <div>
+      <div className="flex justify-between text-xs text-muted-foreground mb-1">
+        <span>{label}</span>
+        <span>{score != null ? Math.round(score) : '—'}</span>
+      </div>
+      <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+        <div className={`h-full rounded-full ${color} transition-all`} style={{ width: `${pct}%` }} />
+      </div>
+    </div>
   );
 }
 
@@ -223,18 +295,18 @@ function StatusActions({
   onTransition: (status: string) => void;
   loading: boolean;
 }) {
-  const actions: Record<string, { label: string; icon: React.ReactNode; action: () => void; variant?: 'default' | 'outline' }[]> = {
+  const actions: Record<string, { label: string; icon: React.ReactNode; action: () => void }[]> = {
     PROMOTED: [
       { label: 'Claim Lead', icon: <UserPlus className="mr-1.5 h-3.5 w-3.5" />, action: onClaim },
     ],
     ASSIGNED: [
-      { label: 'Run Compliance', icon: <Shield className="mr-1.5 h-3.5 w-3.5" />, action: onCompliance },
+      { label: 'Start Compliance', icon: <Shield className="mr-1.5 h-3.5 w-3.5" />, action: onCompliance },
     ],
     DIAL_READY: [
       { label: 'Start Dialing', icon: <Phone className="mr-1.5 h-3.5 w-3.5" />, action: () => onTransition('DIALING') },
     ],
     DIALING: [
-      { label: 'Mark Contacted', icon: <MessageSquare className="mr-1.5 h-3.5 w-3.5" />, action: () => onTransition('CONTACTED') },
+      { label: 'Log Disposition', icon: <MessageSquare className="mr-1.5 h-3.5 w-3.5" />, action: () => onTransition('CONTACTED') },
     ],
     CONTACTED: [
       { label: 'Send Offer', icon: <Send className="mr-1.5 h-3.5 w-3.5" />, action: () => onTransition('OFFER_SENT') },

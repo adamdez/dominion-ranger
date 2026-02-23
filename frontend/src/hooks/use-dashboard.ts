@@ -7,6 +7,8 @@ interface LeadStatsResponse {
   dialReady: number;
   promoted: number;
   closedThisMonth: number;
+  staleCount: number;
+  recentActivity: Array<{ leadInstanceId: string; status: string; updatedAt: string }>;
   byStatus: Array<{ status: string; count: number }>;
 }
 
