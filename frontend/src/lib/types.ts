@@ -120,11 +120,32 @@ export interface LeadWithProperty {
   county: string | null;
   ownerName: string | null;
   phone: string | null;
+  phone2: string | null;
+  phone3: string | null;
+  phoneType: string | null;
+  phone2Type: string | null;
+  phone3Type: string | null;
+  email: string | null;
+  email2: string | null;
+  skipTraceTier: string | null;
+  skipTracedAt: string | null;
+  skipTraceSource: string | null;
   compositeScore: number | null;
   motivationScore: number | null;
   dealScore: number | null;
   confidenceScore: number | null;
   eventCount: number;
+}
+
+export interface SkipTraceResponse {
+  success: boolean;
+  tier: 'STANDARD' | 'ADVANCED';
+  source: string;
+  phone: string | null;
+  additionalPhones: string[];
+  email: string | null;
+  costCents: number;
+  error?: string;
 }
 
 export interface AuditLogEntry {

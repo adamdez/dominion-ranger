@@ -130,6 +130,7 @@ export async function scoringRoutes(app: FastifyInstance): Promise<void> {
   );
 
   // POST /api/scoring/promote — Replay promotion evaluation for all scored properties
+  // Runs synchronously: promotion reads cached scores (not computing new ones) so it's fast
   app.post(
     '/api/scoring/promote',
     { preHandler: [requireRole('pipeline.run')] },
@@ -145,27 +146,8 @@ export async function scoringRoutes(app: FastifyInstance): Promise<void> {
           return reply.send({ status: 'complete', message: 'No scored properties to promote', promoted: 0, skipped: 0, errors: 0 });
         }
 
-        if (total > BUSINESS_RULES.batch.largeBatchThreshold) {
-          reply.send({
-            status: 'started',
-            message: `Promoting ${total} scored properties. Check /api/scoring/stats for progress.`,
-            total,
-          });
-
-          setImmediate(async () => {
-            try {
-              const result = await replayAllPromotions();
-              logger.info({ ...result, total }, 'Batch promotion COMPLETE');
-            } catch (err: unknown) {
-              logger.error({ err: err instanceof Error ? err.message : String(err) }, 'Batch promotion failed');
-            }
-          });
-
-          return;
-        }
-
         const result = await replayAllPromotions();
-        return reply.send({ status: 'completed', ...result });
+        return reply.send({ status: 'completed', total, ...result });
       } catch (err: unknown) {
         logger.error({ err }, 'Promotion failed');
         return reply.code(500).send({

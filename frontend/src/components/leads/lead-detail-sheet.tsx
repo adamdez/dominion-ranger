@@ -19,6 +19,7 @@ import {
   useRunCompliance,
   useLeadAudit,
 } from '@/hooks/use-leads';
+import { useSkipTrace } from '@/hooks/use-skip-trace';
 import type { LeadWithProperty, AuditLogEntry } from '@/lib/types';
 import { formatDistanceToNow, format } from 'date-fns';
 import {
@@ -31,6 +32,8 @@ import {
   CheckCircle,
   XCircle,
   AlertTriangle,
+  SearchCheck,
+  Zap,
 } from 'lucide-react';
 import {
   AlertDialog,
@@ -54,6 +57,7 @@ export function LeadDetailSheet({ lead, open, onClose }: LeadDetailSheetProps) {
   const claimMutation = useClaimLead();
   const transitionMutation = useTransitionLead();
   const complianceMutation = useRunCompliance();
+  const skipTraceMutation = useSkipTrace();
   const auditQuery = useLeadAudit(lead?.dominionLeadId ?? null);
 
   if (!lead) return null;
@@ -134,9 +138,47 @@ export function LeadDetailSheet({ lead, open, onClose }: LeadDetailSheetProps) {
             <section>
               <h3 className="text-sm font-semibold text-muted-foreground mb-3">CONTACT</h3>
               <div className="space-y-1 text-sm">
-                <InfoRow label="Phone" value={lead.phone} />
+                <PhoneRow label="Phone" number={lead.phone} type={lead.phoneType} />
+                <PhoneRow label="Phone 2" number={lead.phone2} type={lead.phone2Type} />
+                <PhoneRow label="Phone 3" number={lead.phone3} type={lead.phone3Type} />
+                <InfoRow label="Email" value={lead.email} />
+                {lead.email2 && <InfoRow label="Email 2" value={lead.email2} />}
                 <InfoRow label="Assigned To" value={lead.assignedTo} />
               </div>
+              {lead.skipTracedAt ? (
+                <p className="text-xs text-muted-foreground mt-2">
+                  Traced via {lead.skipTraceSource} ({lead.skipTraceTier}) •{' '}
+                  {formatDistanceToNow(new Date(lead.skipTracedAt), { addSuffix: true })}
+                </p>
+              ) : null}
+            </section>
+
+            {/* Skip Trace Actions */}
+            <section className="flex flex-wrap gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={skipTraceMutation.isPending}
+                onClick={() => skipTraceMutation.mutate({
+                  dominionLeadId: lead.dominionLeadId,
+                  tier: 'STANDARD',
+                })}
+              >
+                <SearchCheck className="mr-1.5 h-3.5 w-3.5" />
+                {skipTraceMutation.isPending ? 'Tracing...' : 'Standard Trace'}
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={skipTraceMutation.isPending}
+                onClick={() => skipTraceMutation.mutate({
+                  dominionLeadId: lead.dominionLeadId,
+                  tier: 'ADVANCED',
+                })}
+              >
+                <Zap className="mr-1.5 h-3.5 w-3.5" />
+                Advanced Trace
+              </Button>
             </section>
 
             <Separator />
@@ -286,11 +328,27 @@ function StatusActions({
   );
 }
 
-function InfoRow({ label, value }: { label: string; value: string | null }) {
+function InfoRow({ label, value }: { label: string; value: string | null | undefined }) {
   return (
     <div className="flex justify-between">
       <span className="text-muted-foreground">{label}</span>
       <span>{value ?? '—'}</span>
+    </div>
+  );
+}
+
+function PhoneRow({ label, number, type }: { label: string; number: string | null | undefined; type: string | null | undefined }) {
+  if (!number) return null;
+  const formatted = number.length === 10
+    ? `(${number.slice(0, 3)}) ${number.slice(3, 6)}-${number.slice(6)}`
+    : number;
+  return (
+    <div className="flex justify-between">
+      <span className="text-muted-foreground">{label}</span>
+      <span className="font-mono">
+        {formatted}
+        {type && <span className="text-xs text-muted-foreground ml-1">({type})</span>}
+      </span>
     </div>
   );
 }

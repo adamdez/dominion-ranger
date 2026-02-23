@@ -7,6 +7,7 @@ import {
   numeric,
   integer,
   timestamp,
+  jsonb,
   uniqueIndex,
   index,
 } from 'drizzle-orm/pg-core';
@@ -37,10 +38,22 @@ export const properties = pgTable(
     ownerFirst: varchar('owner_first', { length: 128 }),
     ownerLast: varchar('owner_last', { length: 128 }),
 
-    // Contact (enriched via REISkip)
+    // Contact (enriched via skip trace)
     phone: varchar('phone', { length: 20 }),
+    phoneType: varchar('phone_type', { length: 16 }),
+    phone2: varchar('phone_2', { length: 20 }),
+    phone2Type: varchar('phone_2_type', { length: 16 }),
+    phone3: varchar('phone_3', { length: 20 }),
+    phone3Type: varchar('phone_3_type', { length: 16 }),
     email: varchar('email', { length: 256 }),
+    email2: varchar('email_2', { length: 256 }),
     mailingAddress: text('mailing_address'),
+
+    // Skip trace metadata
+    skipTraceTier: varchar('skip_trace_tier', { length: 16 }),
+    skipTracedAt: timestamp('skip_traced_at', { withTimezone: true }),
+    skipTraceSource: varchar('skip_trace_source', { length: 32 }),
+    skipTraceRaw: jsonb('skip_trace_raw'),
 
     // Property intelligence
     ownershipDurationMonths: integer('ownership_duration_months'),

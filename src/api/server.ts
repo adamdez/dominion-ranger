@@ -14,6 +14,7 @@ import { enrichmentRoutes } from './routes/enrichment.js';
 import { scoringRoutes } from './routes/scoring.js';
 import { leadRoutes } from './routes/leads.js';
 import { inboundRoutes } from './routes/inbound.js';
+import { skipTraceRoutes } from './routes/skip-trace.js';
 import { RangerError } from '../lib/errors.js';
 import { ZodError } from 'zod';
 
@@ -88,6 +89,7 @@ export async function createServer() {
   await app.register(scoringRoutes);
   await app.register(leadRoutes);
   await app.register(inboundRoutes);
+  await app.register(skipTraceRoutes);
 
   return app;
 }

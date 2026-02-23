@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useCallback } from 'react';
-import { Phone, SkipForward } from 'lucide-react';
+import { Phone, SkipForward, SearchCheck, Zap, AlertCircle } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -15,6 +15,7 @@ import { ErrorState } from '@/components/ui/error-state';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useDialQueue, useLogDisposition, useDispositions } from '@/hooks/use-dial-queue';
 import { useTransitionLead } from '@/hooks/use-leads';
+import { useSkipTrace } from '@/hooks/use-skip-trace';
 import { DISPOSITION_TYPES } from '@/lib/constants';
 
 export default function DialQueuePage() {
@@ -26,6 +27,7 @@ export default function DialQueuePage() {
   const { data, isLoading, error, refetch } = useDialQueue(1, 50);
   const logDisposition = useLogDisposition();
   const transitionLead = useTransitionLead();
+  const skipTrace = useSkipTrace();
 
   const leads = data?.data ?? [];
   const currentLead = leads[currentIndex] ?? null;
@@ -139,10 +141,43 @@ export default function DialQueuePage() {
                 </div>
               </div>
 
-              {currentLead.phone && (
+              {currentLead.phone ? (
                 <div className="flex items-center gap-2 rounded-lg bg-muted p-3">
                   <Phone className="h-4 w-4 text-muted-foreground" />
                   <span className="font-mono text-lg font-semibold">{currentLead.phone}</span>
+                </div>
+              ) : (
+                <div className="rounded-lg border border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/30 p-3 space-y-2">
+                  <div className="flex items-center gap-2 text-amber-700 dark:text-amber-400">
+                    <AlertCircle className="h-4 w-4" />
+                    <span className="text-sm font-medium">No phone number — run skip trace</span>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={skipTrace.isPending}
+                      onClick={() => skipTrace.mutate({
+                        dominionLeadId: currentLead.dominionLeadId,
+                        tier: 'STANDARD',
+                      })}
+                    >
+                      <SearchCheck className="mr-1.5 h-3.5 w-3.5" />
+                      {skipTrace.isPending ? 'Tracing...' : 'Standard ($0.10)'}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={skipTrace.isPending}
+                      onClick={() => skipTrace.mutate({
+                        dominionLeadId: currentLead.dominionLeadId,
+                        tier: 'ADVANCED',
+                      })}
+                    >
+                      <Zap className="mr-1.5 h-3.5 w-3.5" />
+                      Advanced ($0.40)
+                    </Button>
+                  </div>
                 </div>
               )}
 
