@@ -13,6 +13,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { ScoreBadge } from '@/components/ui/score-badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   useClaimLead,
   useTransitionLead,
@@ -20,6 +21,7 @@ import {
   useLeadAudit,
 } from '@/hooks/use-leads';
 import { useSkipTrace } from '@/hooks/use-skip-trace';
+import { SmsPanel } from '@/components/dialer/sms-panel';
 import type { LeadWithProperty, AuditLogEntry } from '@/lib/types';
 import { formatDistanceToNow, format } from 'date-fns';
 import {
@@ -74,6 +76,21 @@ export function LeadDetailSheet({ lead, open, onClose }: LeadDetailSheetProps) {
           </p>
         </SheetHeader>
 
+        <Tabs defaultValue="details" className="flex-1 flex flex-col min-h-0">
+          <TabsList className="w-full">
+            <TabsTrigger value="details" className="flex-1">Details</TabsTrigger>
+            <TabsTrigger value="messages" className="flex-1">Messages</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="messages" className="flex-1 min-h-0 mt-0">
+            <SmsPanel
+              dominionLeadId={lead.dominionLeadId}
+              toPhone={lead.phone}
+              leadInstanceId={lead.leadInstanceId}
+            />
+          </TabsContent>
+
+          <TabsContent value="details" className="flex-1 min-h-0 mt-0">
         <ScrollArea className="flex-1 -mx-6 px-6">
           <div className="space-y-6 pb-6">
             {/* Score Section */}
@@ -210,6 +227,8 @@ export function LeadDetailSheet({ lead, open, onClose }: LeadDetailSheetProps) {
             </section>
           </div>
         </ScrollArea>
+          </TabsContent>
+        </Tabs>
       </SheetContent>
     </Sheet>
   );

@@ -26,6 +26,17 @@ const envSchema = z.object({
   // Auth
   JWT_SECRET: z.string().min(32).optional(),
   ADMIN_BOOTSTRAP_TOKEN: z.string().optional(),
+
+  // Twilio
+  TWILIO_ACCOUNT_SID: z.string().optional(),
+  TWILIO_AUTH_TOKEN: z.string().optional(),
+  TWILIO_PHONE_NUMBER: z.string().optional(),
+  TWILIO_TWIML_APP_SID: z.string().optional(),
+  TWILIO_API_KEY: z.string().optional(),
+  TWILIO_API_SECRET: z.string().optional(),
+
+  // Public URL for webhooks (validated at runtime, not on startup)
+  BASE_URL: z.string().optional().transform(v => (v && v.trim() ? v.trim() : undefined)),
 });
 
 function loadEnv() {
