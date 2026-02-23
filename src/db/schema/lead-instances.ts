@@ -58,6 +58,8 @@ export const leadInstances = pgTable(
 
     notes: text('notes'),
 
+    dealStage: varchar('deal_stage', { length: 32 }).default('NEW_LEAD'),
+
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
   },
@@ -66,6 +68,7 @@ export const leadInstances = pgTable(
     index('idx_lead_instances_assigned_to').on(table.assignedTo),
     index('idx_lead_instances_status').on(table.status),
     index('idx_lead_instances_created_at').on(table.createdAt),
+    index('idx_lead_instances_deal_stage').on(table.dealStage),
   ],
 );
 

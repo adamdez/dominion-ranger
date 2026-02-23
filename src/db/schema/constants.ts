@@ -78,3 +78,59 @@ export const UserRole = {
 } as const;
 
 export type UserRoleValue = (typeof UserRole)[keyof typeof UserRole];
+
+export const DealStage = {
+  NEW_LEAD: 'NEW_LEAD',
+  SKIP_TRACED: 'SKIP_TRACED',
+  CONTACTED: 'CONTACTED',
+  INTERESTED: 'INTERESTED',
+  OFFER_MADE: 'OFFER_MADE',
+  UNDER_CONTRACT: 'UNDER_CONTRACT',
+  TITLE_ESCROW: 'TITLE_ESCROW',
+  CLOSED_WON: 'CLOSED_WON',
+  CLOSED_LOST: 'CLOSED_LOST',
+  DEAD: 'DEAD',
+} as const;
+
+export type DealStageValue = (typeof DealStage)[keyof typeof DealStage];
+
+export const TaskStatus = {
+  PENDING: 'PENDING',
+  COMPLETED: 'COMPLETED',
+  CANCELLED: 'CANCELLED',
+} as const;
+
+export type TaskStatusValue = (typeof TaskStatus)[keyof typeof TaskStatus];
+
+export const TaskType = {
+  CALLBACK: 'CALLBACK',
+  FOLLOW_UP: 'FOLLOW_UP',
+  RESEARCH: 'RESEARCH',
+  SEND_OFFER: 'SEND_OFFER',
+  SITE_VISIT: 'SITE_VISIT',
+  GENERAL: 'GENERAL',
+} as const;
+
+export type TaskTypeValue = (typeof TaskType)[keyof typeof TaskType];
+
+export const ContactType = {
+  OWNER: 'OWNER',
+  LANDLORD: 'LANDLORD',
+  RELATIVE: 'RELATIVE',
+  TENANT: 'TENANT',
+  SPOUSE: 'SPOUSE',
+  ATTORNEY: 'ATTORNEY',
+  OTHER: 'OTHER',
+} as const;
+
+export type ContactTypeValue = (typeof ContactType)[keyof typeof ContactType];
+
+export const PhoneStatus = {
+  CONNECTED: 'CONNECTED',
+  DISCONNECTED: 'DISCONNECTED',
+  WRONG_NUMBER: 'WRONG_NUMBER',
+  DNC: 'DNC',
+  UNKNOWN: 'UNKNOWN',
+} as const;
+
+export type PhoneStatusValue = (typeof PhoneStatus)[keyof typeof PhoneStatus];

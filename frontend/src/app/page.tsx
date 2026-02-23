@@ -1,18 +1,34 @@
 'use client';
 
-import { Building2, Users, Phone, CheckCircle } from 'lucide-react';
+import { useState } from 'react';
+import {
+  Building2, Users, Phone, CheckCircle,
+  PhoneCall, SearchCheck, Clock, DollarSign,
+} from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { StatCard } from '@/components/ui/stat-card';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { ErrorState } from '@/components/ui/error-state';
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select';
+import { TasksWidget } from '@/components/tasks/tasks-widget';
 import { useSystemStats } from '@/hooks/use-system';
 import { useLeadStats } from '@/hooks/use-dashboard';
-import { SCORE_TIERS } from '@/lib/constants';
+import { usePipelineStats } from '@/hooks/use-pipeline';
+import { SCORE_TIERS, DEAL_STAGES } from '@/lib/constants';
+
+type DateRange = '7d' | '30d' | '90d';
 
 export default function DashboardPage() {
+  const [dateRange, setDateRange] = useState<DateRange>('30d');
   const stats = useSystemStats();
   const leadStats = useLeadStats();
+  const pipelineStats = usePipelineStats();
+
+  // Suppress unused-var lint — dateRange reserved for future analytics filtering
+  void dateRange;
 
   if (stats.error) {
     return <ErrorState message="Failed to load dashboard" onRetry={() => stats.refetch()} />;
@@ -20,6 +36,21 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-6">
+      {/* Header with date range */}
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
+        <Select value={dateRange} onValueChange={(v) => setDateRange(v as DateRange)}>
+          <SelectTrigger className="w-32">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="7d">Last 7 days</SelectItem>
+            <SelectItem value="30d">Last 30 days</SelectItem>
+            <SelectItem value="90d">Last 90 days</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
       {/* Stat Cards */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard
@@ -46,6 +77,89 @@ export default function DashboardPage() {
           icon={CheckCircle}
           loading={leadStats.isLoading}
         />
+      </div>
+
+      {/* Pipeline Value + Pending Actions + Tasks */}
+      <div className="grid gap-4 lg:grid-cols-3">
+        {/* Pipeline Value */}
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <DollarSign className="h-4 w-4" />
+              Pipeline Value
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {pipelineStats.isLoading ? (
+              <Skeleton className="h-20 w-full" />
+            ) : (
+              <div className="space-y-3">
+                <div>
+                  <div className="text-2xl font-bold tabular-nums">
+                    ${formatCurrency((pipelineStats.data ?? []).reduce((sum, s) => sum + s.totalValueCents, 0))}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    {(pipelineStats.data ?? []).reduce((sum, s) => sum + s.count, 0)} active leads
+                  </p>
+                </div>
+                <div className="space-y-1">
+                  {(pipelineStats.data ?? [])
+                    .filter(s => s.totalValueCents > 0 || ['OFFER_MADE', 'UNDER_CONTRACT', 'TITLE_ESCROW'].includes(s.stage))
+                    .slice(0, 5)
+                    .map(s => {
+                      const stageConfig = DEAL_STAGES.find(d => d.key === s.stage);
+                      return (
+                        <div key={s.stage} className="flex items-center justify-between text-xs">
+                          <span className="text-muted-foreground">{stageConfig?.label ?? s.stage}</span>
+                          <span className="font-medium tabular-nums">
+                            ${formatCurrency(s.totalValueCents)} ({s.count})
+                          </span>
+                        </div>
+                      );
+                    })}
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Pending Actions */}
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">Pending Actions</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {leadStats.isLoading ? (
+              <div className="space-y-3">
+                {[1, 2, 3].map(i => <Skeleton key={i} className="h-6 w-full" />)}
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <ActionRow
+                  icon={PhoneCall}
+                  label="Leads need calls"
+                  count={leadStats.data?.dialReady ?? 0}
+                  color="text-green-600 dark:text-green-400"
+                />
+                <ActionRow
+                  icon={SearchCheck}
+                  label="Need skip trace"
+                  count={0}
+                  color="text-blue-600 dark:text-blue-400"
+                />
+                <ActionRow
+                  icon={Clock}
+                  label="Callbacks due today"
+                  count={0}
+                  color="text-amber-600 dark:text-amber-400"
+                />
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Tasks Widget */}
+        <TasksWidget />
       </div>
 
       {/* Score Distribution + Intelligence Overview */}
@@ -114,6 +228,21 @@ export default function DashboardPage() {
   );
 }
 
+function ActionRow({ icon: Icon, label, count, color }: {
+  icon: React.ElementType;
+  label: string;
+  count: number;
+  color: string;
+}) {
+  return (
+    <div className="flex items-center gap-3">
+      <Icon className={`h-4 w-4 ${color}`} />
+      <span className="text-sm text-muted-foreground flex-1">{label}</span>
+      <span className="font-semibold tabular-nums text-sm">{count}</span>
+    </div>
+  );
+}
+
 function ScoreDistribution({ scoring }: { scoring: { totalScored: number; avgScore: number; maxScore: number } | null }) {
   if (!scoring || scoring.totalScored === 0) {
     return <p className="text-sm text-muted-foreground">No scoring data yet. Run scoring first.</p>;
@@ -164,4 +293,10 @@ function MetricRow({ label, value }: { label: string; value: number }) {
       <span className="font-semibold tabular-nums">{value.toLocaleString()}</span>
     </div>
   );
+}
+
+function formatCurrency(cents: number): string {
+  if (cents >= 100_000_00) return `${(cents / 100_000_00).toFixed(0)}M`;
+  if (cents >= 100_00) return `${(cents / 100_00).toFixed(0)}K`;
+  return (cents / 100).toFixed(0);
 }

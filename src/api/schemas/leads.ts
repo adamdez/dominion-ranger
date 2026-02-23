@@ -9,8 +9,11 @@ export const leadsListQuery = z.object({
   minScore: z.coerce.number().optional(),
   maxScore: z.coerce.number().optional(),
   search: z.string().optional(),
-  sortBy: z.enum(['compositeScore', 'createdAt', 'updatedAt', 'status', 'ownerName', 'streetAddress']).default('createdAt'),
+  sortBy: z.enum(['compositeScore', 'createdAt', 'updatedAt', 'status', 'ownerName', 'streetAddress', 'dealStage']).default('createdAt'),
   sortOrder: z.enum(['asc', 'desc']).default('desc'),
+  tags: z.string().optional(),
+  dealStage: z.string().optional(),
+  hasPhone: z.enum(['true', 'false']).optional(),
 });
 
 export const claimLeadBody = z.object({

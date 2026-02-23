@@ -1,11 +1,14 @@
 import type { FastifyInstance } from 'fastify';
-import { sql, eq, and, or, ilike, desc, asc } from 'drizzle-orm';
+import { sql, eq, and, or, ilike, desc, asc, inArray } from 'drizzle-orm';
 import { db } from '../../db/connection.js';
 import {
   leadInstances,
   properties,
   scoringRecords,
   distressEvents,
+  tags,
+  leadInstanceTags,
+  activityLog,
   LeadStatus,
 } from '../../db/schema/index.js';
 import {
@@ -14,10 +17,12 @@ import {
   transitionLead,
 } from '../../modules/workflow/index.js';
 import { logDisposition, getDispositions } from '../../modules/dispositions/index.js';
+import { transitionDealStage } from '../../modules/deal-stage/index.js';
 import { requireRole } from '../middleware/auth.js';
 import { leadsListQuery, claimLeadBody, transitionLeadBody, dialQueueQuery } from '../schemas/leads.js';
+import { transitionDealStageBody } from '../schemas/deal-stage.js';
 import { paginate } from '../types.js';
-import type { LeadStatusValue } from '../../db/schema/constants.js';
+import type { LeadStatusValue, DealStageValue } from '../../db/schema/constants.js';
 import { z } from 'zod';
 
 const dispositionBody = z.object({
@@ -31,7 +36,7 @@ const dispositionBody = z.object({
 
 export async function leadRoutes(app: FastifyInstance): Promise<void> {
 
-  // GET /api/leads — Paginated leads with property + score join
+  // GET /api/leads — Paginated leads with property + score join + tags + deal stage
   app.get<{ Querystring: Record<string, string> }>(
     '/api/leads',
     { preHandler: [requireRole('properties.read')] },
@@ -57,6 +62,29 @@ export async function leadRoutes(app: FastifyInstance): Promise<void> {
             ilike(properties.streetAddress, `%${query.search}%`),
             ilike(properties.ownerName, `%${query.search}%`),
           )!,
+        );
+      }
+      if (query.dealStage) {
+        const stages = query.dealStage.split(',');
+        if (stages.length === 1) {
+          conditions.push(eq(leadInstances.dealStage, stages[0]));
+        } else {
+          conditions.push(inArray(leadInstances.dealStage, stages));
+        }
+      }
+      if (query.hasPhone === 'true') {
+        conditions.push(sql`${properties.phone} IS NOT NULL AND ${properties.phone} != ''`);
+      } else if (query.hasPhone === 'false') {
+        conditions.push(sql`(${properties.phone} IS NULL OR ${properties.phone} = '')`);
+      }
+      if (query.tags) {
+        const tagNames = query.tags.split(',');
+        conditions.push(
+          sql`${leadInstances.leadInstanceId} IN (
+            SELECT lit.lead_instance_id FROM lead_instance_tags lit
+            INNER JOIN tags t ON t.id = lit.tag_id
+            WHERE t.name = ANY(${tagNames})
+          )`,
         );
       }
 
@@ -86,6 +114,7 @@ export async function leadRoutes(app: FastifyInstance): Promise<void> {
         : query.sortBy === 'streetAddress' ? properties.streetAddress
         : query.sortBy === 'status' ? leadInstances.status
         : query.sortBy === 'updatedAt' ? leadInstances.updatedAt
+        : query.sortBy === 'dealStage' ? leadInstances.dealStage
         : leadInstances.createdAt;
 
       const orderFn = query.sortOrder === 'asc' ? asc : desc;
@@ -105,6 +134,7 @@ export async function leadRoutes(app: FastifyInstance): Promise<void> {
           leadInstanceId: leadInstances.leadInstanceId,
           dominionLeadId: leadInstances.dominionLeadId,
           status: leadInstances.status,
+          dealStage: leadInstances.dealStage,
           assignedTo: leadInstances.assignedTo,
           complianceCleared: leadInstances.complianceCleared,
           version: leadInstances.version,
@@ -142,7 +172,57 @@ export async function leadRoutes(app: FastifyInstance): Promise<void> {
         .limit(query.pageSize)
         .offset(offset);
 
-      return paginate(rows, countResult.count, query.page, query.pageSize);
+      // Batch-fetch tags and last activity for each lead in the result set
+      if (rows.length === 0) {
+        return paginate(rows, countResult.count, query.page, query.pageSize);
+      }
+
+      const leadIds = rows.map(r => r.leadInstanceId);
+
+      const [tagRows, activityRows] = await Promise.all([
+        db
+          .select({
+            leadInstanceId: leadInstanceTags.leadInstanceId,
+            tagName: tags.name,
+            tagColor: tags.color,
+          })
+          .from(leadInstanceTags)
+          .innerJoin(tags, eq(leadInstanceTags.tagId, tags.id))
+          .where(inArray(leadInstanceTags.leadInstanceId, leadIds)),
+
+        db.execute(sql`
+          SELECT DISTINCT ON (lead_instance_id)
+            lead_instance_id, activity_type, channel, occurred_at
+          FROM activity_log
+          WHERE lead_instance_id = ANY(${leadIds})
+          ORDER BY lead_instance_id, occurred_at DESC
+        `),
+      ]);
+
+      const tagsByLead = new Map<string, Array<{ name: string; color: string | null }>>();
+      for (const row of tagRows) {
+        const list = tagsByLead.get(row.leadInstanceId) ?? [];
+        list.push({ name: row.tagName, color: row.tagColor });
+        tagsByLead.set(row.leadInstanceId, list);
+      }
+
+      const activityByLead = new Map<string, { type: string; channel: string; occurredAt: unknown }>();
+      const activityResults = activityRows.rows as Array<Record<string, unknown>>;
+      for (const row of activityResults) {
+        activityByLead.set(row.lead_instance_id as string, {
+          type: row.activity_type as string,
+          channel: row.channel as string,
+          occurredAt: row.occurred_at,
+        });
+      }
+
+      const enrichedRows = rows.map(r => ({
+        ...r,
+        tags: tagsByLead.get(r.leadInstanceId) ?? [],
+        lastActivity: activityByLead.get(r.leadInstanceId) ?? null,
+      }));
+
+      return paginate(enrichedRows, countResult.count, query.page, query.pageSize);
     },
   );
 
@@ -404,6 +484,18 @@ export async function leadRoutes(app: FastifyInstance): Promise<void> {
       const { leadInstanceId } = request.params;
       const records = await getDispositions(leadInstanceId);
       return records;
+    },
+  );
+
+  // PATCH /api/leads/:leadInstanceId/deal-stage — Kanban drag-and-drop
+  app.patch<{ Params: { leadInstanceId: string }; Body: { stage: string } }>(
+    '/api/leads/:leadInstanceId/deal-stage',
+    { preHandler: [requireRole('workflow.write')] },
+    async (request) => {
+      const { leadInstanceId } = request.params;
+      const { stage } = transitionDealStageBody.parse(request.body);
+      const user = (request as unknown as Record<string, { userId: string }>).user;
+      return transitionDealStage(leadInstanceId, stage as DealStageValue, user.userId);
     },
   );
 }
