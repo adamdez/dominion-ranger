@@ -29,6 +29,29 @@ export const SCORE_TIERS = {
   D: { min: 0, label: 'Tier D', color: 'bg-red-500', textColor: 'text-red-700 dark:text-red-400' },
 } as const;
 
+export const DEAL_STAGES = [
+  { key: 'NEW_LEAD', label: 'New Lead', color: 'bg-slate-100 dark:bg-slate-800' },
+  { key: 'SKIP_TRACED', label: 'Skip Traced', color: 'bg-blue-50 dark:bg-blue-950' },
+  { key: 'CONTACTED', label: 'Contacted', color: 'bg-indigo-50 dark:bg-indigo-950' },
+  { key: 'INTERESTED', label: 'Interested', color: 'bg-amber-50 dark:bg-amber-950' },
+  { key: 'OFFER_MADE', label: 'Offer Made', color: 'bg-orange-50 dark:bg-orange-950' },
+  { key: 'UNDER_CONTRACT', label: 'Under Contract', color: 'bg-green-50 dark:bg-green-950' },
+  { key: 'TITLE_ESCROW', label: 'Title / Escrow', color: 'bg-emerald-50 dark:bg-emerald-950' },
+  { key: 'CLOSED_WON', label: 'Closed Won', color: 'bg-green-100 dark:bg-green-900' },
+  { key: 'CLOSED_LOST', label: 'Closed Lost', color: 'bg-red-50 dark:bg-red-950' },
+] as const;
+
+export type DealStageKey = typeof DEAL_STAGES[number]['key'];
+
+export const TASK_TYPES = {
+  CALLBACK: { label: 'Callback', color: 'bg-blue-100 text-blue-800' },
+  FOLLOW_UP: { label: 'Follow Up', color: 'bg-indigo-100 text-indigo-800' },
+  RESEARCH: { label: 'Research', color: 'bg-purple-100 text-purple-800' },
+  SEND_OFFER: { label: 'Send Offer', color: 'bg-orange-100 text-orange-800' },
+  SITE_VISIT: { label: 'Site Visit', color: 'bg-green-100 text-green-800' },
+  GENERAL: { label: 'General', color: 'bg-gray-100 text-gray-800' },
+} as const;
+
 export type ScoreTier = keyof typeof SCORE_TIERS;
 
 export function getScoreTier(score: number | null): ScoreTier {

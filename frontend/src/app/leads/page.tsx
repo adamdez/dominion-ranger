@@ -1,25 +1,28 @@
 'use client';
 
 import { useState, useCallback } from 'react';
-import { Users, Search, X } from 'lucide-react';
+import { Users, Search, X, Save, Trash2 } from 'lucide-react';
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select';
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
+} from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Badge } from '@/components/ui/badge';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { ScoreBadge } from '@/components/ui/score-badge';
 import { EmptyState } from '@/components/ui/empty-state';
 import { ErrorState } from '@/components/ui/error-state';
-import { LeadDetailSheet } from '@/components/leads/lead-detail-sheet';
+import { PropertyDetailSheet } from '@/components/property-detail/property-detail-sheet';
 import { useLeads } from '@/hooks/use-leads';
+import { useSavedFilters, useCreateSavedFilter, useDeleteSavedFilter } from '@/hooks/use-saved-filters';
 import { LEAD_STATUS } from '@/lib/constants';
 import type { LeadWithProperty } from '@/lib/types';
 import { formatDistanceToNow } from 'date-fns';
@@ -32,6 +35,13 @@ export default function LeadsPage() {
   const [sortBy, setSortBy] = useState<string>('createdAt');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const [selectedLead, setSelectedLead] = useState<LeadWithProperty | null>(null);
+  const [saveDialogOpen, setSaveDialogOpen] = useState(false);
+  const [filterName, setFilterName] = useState('');
+  const [activeFilterId, setActiveFilterId] = useState<string | null>(null);
+
+  const savedFilters = useSavedFilters();
+  const createFilter = useCreateSavedFilter();
+  const deleteFilter = useDeleteSavedFilter();
 
   const { data, isLoading, error, refetch } = useLeads({
     page,
@@ -51,6 +61,7 @@ export default function LeadsPage() {
     setStatus('');
     setSearch('');
     setSearchInput('');
+    setActiveFilterId(null);
     setPage(1);
   }, []);
 
@@ -64,12 +75,80 @@ export default function LeadsPage() {
     setPage(1);
   }, [sortBy]);
 
+  const handleSaveFilter = useCallback(() => {
+    if (!filterName.trim()) return;
+    createFilter.mutate(
+      {
+        name: filterName.trim(),
+        filterConfig: {
+          status: status || undefined,
+          search: search || undefined,
+          sortBy,
+          sortOrder,
+        },
+      },
+      {
+        onSuccess: () => {
+          setFilterName('');
+          setSaveDialogOpen(false);
+        },
+      },
+    );
+  }, [filterName, status, search, sortBy, sortOrder, createFilter]);
+
+  const handleApplyFilter = useCallback((filterId: string) => {
+    if (filterId === 'ALL') {
+      clearFilters();
+      return;
+    }
+    const filter = (savedFilters.data ?? []).find(f => f.filterId === filterId);
+    if (!filter) return;
+    setActiveFilterId(filterId);
+    const config = filter.filterConfig;
+    setStatus((config.status as string) || '');
+    setSearch((config.search as string) || '');
+    setSearchInput((config.search as string) || '');
+    setSortBy((config.sortBy as string) || 'createdAt');
+    setSortOrder((config.sortOrder as 'asc' | 'desc') || 'desc');
+    setPage(1);
+  }, [savedFilters.data, clearFilters]);
+
   if (error) {
     return <ErrorState message="Failed to load leads" onRetry={() => refetch()} />;
   }
 
   return (
     <div className="space-y-4">
+      {/* Saved Filters Bar */}
+      <div className="flex items-center gap-2">
+        <Select value={activeFilterId ?? 'ALL'} onValueChange={handleApplyFilter}>
+          <SelectTrigger className="w-48">
+            <SelectValue placeholder="All Leads" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="ALL">All Leads</SelectItem>
+            {(savedFilters.data ?? []).map(f => (
+              <SelectItem key={f.filterId} value={f.filterId}>
+                {f.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        {activeFilterId && (
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 text-destructive"
+            onClick={() => {
+              if (activeFilterId) deleteFilter.mutate(activeFilterId);
+              clearFilters();
+            }}
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+          </Button>
+        )}
+      </div>
+
       {/* Filters */}
       <div className="flex flex-wrap items-center gap-3">
         <div className="flex items-center gap-2">
@@ -98,10 +177,16 @@ export default function LeadsPage() {
         </Select>
 
         {(status || search) && (
-          <Button variant="ghost" size="sm" onClick={clearFilters}>
-            <X className="mr-1 h-3 w-3" />
-            Clear
-          </Button>
+          <>
+            <Button variant="ghost" size="sm" onClick={clearFilters}>
+              <X className="mr-1 h-3 w-3" />
+              Clear
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => setSaveDialogOpen(true)}>
+              <Save className="mr-1 h-3 w-3" />
+              Save Filter
+            </Button>
+          </>
         )}
 
         <span className="ml-auto text-sm text-muted-foreground">
@@ -133,6 +218,7 @@ export default function LeadsPage() {
                   <TableHead>County</TableHead>
                   <SortableHeader label="Score" col="compositeScore" current={sortBy} order={sortOrder} onClick={handleSort} />
                   <SortableHeader label="Status" col="status" current={sortBy} order={sortOrder} onClick={handleSort} />
+                  <TableHead>Stage</TableHead>
                   <TableHead>Assigned</TableHead>
                   <SortableHeader label="Updated" col="updatedAt" current={sortBy} order={sortOrder} onClick={handleSort} />
                 </TableRow>
@@ -155,6 +241,9 @@ export default function LeadsPage() {
                     <TableCell>
                       <StatusBadge status={lead.status} />
                     </TableCell>
+                    <TableCell>
+                      <DealStageBadge status={lead.status} />
+                    </TableCell>
                     <TableCell className="text-sm">{lead.assignedTo ?? '—'}</TableCell>
                     <TableCell className="text-sm text-muted-foreground">
                       {formatDistanceToNow(new Date(lead.updatedAt), { addSuffix: true })}
@@ -165,27 +254,16 @@ export default function LeadsPage() {
             </Table>
           </div>
 
-          {/* Pagination */}
           {data && data.pagination.totalPages > 1 && (
             <div className="flex items-center justify-between">
               <span className="text-sm text-muted-foreground">
                 Page {data.pagination.page} of {data.pagination.totalPages}
               </span>
               <div className="flex gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={page <= 1}
-                  onClick={() => setPage(p => p - 1)}
-                >
+                <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage(p => p - 1)}>
                   Previous
                 </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={page >= data.pagination.totalPages}
-                  onClick={() => setPage(p => p + 1)}
-                >
+                <Button variant="outline" size="sm" disabled={page >= data.pagination.totalPages} onClick={() => setPage(p => p + 1)}>
                   Next
                 </Button>
               </div>
@@ -194,12 +272,66 @@ export default function LeadsPage() {
         </>
       )}
 
-      <LeadDetailSheet
+      <PropertyDetailSheet
         lead={selectedLead}
         open={!!selectedLead}
         onClose={() => setSelectedLead(null)}
       />
+
+      {/* Save Filter Dialog */}
+      <Dialog open={saveDialogOpen} onOpenChange={setSaveDialogOpen}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Save Filter</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-2">
+              <Label htmlFor="filter-name">Filter Name</Label>
+              <Input
+                id="filter-name"
+                value={filterName}
+                onChange={e => setFilterName(e.target.value)}
+                placeholder="e.g. Hot Leads"
+                onKeyDown={e => e.key === 'Enter' && handleSaveFilter()}
+                autoFocus
+              />
+            </div>
+            <div className="text-xs text-muted-foreground space-y-1">
+              <p>Current filters:</p>
+              {status && <p>Status: {LEAD_STATUS[status as keyof typeof LEAD_STATUS]?.label ?? status}</p>}
+              {search && <p>Search: &ldquo;{search}&rdquo;</p>}
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setSaveDialogOpen(false)}>Cancel</Button>
+            <Button onClick={handleSaveFilter} disabled={!filterName.trim() || createFilter.isPending}>
+              {createFilter.isPending ? 'Saving...' : 'Save'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
+  );
+}
+
+function DealStageBadge({ status }: { status: string }) {
+  const stageMap: Record<string, string> = {
+    PROMOTED: 'New',
+    ASSIGNED: 'New',
+    COMPLIANCE_PENDING: 'New',
+    DIAL_READY: 'New',
+    DIALING: 'Contacted',
+    CONTACTED: 'Contacted',
+    OFFER_SENT: 'Offer Made',
+    CONTRACTED: 'Under Contract',
+    CLOSED: 'Closed',
+    DEAD: 'Lost',
+  };
+  const label = stageMap[status] ?? status;
+  return (
+    <Badge variant="outline" className="text-xs">
+      {label}
+    </Badge>
   );
 }
 

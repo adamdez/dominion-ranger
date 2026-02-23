@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import {
   LayoutDashboard,
+  LayoutGrid,
   Users,
   Phone,
   BarChart3,
@@ -16,6 +17,7 @@ import {
 const navItems = [
   { href: '/', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/leads', label: 'Leads', icon: Users },
+  { href: '/pipeline', label: 'Pipeline', icon: LayoutGrid },
   { href: '/assign', label: 'Assign', icon: UserPlus },
   { href: '/dial-queue', label: 'Dial Queue', icon: Phone },
   { href: '/scoring', label: 'Scoring', icon: BarChart3 },
@@ -73,7 +75,7 @@ export function Sidebar({ open, onClose }: SidebarProps) {
 
         <div className="border-t border-border p-4">
           <p className="text-xs text-muted-foreground">Dominion Ranger v2.3</p>
-          <p className="text-xs text-muted-foreground">Phase 2 — CRM</p>
+          <p className="text-xs text-muted-foreground">Phase 3 — Deal Management</p>
         </div>
       </aside>
     </>

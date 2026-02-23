@@ -172,3 +172,136 @@ export interface RankedLead {
   marketingTier: string;
   urgencyLevel: string;
 }
+
+// ─── Phase 3: Pipeline / Deal Management ─────────────
+
+export interface Tag {
+  tagId: string;
+  name: string;
+  color: string;
+  createdAt: string;
+}
+
+export interface LeadTag {
+  leadInstanceId: string;
+  tagId: string;
+  tag: Tag;
+}
+
+export interface Task {
+  taskId: string;
+  dominionLeadId: string | null;
+  leadInstanceId: string | null;
+  assignedTo: string | null;
+  title: string;
+  description: string | null;
+  taskType: string;
+  dueAt: string | null;
+  completedAt: string | null;
+  status: 'PENDING' | 'COMPLETED' | 'CANCELLED';
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface DistressEvent {
+  eventId: string;
+  dominionLeadId: string;
+  eventType: string;
+  eventLayer: string;
+  severityLevel: string;
+  source: string;
+  eventDate: string | null;
+  createdAt: string;
+  meta: Record<string, unknown> | null;
+}
+
+export interface PropertyDetail {
+  dominionLeadId: string;
+  apn: string | null;
+  county: string | null;
+  state: string | null;
+  streetAddress: string | null;
+  city: string | null;
+  zip: string | null;
+  ownerName: string | null;
+  ownerFirst: string | null;
+  ownerLast: string | null;
+  phone: string | null;
+  phone2: string | null;
+  phone3: string | null;
+  phoneType: string | null;
+  phone2Type: string | null;
+  phone3Type: string | null;
+  email: string | null;
+  email2: string | null;
+  mailingAddress: string | null;
+  absenteeOwner: boolean;
+  equityEstimate: string | null;
+  mortgageStatus: string;
+  ownershipDurationMonths: number | null;
+  skipTraceTier: string | null;
+  skipTracedAt: string | null;
+  skipTraceSource: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PipelineLead extends LeadWithProperty {
+  dealStage: string | null;
+  tags: Tag[];
+}
+
+export interface SavedFilter {
+  filterId: string;
+  name: string;
+  filterConfig: Record<string, unknown>;
+  createdAt: string;
+}
+
+export interface PipelineStats {
+  stage: string;
+  count: number;
+  totalValueCents: number;
+}
+
+// ─── Communication / Dialer ─────────────────────────
+
+export interface DialerStatusResponse {
+  configured: boolean;
+  clientConfigured: boolean;
+}
+
+export interface DialerTokenResponse {
+  token: string;
+  identity: string;
+}
+
+export interface CallInitiateResponse {
+  callSid: string;
+  status: string;
+}
+
+export interface SmsResult {
+  success: boolean;
+  messageSid?: string;
+  error?: string;
+}
+
+export type ConversationMessage = {
+  id: string;
+  type: 'sms' | 'call';
+  direction: string;
+  body: string | null;
+  phone: string;
+  status: string | null;
+  timestamp: string;
+  messageSid?: string | null;
+  durationSeconds?: number | null;
+  recordingUrl?: string | null;
+  callSid?: string | null;
+};
+
+export interface ConversationResponse {
+  messages: ConversationMessage[];
+  count: number;
+}
