@@ -6,6 +6,8 @@ import { generateId } from '../../lib/index.js';
 import { checkDnc, checkLitigator, logAudit } from '../compliance/index.js';
 import { logger } from '../../config/logger.js';
 import { NotFoundError, ValidationError, ConcurrencyError, ComplianceError } from '../../lib/errors.js';
+import { logActivity } from '../analytics/activity-logger.js';
+import type { NewActivityLog } from '../../db/schema/index.js';
 
 // ─── State Machine ─────────────────────────────────
 
@@ -113,6 +115,15 @@ export async function claimLead(input: {
     metadata: { leadInstanceId: input.leadInstanceId, version: instance.version },
   });
 
+  await logActivity({
+    dominionLeadId: instance.dominionLeadId,
+    leadInstanceId: input.leadInstanceId,
+    userId: input.userId,
+    activityType: 'LEAD_ASSIGNED',
+    channel: 'OUTBOUND_COLD',
+    meta: { userId: input.userId, leadInstanceId: input.leadInstanceId },
+  }).catch(err => logger.error({ err }, 'Failed to log LEAD_ASSIGNED activity'));
+
   logger.info({ leadInstanceId: input.leadInstanceId, userId: input.userId }, 'Lead claimed');
   return instance;
 }
@@ -204,6 +215,14 @@ export async function runComplianceGating(leadInstanceId: string): Promise<LeadI
 
   if (!updated) throw new ConcurrencyError('lead_instance', leadInstanceId);
 
+  await logActivity({
+    dominionLeadId: current.dominionLeadId,
+    leadInstanceId,
+    activityType: 'COMPLIANCE_CHECKED',
+    channel: 'OUTBOUND_COLD',
+    meta: { cleared: complianceCleared, dncResult, litigatorResult },
+  }).catch(err => logger.error({ err }, 'Failed to log COMPLIANCE_CHECKED activity'));
+
   if (!complianceCleared) {
     const reason = dncResult.isOnDnc ? 'DNC' : 'LITIGATOR';
     logger.warn({ leadInstanceId, reason }, 'Lead blocked by compliance');
@@ -284,6 +303,24 @@ export async function transitionLead(input: {
       version: updated.version,
     },
   });
+
+  const TRANSITION_ACTIVITY_MAP: Partial<Record<string, NewActivityLog['activityType']>> = {
+    [LeadStatus.DIALING]: 'CALL_PLACED',
+    [LeadStatus.CONTACTED]: 'CALL_CONNECTED',
+    [LeadStatus.DEAD]: 'STATUS_CHANGED',
+  };
+
+  const activityType = TRANSITION_ACTIVITY_MAP[input.toStatus];
+  if (activityType) {
+    await logActivity({
+      dominionLeadId: updated.dominionLeadId,
+      leadInstanceId: input.leadInstanceId,
+      userId: input.userId,
+      activityType,
+      channel: 'OUTBOUND_COLD',
+      meta: { leadInstanceId: input.leadInstanceId, fromStatus: current.status, toStatus: input.toStatus },
+    }).catch(err => logger.error({ err }, `Failed to log ${activityType} activity`));
+  }
 
   logger.info(
     { leadInstanceId: input.leadInstanceId, from: current.status, to: input.toStatus },

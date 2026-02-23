@@ -57,6 +57,22 @@ export async function cleanupTables() {
 
   await safeExec(db, sql`ALTER TABLE distress_events DISABLE TRIGGER USER`);
   await safeExec(db, sql`ALTER TABLE scoring_records DISABLE TRIGGER USER`);
+  await safeExec(db, sql`ALTER TABLE activity_log DISABLE TRIGGER USER`);
+
+  // Rollup tables (no FK dependencies)
+  await safeExec(db, sql`DELETE FROM daily_metrics`);
+  await safeExec(db, sql`DELETE FROM weekly_funnel_metrics`);
+  await safeExec(db, sql`DELETE FROM agent_weekly_metrics`);
+  await safeExec(db, sql`DELETE FROM channel_performance_metrics`);
+  await safeExec(db, sql`DELETE FROM scoring_performance_metrics`);
+
+  // Analytics tables
+  await safeExec(db, sql`DELETE FROM activity_log`);
+  await safeExec(db, sql`DELETE FROM lead_source_attribution`);
+  await safeExec(db, sql`DELETE FROM campaign_spend_entries`);
+  await safeExec(db, sql`DELETE FROM campaigns`);
+  await safeExec(db, sql`DELETE FROM marketing_channels`);
+  await safeExec(db, sql`DELETE FROM deals`);
 
   await safeExec(db, sql`DELETE FROM dispositions`);
   await safeExec(db, sql`DELETE FROM audit_log`);
@@ -73,6 +89,7 @@ export async function cleanupTables() {
 
   await safeExec(db, sql`ALTER TABLE distress_events ENABLE TRIGGER USER`);
   await safeExec(db, sql`ALTER TABLE scoring_records ENABLE TRIGGER USER`);
+  await safeExec(db, sql`ALTER TABLE activity_log ENABLE TRIGGER USER`);
 }
 
 /**

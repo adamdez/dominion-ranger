@@ -39,6 +39,17 @@ export const sentinelQueue = new Queue('ranger-sentinel', {
   },
 });
 
+/** Nightly analytics rollup aggregation */
+export const rollupQueue = new Queue('ranger-rollup', {
+  connection,
+  defaultJobOptions: {
+    removeOnComplete: { count: 30 },
+    removeOnFail: { count: 100 },
+    attempts: 2,
+    backoff: { type: 'exponential', delay: 30_000 },
+  },
+});
+
 // ─── Job Types ─────────────────────────────────────
 
 export interface IngestionJobData {
@@ -56,6 +67,10 @@ export interface SentinelDispatchJobData {
   dominionLeadId: string;
 }
 
+export interface RollupJobData {
+  date?: string;
+}
+
 // ─── Schedule Helpers ──────────────────────────────
 
 /**
@@ -70,6 +85,17 @@ export async function scheduleIngestionJobs(): Promise<void> {
     {
       name: 'full-ingestion',
       data: { adapterName: '__all__' } satisfies IngestionJobData,
+    },
+  );
+}
+
+export async function scheduleRollupJobs(): Promise<void> {
+  await rollupQueue.upsertJobScheduler(
+    'nightly-rollup',
+    { pattern: '0 5 * * *' },
+    {
+      name: 'nightly-rollup',
+      data: {} satisfies RollupJobData,
     },
   );
 }

@@ -8,6 +8,7 @@ import { logger } from '../config/logger.js';
  * Creates triggers that prevent UPDATE and DELETE on:
  *   - distress_events  (Charter invariant #1)
  *   - scoring_records  (Charter invariant #2)
+ *   - activity_log     (Analytics append-only invariant)
  *
  * Idempotent: safe to call on every startup.
  */
@@ -32,6 +33,8 @@ export async function applyAppendOnlyInvariants(): Promise<void> {
     { table: 'distress_events', name: 'distress_events_no_delete', op: 'DELETE' },
     { table: 'scoring_records', name: 'scoring_records_no_update', op: 'UPDATE' },
     { table: 'scoring_records', name: 'scoring_records_no_delete', op: 'DELETE' },
+    { table: 'activity_log', name: 'activity_log_no_update', op: 'UPDATE' },
+    { table: 'activity_log', name: 'activity_log_no_delete', op: 'DELETE' },
   ];
 
   for (const t of triggers) {
@@ -45,5 +48,5 @@ export async function applyAppendOnlyInvariants(): Promise<void> {
     }
   }
 
-  logger.info('Append-only invariants applied to distress_events and scoring_records');
+  logger.info('Append-only invariants applied to distress_events, scoring_records, and activity_log');
 }

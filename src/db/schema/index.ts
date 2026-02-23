@@ -51,3 +51,4 @@ export type { User, NewUser } from './users';
 export * from './activity-log-v2';
 export * from './deals';
 export * from './marketing';
+export * from './rollups';

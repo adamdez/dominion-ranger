@@ -2,6 +2,7 @@ import { domainEvents } from './bus.js';
 import { logger } from '../config/logger.js';
 import { logAudit } from '../modules/compliance/index.js';
 import { createLeadInstance } from '../modules/workflow/index.js';
+import { logActivity } from '../modules/analytics/activity-logger.js';
 
 /**
  * Wire domain event handlers.
@@ -39,13 +40,20 @@ export function wireEventHandlers(): void {
     });
   });
 
-  // ─── Lead Promoted → Create Lead Instance ──────
+  // ─── Lead Promoted → Create Lead Instance + Activity Log ──────
   domainEvents.on('lead.promoted', async ({ promotionId, dominionLeadId, compositeScore, marketingTier }) => {
     await logAudit({
       dominionLeadId,
       actionType: 'lead.promoted',
       metadata: { promotionId, compositeScore, marketingTier },
     });
+
+    await logActivity({
+      dominionLeadId,
+      activityType: 'LEAD_PROMOTED',
+      channel: 'OUTBOUND_COLD',
+      meta: { promotionId, compositeScore, marketingTier },
+    }).catch(err => logger.error({ err, dominionLeadId }, 'Failed to log LEAD_PROMOTED activity'));
 
     try {
       await createLeadInstance({ dominionLeadId, promotionId });
