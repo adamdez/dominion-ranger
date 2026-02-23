@@ -57,6 +57,7 @@ export async function cleanupTables() {
 
   await safeExec(db, sql`ALTER TABLE distress_events DISABLE TRIGGER USER`);
   await safeExec(db, sql`ALTER TABLE scoring_records DISABLE TRIGGER USER`);
+  await safeExec(db, sql`ALTER TABLE activity_log DISABLE TRIGGER USER`);
 
   await safeExec(db, sql`DELETE FROM tasks`);
   await safeExec(db, sql`DELETE FROM lead_instance_tags`);
@@ -64,6 +65,8 @@ export async function cleanupTables() {
   await safeExec(db, sql`DELETE FROM saved_filters`);
   await safeExec(db, sql`DELETE FROM property_contacts`);
   await safeExec(db, sql`DELETE FROM deals`);
+  await safeExec(db, sql`DELETE FROM call_logs`);
+  await safeExec(db, sql`DELETE FROM sms_logs`);
   await safeExec(db, sql`DELETE FROM activity_log`);
   await safeExec(db, sql`DELETE FROM dispositions`);
   await safeExec(db, sql`DELETE FROM audit_log`);
@@ -80,6 +83,7 @@ export async function cleanupTables() {
 
   await safeExec(db, sql`ALTER TABLE distress_events ENABLE TRIGGER USER`);
   await safeExec(db, sql`ALTER TABLE scoring_records ENABLE TRIGGER USER`);
+  await safeExec(db, sql`ALTER TABLE activity_log ENABLE TRIGGER USER`);
 }
 
 /**

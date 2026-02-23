@@ -1,7 +1,16 @@
 'use client';
 
-import { useState, useCallback } from 'react';
-import { Phone, SkipForward, SearchCheck, Zap, AlertCircle } from 'lucide-react';
+import { useState, useCallback, useEffect } from 'react';
+import {
+  Phone,
+  PhoneCall,
+  SkipForward,
+  SearchCheck,
+  Zap,
+  AlertCircle,
+  Wifi,
+  WifiOff,
+} from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -16,6 +25,8 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { useDialQueue, useLogDisposition, useDispositions } from '@/hooks/use-dial-queue';
 import { useTransitionLead } from '@/hooks/use-leads';
 import { useSkipTrace } from '@/hooks/use-skip-trace';
+import { useDialerStatus } from '@/hooks/use-dialer';
+import { useTwilioContext } from '@/components/dialer/twilio-provider';
 import { DISPOSITION_TYPES } from '@/lib/constants';
 
 export default function DialQueuePage() {
@@ -28,20 +39,51 @@ export default function DialQueuePage() {
   const logDisposition = useLogDisposition();
   const transitionLead = useTransitionLead();
   const skipTrace = useSkipTrace();
+  const dialerStatus = useDialerStatus();
+  const twilio = useTwilioContext();
+
+  const twilioAvailable = dialerStatus.data?.clientConfigured ?? false;
 
   const leads = data?.data ?? [];
   const currentLead = leads[currentIndex] ?? null;
   const dispositionHistory = useDispositions(currentLead?.leadInstanceId ?? null);
 
+  // Initialize Twilio device when page loads if configured
+  useEffect(() => {
+    if (twilioAvailable && !twilio.deviceReady) {
+      twilio.initDevice();
+    }
+  }, [twilioAvailable, twilio.deviceReady]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Listen for call state changes from softphone widget
+  useEffect(() => {
+    if (twilio.callState === 'ended') {
+      setIsDialing(false);
+      refetch();
+    }
+  }, [twilio.callState, refetch]);
+
   const handleStartCall = useCallback(() => {
     if (!currentLead) return;
+
+    if (twilioAvailable && twilio.deviceReady && currentLead.phone) {
+      // Browser-based Twilio call
+      twilio.startCall({
+        dominionLeadId: currentLead.dominionLeadId,
+        leadInstanceId: currentLead.leadInstanceId,
+        leadName: currentLead.ownerName ?? 'Unknown',
+        phone: currentLead.phone,
+        version: currentLead.version,
+      });
+    }
+
     transitionLead.mutate({
       leadInstanceId: currentLead.leadInstanceId,
       toStatus: 'DIALING',
       expectedVersion: currentLead.version,
     });
     setIsDialing(true);
-  }, [currentLead, transitionLead]);
+  }, [currentLead, transitionLead, twilioAvailable, twilio]);
 
   const handleSubmitDisposition = useCallback(
     (advance: boolean) => {
@@ -78,11 +120,13 @@ export default function DialQueuePage() {
             if (advance && currentIndex < leads.length - 1) {
               setCurrentIndex((i) => i + 1);
             }
+
+            refetch();
           },
-        }
+        },
       );
     },
-    [currentLead, disposition, notes, logDisposition, transitionLead, currentIndex, leads.length]
+    [currentLead, disposition, notes, logDisposition, transitionLead, currentIndex, leads.length, refetch],
   );
 
   if (error) {
@@ -112,6 +156,20 @@ export default function DialQueuePage() {
     <div className="grid gap-4 lg:grid-cols-[1fr_340px]">
       {/* Left: Current Lead */}
       <div className="space-y-4">
+        {/* Twilio status indicator */}
+        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          {twilioAvailable && twilio.deviceReady ? (
+            <><Wifi className="h-3.5 w-3.5 text-emerald-500" /> Browser dialer active</>
+          ) : twilioAvailable ? (
+            <><Wifi className="h-3.5 w-3.5 text-amber-500 animate-pulse" /> Dialer connecting...</>
+          ) : (
+            <><WifiOff className="h-3.5 w-3.5" /> Manual dial mode (Twilio not configured)</>
+          )}
+          {twilio.error && (
+            <span className="text-red-500 ml-2">{twilio.error}</span>
+          )}
+        </div>
+
         {currentLead && (
           <Card>
             <CardHeader className="pb-3">
@@ -184,9 +242,13 @@ export default function DialQueuePage() {
               <Separator />
 
               {!isDialing ? (
-                <Button className="w-full" size="lg" onClick={handleStartCall}>
-                  <Phone className="mr-2 h-4 w-4" />
-                  Start Call
+                <Button className="w-full" size="lg" onClick={handleStartCall} disabled={!currentLead.phone}>
+                  {twilioAvailable && twilio.deviceReady ? (
+                    <PhoneCall className="mr-2 h-4 w-4" />
+                  ) : (
+                    <Phone className="mr-2 h-4 w-4" />
+                  )}
+                  {twilioAvailable && twilio.deviceReady ? 'Call via Browser' : 'Start Call'}
                 </Button>
               ) : (
                 <div className="space-y-3">
@@ -195,7 +257,13 @@ export default function DialQueuePage() {
                       <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-500 opacity-75" />
                       <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
                     </span>
-                    <span className="text-sm font-medium">Call in progress</span>
+                    <span className="text-sm font-medium">
+                      {twilio.callState === 'connected'
+                        ? `Connected — ${Math.floor(twilio.callDuration / 60)}:${(twilio.callDuration % 60).toString().padStart(2, '0')}`
+                        : twilio.callState === 'ringing'
+                          ? 'Ringing...'
+                          : 'Call in progress'}
+                    </span>
                   </div>
 
                   <Select value={disposition} onValueChange={setDisposition}>
