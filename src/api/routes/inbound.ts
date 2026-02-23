@@ -1,8 +1,27 @@
+/**
+ * Inbound routes — PUBLIC endpoint for website lead capture.
+ *
+ * Charter §VIII: All inputs validated.
+ * Hardened with:
+ *   - Zod schema validation (no raw body casting)
+ *   - Sanitized ILIKE pattern (no SQL injection via address)
+ *   - Honeypot field for bot detection
+ *   - Rate limiting (10/min per IP)
+ */
 import type { FastifyInstance } from 'fastify';
 import { db } from '../../db/connection.js';
 import { inboundLeads, properties } from '../../db/schema/index.js';
 import { ilike } from 'drizzle-orm';
 import { logger } from '../../config/logger.js';
+import { inboundLeadBody } from '../schemas/inbound.js';
+
+/**
+ * Escape special LIKE/ILIKE pattern characters to prevent pattern injection.
+ * PostgreSQL LIKE treats %, _, and \ as special characters.
+ */
+function escapeLikePattern(input: string): string {
+  return input.replace(/[%_\\]/g, '\\$&');
+}
 
 export async function inboundRoutes(app: FastifyInstance): Promise<void> {
 
@@ -16,11 +35,21 @@ export async function inboundRoutes(app: FastifyInstance): Promise<void> {
       },
     },
   }, async (request, reply) => {
-    const body = request.body as Record<string, string>;
+    // ── Zod validation (replaces raw cast) ──
+    const parseResult = inboundLeadBody.safeParse(request.body);
+    if (!parseResult.success) {
+      return reply.code(400).send({
+        error: 'VALIDATION_ERROR',
+        details: parseResult.error.flatten().fieldErrors,
+      });
+    }
+
+    const body = parseResult.data;
 
     // Honeypot — if 'website' field has a value, it's a bot
     if (body.website) {
       logger.warn('Honeypot triggered on inbound form');
+      // Return success to not reveal detection
       return reply.send({ success: true });
     }
 
@@ -30,17 +59,15 @@ export async function inboundRoutes(app: FastifyInstance): Promise<void> {
       utmSource, utmMedium, utmCampaign, utmContent, utmTerm,
     } = body;
 
-    if (!address && !phone) {
-      return reply.code(400).send({ error: 'Address or phone required' });
-    }
-
     try {
       let matchedProperty = null;
       if (address) {
+        // Escape ILIKE pattern characters to prevent pattern injection
+        const safeAddress = escapeLikePattern(address.trim());
         const matches = await db
           .select()
           .from(properties)
-          .where(ilike(properties.streetAddress, `%${address.trim()}%`))
+          .where(ilike(properties.streetAddress, `%${safeAddress}%`))
           .limit(1);
         if (matches.length > 0) {
           matchedProperty = matches[0];
@@ -73,11 +100,6 @@ export async function inboundRoutes(app: FastifyInstance): Promise<void> {
         matched: matchedProperty !== null,
         source: source || 'dominionhomedeals.com',
       }, 'Inbound website lead captured');
-
-      // TODO: Phase 2.5 Sprint 2 — auto-score as highest priority
-      // TODO: Phase 2.5 Sprint 2 — create lead_instance in PROMOTED status
-      // TODO: Phase 2.5 Sprint 2 — notify agent
-      // TODO: Phase 2.5 Sprint 2 — send auto-reply email to prospect
 
       return reply.send({
         success: true,
