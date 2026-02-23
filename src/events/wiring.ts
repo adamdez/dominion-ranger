@@ -1,7 +1,7 @@
 import { domainEvents } from './bus.js';
 import { logger } from '../config/logger.js';
 import { logAudit } from '../modules/compliance/index.js';
-import { createLeadInstance, getActiveLeadInstance } from '../modules/workflow/index.js';
+import { createLeadInstance } from '../modules/workflow/index.js';
 
 /**
  * Wire domain event handlers.
@@ -48,12 +48,13 @@ export function wireEventHandlers(): void {
     });
 
     try {
-      const existing = await getActiveLeadInstance(dominionLeadId);
-      if (!existing) {
-        await createLeadInstance({ dominionLeadId, promotionId });
-      }
+      await createLeadInstance({ dominionLeadId, promotionId });
     } catch (err) {
-      logger.error({ err, dominionLeadId, promotionId }, 'Failed to create lead instance from promotion');
+      if (err instanceof Error && err.message.includes('Active lead instance already exists')) {
+        logger.debug({ dominionLeadId, promotionId }, 'Lead instance already exists, skipping');
+      } else {
+        logger.error({ err, dominionLeadId, promotionId }, 'Failed to create lead instance from promotion');
+      }
     }
   });
 

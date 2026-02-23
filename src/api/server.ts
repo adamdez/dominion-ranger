@@ -13,6 +13,7 @@ import { systemRoutes } from './routes/system.js';
 import { enrichmentRoutes } from './routes/enrichment.js';
 import { scoringRoutes } from './routes/scoring.js';
 import { leadRoutes } from './routes/leads.js';
+import { inboundRoutes } from './routes/inbound.js';
 import { RangerError } from '../lib/errors.js';
 import { ZodError } from 'zod';
 
@@ -42,6 +43,8 @@ export async function createServer() {
   app.addHook('preHandler', async (request, reply) => {
     // Skip auth for health check
     if (request.url === '/health') return;
+    // Skip auth for public inbound lead endpoint
+    if (request.url === '/api/inbound/website-lead') return;
     // Skip auth for system stats in dev
     if (request.url === '/api/system/stats' && env.NODE_ENV === 'development') return;
 
@@ -84,6 +87,7 @@ export async function createServer() {
   await app.register(enrichmentRoutes);
   await app.register(scoringRoutes);
   await app.register(leadRoutes);
+  await app.register(inboundRoutes);
 
   return app;
 }

@@ -19,14 +19,16 @@ export async function replayPropertyPromotion(dominionLeadId: string): Promise<b
 
   if (!latestScore) return false;
 
+  const snapshot = latestScore.scoreInputsSnapshot as Record<string, unknown> | null;
+
   const result: ScoringResult = {
     compositeScore: parseFloat(latestScore.compositeScore),
     motivationScore: parseFloat(latestScore.motivationScore ?? '0'),
     dealScore: parseFloat(latestScore.dealScore ?? '0'),
     confidenceScore: parseFloat(latestScore.confidenceScore),
-    equityMultiplier: 1.0,
-    suppressed: false,
-    suppressionReason: null,
+    equityMultiplier: typeof snapshot?.equityMultiplier === 'number' ? snapshot.equityMultiplier : 1.0,
+    suppressed: typeof snapshot?.suppressed === 'boolean' ? snapshot.suppressed : false,
+    suppressionReason: typeof snapshot?.suppressionReason === 'string' ? snapshot.suppressionReason : null,
     signalContributions: (latestScore.signalContributions as ScoringResult['signalContributions']) ?? [],
     timeDecayFactor: parseFloat(latestScore.timeDecayFactor ?? '0'),
     scoreDecayRate: parseFloat(latestScore.scoreDecayRate ?? '1'),

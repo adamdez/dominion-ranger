@@ -104,6 +104,8 @@ export async function seedScoringModel(): Promise<void> {
         FORECLOSURE: 1.0,
         UNKNOWN: 0.1,
       },
+      equity_factors: { high: 1.0, mid: 0.7, low: 0.4, floor: 0.15 },
+      ownership_factors: { long: 1.0, short: 0.5, floor: 0.2 },
     },
 
     compositeWeights: {

@@ -16,11 +16,12 @@ import { createInterface } from 'node:readline';
 import { join } from 'node:path';
 import pg from 'pg';
 import { drizzle } from 'drizzle-orm/node-postgres';
-import { eq, and } from 'drizzle-orm';
+import { sql } from 'drizzle-orm';
 import * as schema from '../db/schema/index.js';
 import type { DistressEvent } from '../db/schema/index.js';
 import { EventLayer } from '../db/schema/constants.js';
 import { generateEventFingerprint } from '../lib/fingerprint.js';
+import { generateId } from '../lib/ids.js';
 import { env } from '../config/env.js';
 
 // Use a small pool to avoid Neon limits
@@ -155,14 +156,6 @@ function isTruthy(val: string | null): boolean {
   return ['yes', 'y', 'true', '1', 'x'].includes(val.toLowerCase().trim());
 }
 
-function generateUUID(): string {
-  // UUID v7 approximation
-  const now = Date.now();
-  const hex = now.toString(16).padStart(12, '0');
-  const random = Array.from({ length: 20 }, () => Math.floor(Math.random() * 16).toString(16)).join('');
-  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-7${random.slice(0, 3)}-${(0x80 | (parseInt(random[3], 16) & 0x3f)).toString(16)}${random.slice(4, 6)}-${random.slice(6, 18)}`;
-}
-
 function parseOwnerName(raw: string): { first: string | null; last: string | null } {
   if (!raw) return { first: null, last: null };
   if (raw.includes(',')) {
@@ -243,115 +236,30 @@ async function main() {
       }
     }
 
-    // ── Build property_attributes JSONB ──
-    const attrs: Record<string, unknown> = {};
+    // ── Parse numeric/boolean fields used by property upsert and events ──
     const taxAmt = num(get(values, mapping, 'taxDelinquentAmt'));
-    const estValue = num(get(values, mapping, 'estValue'));
     const estEquityDollar = num(get(values, mapping, 'estEquityDollar'));
-    const estEquityPct = num(get(values, mapping, 'estEquityPct'));
-    const openLoans = num(get(values, mapping, 'estOpenLoans'));
-    const cltvPct = num(get(values, mapping, 'cltv'));
-    const annualTaxes = num(get(values, mapping, 'annualTaxes'));
-    const purchaseAmt = num(get(values, mapping, 'purchaseAmt'));
-    const yearBuilt = num(get(values, mapping, 'yearBuilt'));
-    const lotSqft = num(get(values, mapping, 'lotSqft'));
-    const hudRent = num(get(values, mapping, 'hudRent'));
-    const openLoansCount = num(get(values, mapping, 'openLoansCount'));
-    const firstAmount = num(get(values, mapping, 'firstAmount'));
-    const firstCashOut = num(get(values, mapping, 'firstCashOut'));
-    const secondAmount = num(get(values, mapping, 'secondAmount'));
 
-    if (taxAmt) attrs.taxDelinquentAmount = taxAmt;
-    if (estValue) attrs.estimatedValue = estValue;
-    if (estEquityDollar) attrs.estimatedEquityDollars = estEquityDollar;
-    if (estEquityPct) attrs.estimatedEquityPct = estEquityPct;
-    if (openLoans) attrs.openLoansBalance = openLoans;
-    if (cltvPct) attrs.cltvPct = cltvPct;
-    if (annualTaxes) attrs.annualTaxes = annualTaxes;
-    if (purchaseAmt) attrs.purchaseAmount = purchaseAmt;
-    if (purchaseDateStr) attrs.purchaseDate = purchaseDateStr;
-    if (yearBuilt) attrs.yearBuilt = yearBuilt;
-    if (lotSqft) attrs.lotSqft = lotSqft;
-    if (hudRent) attrs.hudRent = hudRent;
-    if (openLoansCount) attrs.openLoansCount = openLoansCount;
-    if (firstAmount) attrs.firstLoanAmount = firstAmount;
-    if (firstCashOut) attrs.firstCashOut = firstCashOut;
-    if (secondAmount) attrs.secondLoanAmount = secondAmount;
-
-    const sqft = num(get(values, mapping, 'sqft'));
-    const beds = num(get(values, mapping, 'beds'));
-    const baths = num(get(values, mapping, 'baths'));
-    const propType = get(values, mapping, 'type');
-    const firstPurpose = get(values, mapping, 'firstPurpose');
-    const firstLoanType = get(values, mapping, 'firstLoanType');
-    const secondRateType = get(values, mapping, 'secondRateType');
-
-    if (sqft) attrs.sqft = sqft;
-    if (beds) attrs.beds = beds;
-    if (baths) attrs.baths = baths;
-    if (propType) attrs.propertyType = propType;
-    if (firstPurpose) attrs.firstLoanPurpose = firstPurpose;
-    if (firstLoanType) attrs.firstLoanType = firstLoanType;
-    if (secondRateType) attrs.secondRateType = secondRateType;
-
-    // Boolean flags
     const isBankrupt = isTruthy(get(values, mapping, 'bankruptcy'));
     const isDivorce = isTruthy(get(values, mapping, 'divorce'));
     const isDeceased = isTruthy(get(values, mapping, 'deceasedOwner'));
     const isVacant = isTruthy(get(values, mapping, 'siteVacant'));
-    const isMailVacant = isTruthy(get(values, mapping, 'mailVacant'));
     const isForeclosure = isTruthy(get(values, mapping, 'foreclosure'));
 
-    if (isBankrupt) attrs.inBankruptcy = true;
-    if (isDivorce) attrs.hasDivorce = true;
-    if (isDeceased) attrs.ownerDeceased = true;
-    if (isVacant) attrs.siteVacant = true;
-    if (isMailVacant) attrs.mailVacant = true;
-
-    // Severity ratios
-    if (taxAmt && estValue && estValue > 0) {
-      attrs.taxToValueRatio = +(taxAmt / estValue).toFixed(4);
-    }
+    // Resolve historical date from purchase date or import timestamp
+    const purchaseDate = purchaseDateStr ? new Date(purchaseDateStr) : null;
+    const historicalDate = (purchaseDate && !isNaN(purchaseDate.getTime())) ? purchaseDate : null;
 
     try {
-      // ── Find or create property ──
-      let dominionLeadId: string;
-      let isNew = false;
+      // ── Atomic upsert property (Charter: ON CONFLICT DO UPDATE, no SELECT-then-INSERT) ──
+      const candidateId = generateId();
+      const candidatePropertyId = generateId();
 
-      if (apn && county) {
-        const existing = await db
-          .select({ dominionLeadId: properties.dominionLeadId })
-          .from(properties)
-          .where(and(eq(properties.apn, apn), eq(properties.county, county)))
-          .limit(1);
-
-        if (existing.length > 0) {
-          dominionLeadId = existing[0].dominionLeadId;
-          // Update with new data
-          await db.update(properties).set({
-            ownerName: ownerRaw || undefined,
-            ownerFirst: ownerFirst || undefined,
-            ownerLast: ownerLast || undefined,
-            mailingAddress: mailingAddress || undefined,
-            absenteeOwner: isAbsentee,
-            equityEstimate: estEquityDollar?.toString() || undefined,
-            ownershipDurationMonths: ownershipMonths,
-            updatedAt: new Date(),
-          }).where(eq(properties.dominionLeadId, dominionLeadId));
-          updated++;
-        } else {
-          dominionLeadId = generateUUID();
-          isNew = true;
-        }
-      } else {
-        dominionLeadId = generateUUID();
-        isNew = true;
-      }
-
-      if (isNew) {
-        await db.insert(properties).values({
-          dominionLeadId,
-          propertyId: generateUUID(),
+      const [result] = await db
+        .insert(properties)
+        .values({
+          dominionLeadId: candidateId,
+          propertyId: candidatePropertyId,
           apn: apn || null,
           county,
           state,
@@ -366,11 +274,29 @@ async function main() {
           equityEstimate: estEquityDollar?.toString() || null,
           ownershipDurationMonths: ownershipMonths,
           mortgageStatus: 'UNKNOWN',
-        });
-        created++;
-      }
+        })
+        .onConflictDoUpdate({
+          target: [properties.apn, properties.county],
+          set: {
+            ownerName: sql`COALESCE(excluded.owner_name, ${properties.ownerName})`,
+            ownerFirst: sql`COALESCE(excluded.owner_first, ${properties.ownerFirst})`,
+            ownerLast: sql`COALESCE(excluded.owner_last, ${properties.ownerLast})`,
+            mailingAddress: sql`COALESCE(excluded.mailing_address, ${properties.mailingAddress})`,
+            absenteeOwner: sql`COALESCE(excluded.absentee_owner, ${properties.absenteeOwner})`,
+            equityEstimate: sql`COALESCE(excluded.equity_estimate, ${properties.equityEstimate})`,
+            ownershipDurationMonths: sql`COALESCE(excluded.ownership_duration_months, ${properties.ownershipDurationMonths})`,
+            updatedAt: new Date(),
+          },
+        })
+        .returning();
 
-      // ── Create distress events ──
+      const dominionLeadId = result.dominionLeadId;
+      const isNew = dominionLeadId === candidateId;
+
+      if (isNew) created++;
+      else updated++;
+
+      // ── Create distress events (only for actual distress flags) ──
       type EventType = DistressEvent['eventType'];
       type EventLayerType = DistressEvent['eventLayer'];
       interface EventDraft {
@@ -382,104 +308,126 @@ async function main() {
         sourceName: string;
         reliabilityScore: string;
         rawEventPayload: Record<string, unknown>;
-        freshnessCategory: 'same_day';
+        freshnessCategory: 'same_day' | '1_3_days' | '4_7_days' | 'stale';
       }
       const source = `csv_reimport:${fileName}`;
       const newEvents: EventDraft[] = [];
 
-      newEvents.push({
-        eventId: generateUUID(),
-        dominionLeadId,
-        eventType: 'TAX_DELINQUENCY' as EventType,
-        eventLayer: EventLayer.CONFIRMED as EventLayerType,
-        triggerEventDate: new Date(),
-        sourceName: source,
-        reliabilityScore: '0.85',
-        rawEventPayload: { reason: 'tax_delinquent_list', taxDelinquentAmount: taxAmt, source: 'propertyradar' },
-        freshnessCategory: 'same_day',
-      });
+      // Use historical date for trigger; classify freshness based on age
+      function resolveDate(): { date: Date; freshness: EventDraft['freshnessCategory'] } {
+        if (historicalDate) {
+          const daysAgo = Math.floor((Date.now() - historicalDate.getTime()) / (1000 * 60 * 60 * 24));
+          if (daysAgo <= 0) return { date: historicalDate, freshness: 'same_day' };
+          if (daysAgo <= 3) return { date: historicalDate, freshness: '1_3_days' };
+          if (daysAgo <= 7) return { date: historicalDate, freshness: '4_7_days' };
+          return { date: historicalDate, freshness: 'stale' };
+        }
+        return { date: new Date(), freshness: 'same_day' };
+      }
+
+      // Only create TAX_DELINQUENCY if actually tax delinquent
+      if (taxAmt && taxAmt > 0) {
+        const { date, freshness } = resolveDate();
+        newEvents.push({
+          eventId: generateId(),
+          dominionLeadId,
+          eventType: 'TAX_DELINQUENCY' as EventType,
+          eventLayer: EventLayer.CONFIRMED as EventLayerType,
+          triggerEventDate: date,
+          sourceName: source,
+          reliabilityScore: '0.85',
+          rawEventPayload: { reason: 'tax_delinquent_amount', taxDelinquentAmount: taxAmt, source: 'propertyradar' },
+          freshnessCategory: freshness,
+        });
+      }
 
       if (isForeclosure) {
+        const { date, freshness } = resolveDate();
         newEvents.push({
-          eventId: generateUUID(),
+          eventId: generateId(),
           dominionLeadId,
           eventType: 'NOTICE_OF_DEFAULT' as EventType,
           eventLayer: EventLayer.CONFIRMED as EventLayerType,
-          triggerEventDate: new Date(),
+          triggerEventDate: date,
           sourceName: source,
           reliabilityScore: '0.90',
           rawEventPayload: { reason: 'foreclosure_flag', source: 'propertyradar' },
-          freshnessCategory: 'same_day',
+          freshnessCategory: freshness,
         });
       }
 
       if (isBankrupt) {
+        const { date, freshness } = resolveDate();
         newEvents.push({
-          eventId: generateUUID(),
+          eventId: generateId(),
           dominionLeadId,
           eventType: 'BANKRUPTCY' as EventType,
           eventLayer: EventLayer.CONFIRMED as EventLayerType,
-          triggerEventDate: new Date(),
+          triggerEventDate: date,
           sourceName: source,
           reliabilityScore: '0.90',
           rawEventPayload: { reason: 'bankruptcy_flag', source: 'propertyradar' },
-          freshnessCategory: 'same_day',
+          freshnessCategory: freshness,
         });
       }
 
       if (isDivorce) {
+        const { date, freshness } = resolveDate();
         newEvents.push({
-          eventId: generateUUID(),
+          eventId: generateId(),
           dominionLeadId,
           eventType: 'PREDICTIVE_DIVORCE_FILING' as EventType,
           eventLayer: EventLayer.PREDICTIVE as EventLayerType,
-          triggerEventDate: new Date(),
+          triggerEventDate: date,
           sourceName: source,
           reliabilityScore: '0.60',
           rawEventPayload: { reason: 'divorce_flag', source: 'propertyradar' },
-          freshnessCategory: 'same_day',
+          freshnessCategory: freshness,
         });
       }
 
       if (isDeceased) {
+        const { date, freshness } = resolveDate();
         newEvents.push({
-          eventId: generateUUID(),
+          eventId: generateId(),
           dominionLeadId,
           eventType: 'PROBATE' as EventType,
           eventLayer: EventLayer.CONFIRMED as EventLayerType,
-          triggerEventDate: new Date(),
+          triggerEventDate: date,
           sourceName: source,
           reliabilityScore: '0.80',
           rawEventPayload: { reason: 'deceased_owner_flag', source: 'propertyradar' },
-          freshnessCategory: 'same_day',
+          freshnessCategory: freshness,
         });
       }
 
       if (isVacant) {
+        const { date, freshness } = resolveDate();
         newEvents.push({
-          eventId: generateUUID(),
+          eventId: generateId(),
           dominionLeadId,
           eventType: 'PREDICTIVE_VACANCY_SIGNAL' as EventType,
           eventLayer: EventLayer.PREDICTIVE as EventLayerType,
-          triggerEventDate: new Date(),
+          triggerEventDate: date,
           sourceName: source,
           reliabilityScore: '0.50',
           rawEventPayload: { reason: 'site_vacant_flag', source: 'propertyradar' },
-          freshnessCategory: 'same_day',
+          freshnessCategory: freshness,
         });
       }
 
       if (isAbsentee) {
+        const { date, freshness } = resolveDate();
         newEvents.push({
-          eventId: generateUUID(),
+          eventId: generateId(),
           dominionLeadId,
           eventType: 'PREDICTIVE_ABSENTEE_DISTRESS' as EventType,
           eventLayer: EventLayer.PREDICTIVE as EventLayerType,
-          triggerEventDate: new Date(),
+          triggerEventDate: date,
           sourceName: source,
           reliabilityScore: '0.30',
           rawEventPayload: { reason: 'absentee_from_csv', source: 'propertyradar' },
-          freshnessCategory: 'same_day',
+          freshnessCategory: freshness,
         });
       }
 
@@ -501,14 +449,14 @@ async function main() {
       if (processed % 500 === 0) {
         const elapsed = ((Date.now() - startTime) / 1000).toFixed(0);
         const rate = (processed / parseFloat(elapsed)).toFixed(0);
-        console.log(`  ⚡ ${processed} processed (${updated} updated, ${created} new) | ${eventsCreated} events | ${rate}/sec`);
+        console.log(`  ${processed} processed (${updated} updated, ${created} new) | ${eventsCreated} events | ${rate}/sec`);
       }
 
     } catch (err: unknown) {
       errors++;
       if (errors <= 5) {
         const message = err instanceof Error ? err.message : String(err);
-        console.error(`  ❌ Error on line ${lineNum} (APN: ${apn}): ${message}`);
+        console.error(`  Error on line ${lineNum} (APN: ${apn}): ${message}`);
       }
     }
   }

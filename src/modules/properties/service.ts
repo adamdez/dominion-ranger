@@ -29,7 +29,6 @@ export interface PropertyData extends PropertyIdentity {
   absenteeOwner?: boolean | null;
   equityEstimate?: string | null;
   mortgageStatus?: MortgageStatusValue;
-  propertyAttributes?: Record<string, unknown> | null;
 }
 
 /**

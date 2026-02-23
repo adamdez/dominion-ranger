@@ -2,9 +2,10 @@ import type { FastifyInstance } from 'fastify';
 import type { SQL } from 'drizzle-orm';
 import { requireRole } from '../middleware/auth.js';
 import { scoreProperty, getLatestScore, getScoringHistory } from '../../modules/scoring/index.js';
+import { replayAllPromotions } from '../../modules/promotion/index.js';
 import { db } from '../../db/connection.js';
-import { properties } from '../../db/schema/index.js';
-import { eq, sql, and } from 'drizzle-orm';
+import { properties, scoringRecords } from '../../db/schema/index.js';
+import { eq, sql, and, countDistinct } from 'drizzle-orm';
 import { logger } from '../../config/logger.js';
 import { BUSINESS_RULES } from '../../config/business-rules.js';
 import { batchScoreBody, scoringParamsSchema, scoringHistoryQuery } from '../schemas/scoring.js';
@@ -122,6 +123,53 @@ export async function scoringRoutes(app: FastifyInstance): Promise<void> {
         logger.error({ err }, 'Batch scoring failed');
         return reply.code(500).send({
           error: 'SCORING_FAILED',
+          message: err instanceof Error ? err.message : 'Unknown error',
+        });
+      }
+    },
+  );
+
+  // POST /api/scoring/promote — Replay promotion evaluation for all scored properties
+  app.post(
+    '/api/scoring/promote',
+    { preHandler: [requireRole('pipeline.run')] },
+    async (_request, reply) => {
+      try {
+        const [{ count }] = await db
+          .select({ count: countDistinct(scoringRecords.dominionLeadId) })
+          .from(scoringRecords);
+
+        const total = Number(count);
+
+        if (total === 0) {
+          return reply.send({ status: 'complete', message: 'No scored properties to promote', promoted: 0, skipped: 0, errors: 0 });
+        }
+
+        if (total > BUSINESS_RULES.batch.largeBatchThreshold) {
+          reply.send({
+            status: 'started',
+            message: `Promoting ${total} scored properties. Check /api/scoring/stats for progress.`,
+            total,
+          });
+
+          setImmediate(async () => {
+            try {
+              const result = await replayAllPromotions();
+              logger.info({ ...result, total }, 'Batch promotion COMPLETE');
+            } catch (err: unknown) {
+              logger.error({ err: err instanceof Error ? err.message : String(err) }, 'Batch promotion failed');
+            }
+          });
+
+          return;
+        }
+
+        const result = await replayAllPromotions();
+        return reply.send({ status: 'completed', ...result });
+      } catch (err: unknown) {
+        logger.error({ err }, 'Promotion failed');
+        return reply.code(500).send({
+          error: 'PROMOTION_FAILED',
           message: err instanceof Error ? err.message : 'Unknown error',
         });
       }

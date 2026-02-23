@@ -57,3 +57,22 @@ export function useRunScoring() {
     },
   });
 }
+
+export function useRunPromotion() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async () => {
+      const { data } = await api.post('/api/scoring/promote', {});
+      return data;
+    },
+    onSuccess: () => {
+      toast.success('Promotion batch started');
+      queryClient.invalidateQueries({ queryKey: ['scoringStats'] });
+      queryClient.invalidateQueries({ queryKey: ['leads'] });
+    },
+    onError: () => {
+      toast.error('Failed to run promotion');
+    },
+  });
+}

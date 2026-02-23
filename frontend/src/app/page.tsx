@@ -24,7 +24,7 @@ export default function DashboardPage() {
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard
           title="Total Properties"
-          value={stats.data?.overview.totalProperties}
+          value={stats.data?.overview?.totalProperties}
           icon={Building2}
           loading={stats.isLoading}
         />
@@ -76,12 +76,12 @@ export default function DashboardPage() {
               </div>
             ) : (
               <div className="space-y-3 text-sm">
-                <MetricRow label="Total Events" value={stats.data?.overview.totalEvents ?? 0} />
-                <MetricRow label="Confirmed Signals" value={stats.data?.overview.confirmedEvents ?? 0} />
-                <MetricRow label="Predictive Signals" value={stats.data?.overview.predictiveEvents ?? 0} />
-                <MetricRow label="Promoted Leads" value={stats.data?.overview.promotedLeads ?? 0} />
-                <MetricRow label="Properties w/ Phone" value={stats.data?.overview.withPhone ?? 0} />
-                <MetricRow label="Absentee Owners" value={stats.data?.overview.absenteeOwners ?? 0} />
+                <MetricRow label="Total Events" value={stats.data?.overview?.totalEvents ?? 0} />
+                <MetricRow label="Confirmed Signals" value={stats.data?.overview?.confirmedEvents ?? 0} />
+                <MetricRow label="Predictive Signals" value={stats.data?.overview?.predictiveEvents ?? 0} />
+                <MetricRow label="Promoted Leads" value={stats.data?.overview?.promotedLeads ?? 0} />
+                <MetricRow label="Properties w/ Phone" value={stats.data?.overview?.withPhone ?? 0} />
+                <MetricRow label="Absentee Owners" value={stats.data?.overview?.absenteeOwners ?? 0} />
               </div>
             )}
           </CardContent>
@@ -129,9 +129,9 @@ function ScoreDistribution({ scoring }: { scoring: { totalScored: number; avgSco
   return (
     <div className="space-y-4">
       <div className="flex justify-between text-sm text-muted-foreground">
-        <span>Avg: {scoring.avgScore.toFixed(1)}</span>
-        <span>Max: {scoring.maxScore.toFixed(1)}</span>
-        <span>Scored: {scoring.totalScored.toLocaleString()}</span>
+        <span>Avg: {(scoring.avgScore ?? 0).toFixed(1)}</span>
+        <span>Max: {(scoring.maxScore ?? 0).toFixed(1)}</span>
+        <span>Scored: {(scoring.totalScored ?? 0).toLocaleString()}</span>
       </div>
       <div className="space-y-2">
         {tiers.map(tier => {

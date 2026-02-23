@@ -103,15 +103,24 @@ const DISTRESS_TYPE_MAP: Record<string, { eventType: string; eventLayer: 'confir
   'withdrawn listing':        { eventType: 'PREDICTIVE_LISTING_WITHDRAWAL', eventLayer: 'predictive', reliability: 0.35 },
 };
 
+/**
+ * Optional reliability score overrides per distress type.
+ * Pass via constructor to override hardcoded defaults.
+ * Phase 2: load from system_settings for per-source calibration.
+ */
+export type ReliabilityOverrides = Record<string, number>;
+
 export class CsvAdapter implements IngestionAdapter {
   readonly name = 'csv';
   readonly description = 'CSV file import — PropertyRadar exports, county recorder files, manual lists';
   readonly sourceType = 'file' as const;
 
   private importDir: string;
+  private reliabilityOverrides: ReliabilityOverrides;
 
-  constructor(importDir?: string) {
-    this.importDir = importDir ?? DEFAULT_IMPORT_DIR;
+  constructor(options?: { importDir?: string; reliabilityOverrides?: ReliabilityOverrides }) {
+    this.importDir = options?.importDir ?? DEFAULT_IMPORT_DIR;
+    this.reliabilityOverrides = options?.reliabilityOverrides ?? {};
   }
 
   async *fetchRecords(options?: Record<string, unknown>): AsyncGenerator<NormalizedRecord[], void, unknown> {
@@ -175,7 +184,7 @@ export class CsvAdapter implements IngestionAdapter {
         const values = parseCsvLine(line);
         if (values.length === 0 || values.every((v) => !v.trim())) continue;
 
-        const record = normalizeRow(values, columnMapping, filePath);
+        const record = normalizeRow(values, columnMapping, filePath, this.reliabilityOverrides);
         if (record) {
           batch.push(record);
           totalProcessed++;
@@ -266,6 +275,7 @@ function normalizeRow(
   values: string[],
   mapping: Record<string, number>,
   sourcefile: string,
+  reliabilityOverrides: ReliabilityOverrides = {},
 ): NormalizedRecord | null {
   const apn = getField(values, mapping, 'apn');
   const address = getField(values, mapping, 'streetAddress');
@@ -319,7 +329,7 @@ function normalizeRow(
     ?? getField(values, mapping, 'prListName');
 
   if (distressType) {
-    const mapping2 = matchDistressType(distressType);
+    const mapping2 = matchDistressType(distressType, reliabilityOverrides);
     if (mapping2) {
       const filingDateStr = getField(values, mapping, 'filingDate');
       const recordingDateStr = getField(values, mapping, 'recordingDate');
@@ -414,26 +424,36 @@ function parseOwnerName(raw: string): { firstName: string | null; lastName: stri
   return { firstName: null, lastName: raw };
 }
 
-function matchDistressType(raw: string): { eventType: string; eventLayer: 'confirmed' | 'predictive'; reliability: number } | null {
+function matchDistressType(
+  raw: string,
+  reliabilityOverrides: ReliabilityOverrides = {},
+): { eventType: string; eventLayer: 'confirmed' | 'predictive'; reliability: number } | null {
   const normalized = raw.toLowerCase().trim();
 
-  // Direct match
-  if (DISTRESS_TYPE_MAP[normalized]) return DISTRESS_TYPE_MAP[normalized];
+  let match: { eventType: string; eventLayer: 'confirmed' | 'predictive'; reliability: number } | null = null;
 
-  // Partial match — check if any key is contained in the input
-  for (const [key, value] of Object.entries(DISTRESS_TYPE_MAP)) {
-    if (normalized.includes(key) || key.includes(normalized)) {
-      return value;
+  if (DISTRESS_TYPE_MAP[normalized]) {
+    match = DISTRESS_TYPE_MAP[normalized];
+  } else {
+    for (const [key, value] of Object.entries(DISTRESS_TYPE_MAP)) {
+      if (normalized.includes(key) || key.includes(normalized)) {
+        match = value;
+        break;
+      }
     }
   }
 
-  // If we can't classify it, treat as a generic predictive signal
-  logger.debug({ distressType: raw }, 'Unknown distress type in CSV, treating as predictive');
-  return {
-    eventType: 'PREDICTIVE_MARKET_STRESS',
-    eventLayer: 'predictive',
-    reliability: 0.20,
-  };
+  if (!match) {
+    logger.debug({ distressType: raw }, 'Unknown distress type in CSV, treating as predictive');
+    match = { eventType: 'PREDICTIVE_MARKET_STRESS', eventLayer: 'predictive', reliability: 0.20 };
+  }
+
+  const override = reliabilityOverrides[match.eventType];
+  if (override !== undefined) {
+    return { ...match, reliability: override };
+  }
+
+  return match;
 }
 
 function parseDate(str: string): Date | null {

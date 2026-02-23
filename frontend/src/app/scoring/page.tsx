@@ -79,10 +79,10 @@ export default function ScoringPage() {
           <CardContent>
             <div className="grid grid-cols-4 gap-4">
               {[
-                { tier: 'A' as const, count: stats.data.tierA },
-                { tier: 'B' as const, count: stats.data.tierB },
-                { tier: 'C' as const, count: stats.data.tierC },
-                { tier: 'D' as const, count: stats.data.belowThreshold },
+                { tier: 'A' as const, count: stats.data?.tierA ?? 0 },
+                { tier: 'B' as const, count: stats.data?.tierB ?? 0 },
+                { tier: 'C' as const, count: stats.data?.tierC ?? 0 },
+                { tier: 'D' as const, count: stats.data?.belowThreshold ?? 0 },
               ].map(({ tier, count }) => (
                 <div key={tier} className="text-center rounded-lg border p-3">
                   <div className={`inline-block h-3 w-3 rounded-full ${SCORE_TIERS[tier].color} mb-2`} />

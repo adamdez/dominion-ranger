@@ -92,7 +92,8 @@ describe.skipIf(!canRun)('Scoring Replay Determinism', () => {
   });
 
   it('delete-and-replay regenerates identical scores', async () => {
-    const originalResult = await scoreProperty(testPropertyId);
+    const asOf = new Date('2026-02-15T12:00:00Z');
+    const originalResult = await scoreProperty(testPropertyId, { asOf });
     expect(originalResult.compositeScore).toBeGreaterThan(0);
 
     const [originalRecord] = await db
@@ -115,7 +116,7 @@ describe.skipIf(!canRun)('Scoring Replay Determinism', () => {
     expect(deletedCheck.length).toBe(0);
 
     invalidateConfigCache();
-    const replayResult = await scoreProperty(testPropertyId);
+    const replayResult = await scoreProperty(testPropertyId, { asOf });
 
     expect(replayResult.compositeScore).toBeCloseTo(originalResult.compositeScore, 4);
     expect(replayResult.motivationScore).toBeCloseTo(originalResult.motivationScore, 4);

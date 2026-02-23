@@ -56,7 +56,7 @@ export default function AssignPage() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <p className="text-sm text-muted-foreground">
-          {data.pagination.total} promoted leads available for assignment
+          {data?.pagination?.total ?? 0} promoted leads available for assignment
         </p>
       </div>
 

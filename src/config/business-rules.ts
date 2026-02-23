@@ -36,10 +36,6 @@ export const BUSINESS_RULES = {
 
   scoring: {
     configCacheTtlMs: 60_000,
-    defaultCompositeWeights: {
-      motivation_weight: 0.65,
-      deal_weight: 0.35,
-    },
     normalizationDivisor: 3.0,
     accelerationRateMultiplier: 0.05,
     densityBonusMultiplier: 0.02,
@@ -49,17 +45,6 @@ export const BUSINESS_RULES = {
       signalFactor: 0.4,
       maxDiversityBonus: 0.2,
       maxSourceBonus: 0.15,
-    },
-    equityFactors: {
-      high: 1.0,
-      mid: 0.7,
-      low: 0.4,
-      floor: 0.15,
-    },
-    ownershipFactors: {
-      long: 1.0,
-      short: 0.5,
-      floor: 0.2,
     },
     signalDensityDiversityBonus: 0.15,
     defaultAccelerationFallback: 2.0,

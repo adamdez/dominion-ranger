@@ -10,7 +10,7 @@ import { generateId } from '../../lib/index.js';
 import { domainEvents } from '../../events/bus.js';
 import { logger } from '../../config/logger.js';
 import { BUSINESS_RULES } from '../../config/business-rules.js';
-import { EventLayer, UrgencyLevel } from '../../db/schema/constants.js';
+import { EventLayer, UrgencyLevel, MarketingTier } from '../../db/schema/constants.js';
 import type { ScoringResult } from '../scoring/index.js';
 
 interface TierThresholds {
@@ -135,13 +135,13 @@ function recommendAction(
   urgency: string,
   _result: ScoringResult,
 ): string {
-  if (urgency === 'CRITICAL') {
+  if (urgency === UrgencyLevel.CRITICAL) {
     return 'Immediate outreach. Confirmed distress with high score and recent activity. Priority dial.';
   }
-  if (tier === 'A') {
+  if (tier === MarketingTier.A) {
     return 'High-priority contact. Multiple strong signals detected. Schedule same-day outreach.';
   }
-  if (tier === 'B') {
+  if (tier === MarketingTier.B) {
     return 'Standard outreach. Moderate distress signals. Include in next campaign batch.';
   }
   return 'Monitor and nurture. Early signals detected. Add to drip campaign.';
@@ -197,6 +197,17 @@ export async function getRankedLeads(options: {
 
   const rows = await query;
   return rows.map((r) => ({ ...r.promotion, property: r.property }));
+}
+
+/**
+ * Mark a promotion as exported to Sentinel.
+ * Owned by the Promotion domain — external modules call this instead of writing directly.
+ */
+export async function markExportedToSentinel(promotionId: string): Promise<void> {
+  await db
+    .update(promotedLeads)
+    .set({ exportedToSentinelAt: new Date() })
+    .where(eq(promotedLeads.promotionId, promotionId));
 }
 
 /**

@@ -36,9 +36,18 @@ export type { SystemSetting, NewSystemSetting } from './system-settings';
 export { dispositions } from './dispositions';
 export type { Disposition, NewDisposition } from './dispositions';
 
+// ─── Inbound ──────────────────────────────────────
+export { inboundLeads } from './inbound-leads';
+export type { InboundLead, NewInboundLead } from './inbound-leads';
+
 // ─── Auth & Audit ──────────────────────────────────
 export { auditLog } from './audit-log';
 export type { AuditLogEntry, NewAuditLogEntry } from './audit-log';
 
 export { users } from './users';
 export type { User, NewUser } from './users';
+
+// ─── Analytics & Attribution ────────────────────────
+export * from './activity-log-v2';
+export * from './deals';
+export * from './marketing';

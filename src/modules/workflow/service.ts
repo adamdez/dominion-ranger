@@ -35,37 +35,32 @@ function isValidTransition(from: LeadStatusType, to: LeadStatusType): boolean {
 /**
  * Create a lead instance from a promotion.
  * Charter: One active lead_instance per property.
+ *
+ * Uses atomic INSERT ... SELECT ... WHERE NOT EXISTS to prevent race conditions.
+ * Two concurrent promotions for the same property will only create one instance.
  */
 export async function createLeadInstance(input: {
   dominionLeadId: string;
   promotionId: string;
 }): Promise<LeadInstance> {
-  const activeInstances = await db
-    .select({ count: sql<number>`count(*)::int` })
-    .from(leadInstances)
-    .where(
-      and(
-        eq(leadInstances.dominionLeadId, input.dominionLeadId),
-        ne(leadInstances.status, LeadStatus.CLOSED),
-        ne(leadInstances.status, LeadStatus.DEAD),
-      ),
-    );
+  const leadInstanceId = generateId();
 
-  if (activeInstances[0].count > 0) {
+  const result = await db.execute<LeadInstance>(sql`
+    INSERT INTO lead_instances (lead_instance_id, dominion_lead_id, promotion_id, status, version)
+    SELECT ${leadInstanceId}, ${input.dominionLeadId}, ${input.promotionId}, ${LeadStatus.PROMOTED}, 1
+    WHERE NOT EXISTS (
+      SELECT 1 FROM lead_instances
+      WHERE dominion_lead_id = ${input.dominionLeadId}
+        AND status NOT IN (${LeadStatus.CLOSED}, ${LeadStatus.DEAD})
+    )
+    RETURNING *
+  `);
+
+  if (result.rows.length === 0) {
     throw new ValidationError(`Active lead instance already exists for property ${input.dominionLeadId}`);
   }
 
-  const leadInstanceId = generateId();
-  const [instance] = await db
-    .insert(leadInstances)
-    .values({
-      leadInstanceId,
-      dominionLeadId: input.dominionLeadId,
-      promotionId: input.promotionId,
-      status: LeadStatus.PROMOTED,
-      version: 1,
-    })
-    .returning();
+  const instance = result.rows[0];
 
   await logAudit({
     dominionLeadId: input.dominionLeadId,
@@ -125,6 +120,10 @@ export async function claimLead(input: {
 /**
  * Run compliance checks (DNC + litigant) on a lead.
  * Charter: Compliance gating before dial eligibility.
+ *
+ * Two-phase transition:
+ *   ASSIGNED → COMPLIANCE_PENDING  (phase 1: begin checks)
+ *   COMPLIANCE_PENDING → DIAL_READY | DEAD  (phase 2: apply result)
  */
 export async function runComplianceGating(leadInstanceId: string): Promise<LeadInstance> {
   const [instance] = await db
@@ -134,21 +133,52 @@ export async function runComplianceGating(leadInstanceId: string): Promise<LeadI
 
   if (!instance) throw new NotFoundError('LeadInstance', leadInstanceId);
 
-  if (!isValidTransition(instance.status, LeadStatus.COMPLIANCE_PENDING)) {
-    throw new ValidationError(`Cannot run compliance from status ${instance.status}`);
+  // Phase 1: transition to COMPLIANCE_PENDING
+  let current = instance;
+  if (current.status === LeadStatus.ASSIGNED) {
+    if (!isValidTransition(current.status, LeadStatus.COMPLIANCE_PENDING)) {
+      throw new ValidationError(`Cannot run compliance from status ${current.status}`);
+    }
+
+    const [pending] = await db
+      .update(leadInstances)
+      .set({
+        status: LeadStatus.COMPLIANCE_PENDING,
+        version: sql`${leadInstances.version} + 1`,
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(leadInstances.leadInstanceId, leadInstanceId),
+          eq(leadInstances.version, current.version),
+        ),
+      )
+      .returning();
+
+    if (!pending) throw new ConcurrencyError('lead_instance', leadInstanceId);
+    current = pending;
+
+    await logAudit({
+      dominionLeadId: current.dominionLeadId,
+      actionType: 'workflow.compliance_started',
+      metadata: { leadInstanceId },
+    });
+  } else if (current.status !== LeadStatus.COMPLIANCE_PENDING) {
+    throw new ValidationError(`Cannot run compliance from status ${current.status}`);
   }
 
+  // Phase 2: run checks and resolve
   const [property] = await db
     .select()
     .from(properties)
-    .where(eq(properties.dominionLeadId, instance.dominionLeadId));
+    .where(eq(properties.dominionLeadId, current.dominionLeadId));
 
   const dncResult = property?.phone
-    ? await checkDnc(property.phone, instance.dominionLeadId)
+    ? await checkDnc(property.phone, current.dominionLeadId)
     : { isOnDnc: false, checkedAt: new Date() };
 
   const litigatorResult = property?.ownerName
-    ? await checkLitigator(property.ownerName, instance.dominionLeadId)
+    ? await checkLitigator(property.ownerName, current.dominionLeadId)
     : { isLitigator: false, checkedAt: new Date() };
 
   const complianceCleared = !dncResult.isOnDnc && !litigatorResult.isLitigator;
@@ -167,7 +197,7 @@ export async function runComplianceGating(leadInstanceId: string): Promise<LeadI
     .where(
       and(
         eq(leadInstances.leadInstanceId, leadInstanceId),
-        eq(leadInstances.version, instance.version),
+        eq(leadInstances.version, current.version),
       ),
     )
     .returning();
@@ -178,7 +208,7 @@ export async function runComplianceGating(leadInstanceId: string): Promise<LeadI
     const reason = dncResult.isOnDnc ? 'DNC' : 'LITIGATOR';
     logger.warn({ leadInstanceId, reason }, 'Lead blocked by compliance');
     await logAudit({
-      dominionLeadId: instance.dominionLeadId,
+      dominionLeadId: current.dominionLeadId,
       actionType: 'workflow.compliance_blocked',
       metadata: { leadInstanceId, reason, dncResult, litigatorResult },
     });

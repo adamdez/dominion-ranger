@@ -1,19 +1,20 @@
 'use client';
 
-import { Settings, Database, BarChart3, RefreshCw, Play } from 'lucide-react';
+import { Settings, Database, BarChart3, RefreshCw, Play, ArrowUpCircle } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ErrorState } from '@/components/ui/error-state';
 import { useSystemStats } from '@/hooks/use-system';
-import { useScoringStats, useRunScoring } from '@/hooks/use-scoring';
+import { useScoringStats, useRunScoring, useRunPromotion } from '@/hooks/use-scoring';
 import { SCORE_TIERS } from '@/lib/constants';
 
 export default function SettingsPage() {
   const stats = useSystemStats();
   const scoringStats = useScoringStats();
   const runScoring = useRunScoring();
+  const runPromotion = useRunPromotion();
 
   if (stats.error) {
     return <ErrorState message="Failed to load settings" onRetry={() => stats.refetch()} />;
@@ -36,11 +37,11 @@ export default function SettingsPage() {
             </div>
           ) : (
             <div className="space-y-2 text-sm">
-              <SettingRow label="Total Properties" value={stats.data?.overview.totalProperties.toLocaleString() ?? '—'} />
-              <SettingRow label="Total Events" value={stats.data?.overview.totalEvents.toLocaleString() ?? '—'} />
-              <SettingRow label="Promoted Leads" value={stats.data?.overview.promotedLeads.toLocaleString() ?? '—'} />
-              <SettingRow label="Properties w/ Phone" value={stats.data?.overview.withPhone.toLocaleString() ?? '—'} />
-              <SettingRow label="Absentee Owners" value={stats.data?.overview.absenteeOwners.toLocaleString() ?? '—'} />
+              <SettingRow label="Total Properties" value={(stats.data?.overview?.totalProperties ?? 0).toLocaleString()} />
+              <SettingRow label="Total Events" value={(stats.data?.overview?.totalEvents ?? 0).toLocaleString()} />
+              <SettingRow label="Promoted Leads" value={(stats.data?.overview?.promotedLeads ?? 0).toLocaleString()} />
+              <SettingRow label="Properties w/ Phone" value={(stats.data?.overview?.withPhone ?? 0).toLocaleString()} />
+              <SettingRow label="Absentee Owners" value={(stats.data?.overview?.absenteeOwners ?? 0).toLocaleString()} />
               <SettingRow label="Uptime" value={stats.data ? formatUptime(stats.data.uptime) : '—'} />
             </div>
           )}
@@ -81,9 +82,9 @@ export default function SettingsPage() {
               <Separator />
               <div className="space-y-2 text-sm">
                 <h4 className="font-semibold text-xs text-muted-foreground uppercase">Current Stats</h4>
-                <SettingRow label="Properties Scored" value={scoringStats.data.propertiesScored.toLocaleString()} />
-                <SettingRow label="Average Score" value={scoringStats.data.avgScore.toFixed(1)} />
-                <SettingRow label="Max Score" value={scoringStats.data.maxScore.toFixed(1)} />
+                <SettingRow label="Properties Scored" value={(scoringStats.data?.propertiesScored ?? 0).toLocaleString()} />
+                <SettingRow label="Average Score" value={(scoringStats.data?.avgScore ?? 0).toFixed(1)} />
+                <SettingRow label="Max Score" value={(scoringStats.data?.maxScore ?? 0).toFixed(1)} />
               </div>
             </>
           )}
@@ -132,6 +133,24 @@ export default function SettingsPage() {
             >
               <Play className="mr-1.5 h-3.5 w-3.5" />
               Score New
+            </Button>
+          </div>
+          <Separator />
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium">Run Promotion</p>
+              <p className="text-xs text-muted-foreground">
+                Evaluate all scored properties for lead promotion
+              </p>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={runPromotion.isPending}
+              onClick={() => runPromotion.mutate()}
+            >
+              <ArrowUpCircle className="mr-1.5 h-3.5 w-3.5" />
+              Promote
             </Button>
           </div>
         </CardContent>

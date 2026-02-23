@@ -2,16 +2,15 @@ import { eq } from 'drizzle-orm';
 import { db } from '../../db/connection.js';
 import {
   systemSettings,
-  promotedLeads,
   outcomeReservoir,
-  auditLog,
 } from '../../db/schema/index.js';
 import type { PromotedLead, Property } from '../../db/schema/index.js';
-import { generateId } from '../../lib/index.js';
 import { domainEvents } from '../../events/bus.js';
 import { logger } from '../../config/logger.js';
 import { BUSINESS_RULES } from '../../config/business-rules.js';
 import { OutcomeStatus } from '../../db/schema/constants.js';
+import { markExportedToSentinel } from '../promotion/index.js';
+import { logAudit } from '../compliance/index.js';
 
 // ─── Sentinel Payload (Charter VIII.3) ─────────────
 
@@ -76,11 +75,7 @@ export async function dispatchToSentinel(
       return false;
     }
 
-    // Mark as exported
-    await db
-      .update(promotedLeads)
-      .set({ exportedToSentinelAt: new Date() })
-      .where(eq(promotedLeads.promotionId, promotion.promotionId));
+    await markExportedToSentinel(promotion.promotionId);
 
     domainEvents.emit('sentinel.exported', {
       dominionLeadId: promotion.dominionLeadId,
@@ -174,9 +169,7 @@ export async function receiveSentinelStatus(input: StatusSyncInput): Promise<voi
       set: outcomeUpdates,
     });
 
-  // Audit log
-  await db.insert(auditLog).values({
-    logId: generateId(),
+  await logAudit({
     dominionLeadId: input.dominionLeadId,
     userId: input.userId ?? 'sentinel',
     actionType: `sentinel.status.${input.status.toLowerCase()}`,

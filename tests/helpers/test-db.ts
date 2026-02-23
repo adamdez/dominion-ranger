@@ -58,6 +58,7 @@ export async function cleanupTables() {
   await safeExec(db, sql`ALTER TABLE distress_events DISABLE TRIGGER USER`);
   await safeExec(db, sql`ALTER TABLE scoring_records DISABLE TRIGGER USER`);
 
+  await safeExec(db, sql`DELETE FROM dispositions`);
   await safeExec(db, sql`DELETE FROM audit_log`);
   await safeExec(db, sql`DELETE FROM lead_instances`);
   await safeExec(db, sql`DELETE FROM outcome_reservoir`);
@@ -65,6 +66,7 @@ export async function cleanupTables() {
   await safeExec(db, sql`DELETE FROM scoring_records`);
   await safeExec(db, sql`DELETE FROM signal_accumulation`);
   await safeExec(db, sql`DELETE FROM distress_events`);
+  await safeExec(db, sql`DELETE FROM scoring_model_configs`);
   await safeExec(db, sql`DELETE FROM system_settings`);
   await safeExec(db, sql`DELETE FROM users`);
   await safeExec(db, sql`DELETE FROM properties`);

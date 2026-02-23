@@ -11,10 +11,12 @@ import type { ScoringResult } from './service.js';
  * Re-scores from current events using the active model config.
  * Appends a new scoring record — never deletes prior records.
  * Charter: deterministic replay must produce identical scores for identical inputs.
+ *
+ * @param asOf — fixed timestamp for deterministic replay; defaults to now
  */
-export async function replayPropertyScoring(dominionLeadId: string): Promise<ScoringResult> {
+export async function replayPropertyScoring(dominionLeadId: string, options?: { asOf?: Date }): Promise<ScoringResult> {
   await recalculateSignalAccumulation(dominionLeadId);
-  return scoreProperty(dominionLeadId);
+  return scoreProperty(dominionLeadId, options);
 }
 
 /**

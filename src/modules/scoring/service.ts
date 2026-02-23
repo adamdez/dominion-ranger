@@ -54,6 +54,8 @@ interface DealScoreWeights {
   equity_thresholds: { low: number; mid: number; high: number };
   ownership_thresholds: { short_months: number; long_months: number };
   mortgage_severity: Record<string, number>;
+  equity_factors: { high: number; mid: number; low: number; floor: number };
+  ownership_factors: { long: number; short: number; floor: number };
 }
 
 interface SuppressionConfig {
@@ -136,18 +138,22 @@ export function invalidateConfigCache(): void {
  *   - Negative-stack suppression check before scoring
  *   - Versioned, append-only scoring records
  */
-export async function scoreProperty(dominionLeadId: string): Promise<ScoringResult> {
+export async function scoreProperty(dominionLeadId: string, options?: { asOf?: Date }): Promise<ScoringResult> {
   const config = await getActiveConfig();
   const confirmedWeights = config.confirmedWeights as Record<string, WeightEntry>;
   const predictiveWeights = config.predictiveWeights as Record<string, WeightEntry>;
   const decayConfig = config.decayConfig as DecayConfig;
   const confidenceConfig = config.confidenceConfig as ConfidenceConfig;
-  const equityConfig = (config.equityMultiplierConfig as EquityMultiplierConfig | null) ?? DEFAULT_EQUITY_CONFIG;
-  const dealWeights = (config.dealScoreWeights as DealScoreWeights | null) ?? DEFAULT_DEAL_WEIGHTS;
+
+  const equityConfig = config.equityMultiplierConfig as EquityMultiplierConfig | null;
+  if (!equityConfig) throw new ValidationError('Scoring config missing equityMultiplierConfig. Seed the database.');
+  const dealWeights = config.dealScoreWeights as DealScoreWeights | null;
+  if (!dealWeights) throw new ValidationError('Scoring config missing dealScoreWeights. Seed the database.');
+  const compositeWeights = config.compositeWeights as { motivation_weight: number; deal_weight: number } | null;
+  if (!compositeWeights) throw new ValidationError('Scoring config missing compositeWeights. Seed the database.');
+
   const suppressionConfig = (config.suppressionConfig as SuppressionConfig | null) ?? null;
-  const compositeWeights = (config.compositeWeights as { motivation_weight: number; deal_weight: number } | null)
-    ?? BUSINESS_RULES.scoring.defaultCompositeWeights;
-  const now = new Date();
+  const now = options?.asOf ?? new Date();
 
   const [property] = await db
     .select()
@@ -162,7 +168,7 @@ export async function scoreProperty(dominionLeadId: string): Promise<ScoringResu
   const suppressionReason = checkSuppression(property, suppressionConfig);
   if (suppressionReason) {
     const result = createSuppressedScore(dominionLeadId, config.version, suppressionReason);
-    await storeScoringRecord(dominionLeadId, result, config.version);
+    await storeScoringRecord(dominionLeadId, result, config.version, now);
     return result;
   }
 
@@ -274,7 +280,7 @@ export async function scoreProperty(dominionLeadId: string): Promise<ScoringResu
     modelVersion: config.version,
   };
 
-  await storeScoringRecord(dominionLeadId, result, config.version);
+  await storeScoringRecord(dominionLeadId, result, config.version, now);
 
   logger.info(
     {
@@ -307,7 +313,7 @@ function calculateDealScore(property: Property, weights: DealScoreWeights): numb
   // Equity factor
   const equity = property.equityEstimate ? parseFloat(property.equityEstimate) : 0;
   const { low, mid, high } = weights.equity_thresholds;
-  const ef = BUSINESS_RULES.scoring.equityFactors;
+  const ef = weights.equity_factors;
   let equityFactor = 0;
   if (equity >= high) equityFactor = ef.high;
   else if (equity >= mid) equityFactor = ef.mid;
@@ -318,7 +324,7 @@ function calculateDealScore(property: Property, weights: DealScoreWeights): numb
   // Ownership duration factor (long ownership = more motivated to sell)
   const months = property.ownershipDurationMonths ?? 0;
   const { short_months, long_months } = weights.ownership_thresholds;
-  const of_ = BUSINESS_RULES.scoring.ownershipFactors;
+  const of_ = weights.ownership_factors;
   let ownershipFactor = 0;
   if (months >= long_months) ownershipFactor = of_.long;
   else if (months >= short_months) ownershipFactor = of_.short;
@@ -388,7 +394,7 @@ function calculateConfidence(
 
 // ─── Storage ───────────────────────────────────────
 
-async function storeScoringRecord(dominionLeadId: string, result: ScoringResult, modelVersion: string): Promise<void> {
+async function storeScoringRecord(dominionLeadId: string, result: ScoringResult, modelVersion: string, asOf: Date): Promise<void> {
   const scoreId = generateId();
   await db.insert(scoringRecords).values({
     scoreId,
@@ -412,40 +418,9 @@ async function storeScoringRecord(dominionLeadId: string, result: ScoringResult,
     scoreDecayRate: result.scoreDecayRate.toFixed(4),
     daysSinceTrigger: result.daysSinceTrigger,
     firstDetectedAt: result.firstDetectedAt,
-    lastScoredAt: new Date(),
+    lastScoredAt: asOf,
   });
 }
-
-// ─── Defaults ──────────────────────────────────────
-
-const DEFAULT_EQUITY_CONFIG: EquityMultiplierConfig = {
-  ranges: [
-    { min: 0, max: 25000, multiplier: 0.7 },
-    { min: 25000, max: 75000, multiplier: 0.85 },
-    { min: 75000, max: 200000, multiplier: 1.0 },
-    { min: 200000, multiplier: 1.15 },
-  ],
-  default_multiplier: 1.0,
-};
-
-const DEFAULT_DEAL_WEIGHTS: DealScoreWeights = {
-  equity_weight: 0.35,
-  ownership_weight: 0.25,
-  absentee_weight: 0.15,
-  mortgage_weight: 0.25,
-  equity_thresholds: { low: 25000, mid: 75000, high: 200000 },
-  ownership_thresholds: { short_months: 24, long_months: 120 },
-  mortgage_severity: {
-    FREE_AND_CLEAR: 0.3,
-    CURRENT: 0.2,
-    LATE_30: 0.5,
-    LATE_60: 0.7,
-    LATE_90: 0.85,
-    DEFAULT: 0.95,
-    FORECLOSURE: 1.0,
-    UNKNOWN: 0.1,
-  },
-};
 
 function createZeroScore(dominionLeadId: string, modelVersion: string): ScoringResult {
   return {

@@ -136,10 +136,11 @@ describe.skipIf(!canRun)('Promotion Replay Determinism', () => {
     ]);
 
     // --- First pass: score all and evaluate ---
+    const asOf = new Date('2026-02-15T12:00:00Z');
     const originalPromotions: Map<string, string> = new Map();
 
     for (const id of [id1, id2, id3, id4, id5]) {
-      const result = await scoreProperty(id);
+      const result = await scoreProperty(id, { asOf });
       const promotion = await evaluateForPromotion(id, result);
       if (promotion) {
         originalPromotions.set(id, promotion.marketingTier);
