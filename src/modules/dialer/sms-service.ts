@@ -1,7 +1,7 @@
 import { getTwilioClient, TWILIO_PHONE_NUMBER, isTwilioConfigured } from '../../config/twilio.js';
 import { logger } from '../../config/logger.js';
 import { db } from '../../db/connection.js';
-import { smsLogs, properties } from '../../db/schema/index.js';
+import { smsLogs, properties, propertyContacts } from '../../db/schema/index.js';
 import { eq, desc, sql, and } from 'drizzle-orm';
 import { env } from '../../config/env.js';
 
@@ -75,7 +75,9 @@ export async function logInboundSms(
 ): Promise<{ dominionLeadId: string | null }> {
   const normalizedPhone = fromPhone.replace(/\D/g, '').slice(-10);
 
-  const [match] = await db
+  let dominionLeadId: string | null = null;
+
+  const [propMatch] = await db
     .select({ dominionLeadId: properties.dominionLeadId })
     .from(properties)
     .where(
@@ -83,7 +85,19 @@ export async function logInboundSms(
     )
     .limit(1);
 
-  const dominionLeadId = match?.dominionLeadId ?? null;
+  dominionLeadId = propMatch?.dominionLeadId ?? null;
+
+  if (!dominionLeadId) {
+    const [contactMatch] = await db
+      .select({ dominionLeadId: propertyContacts.dominionLeadId })
+      .from(propertyContacts)
+      .where(
+        sql`REPLACE(REPLACE(REPLACE(REPLACE(${propertyContacts.phone}, '-', ''), '(', ''), ')', ''), ' ', '') LIKE ${'%' + normalizedPhone}`,
+      )
+      .limit(1);
+
+    dominionLeadId = contactMatch?.dominionLeadId ?? null;
+  }
 
   await db.insert(smsLogs).values({
     messageSid,

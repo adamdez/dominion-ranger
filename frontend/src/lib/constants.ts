@@ -52,6 +52,19 @@ export const TASK_TYPES = {
   GENERAL: { label: 'General', color: 'bg-gray-100 text-gray-800' },
 } as const;
 
+export const VALID_DEAL_TRANSITIONS: Record<string, string[]> = {
+  NEW_LEAD:       ['SKIP_TRACED', 'DEAD'],
+  SKIP_TRACED:    ['CONTACTED', 'DEAD'],
+  CONTACTED:      ['INTERESTED', 'DEAD'],
+  INTERESTED:     ['OFFER_MADE', 'DEAD'],
+  OFFER_MADE:     ['UNDER_CONTRACT', 'DEAD'],
+  UNDER_CONTRACT: ['TITLE_ESCROW', 'CLOSED_LOST'],
+  TITLE_ESCROW:   ['CLOSED_WON', 'CLOSED_LOST'],
+  CLOSED_WON:     [],
+  CLOSED_LOST:    [],
+  DEAD:           ['NEW_LEAD'],
+};
+
 export type ScoreTier = keyof typeof SCORE_TIERS;
 
 export function getScoreTier(score: number | null): ScoreTier {

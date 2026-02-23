@@ -30,7 +30,7 @@ import { usePropertyDetail, usePropertyEvents, usePropertyTasks, usePropertyTags
 import { useDealStageTransition } from '@/hooks/use-pipeline';
 import { useAddTag, useRemoveTag } from '@/hooks/use-tags';
 import type { LeadWithProperty, AuditLogEntry, DistressEvent, Tag } from '@/lib/types';
-import { DEAL_STAGES } from '@/lib/constants';
+import { DEAL_STAGES, VALID_DEAL_TRANSITIONS } from '@/lib/constants';
 import { format } from 'date-fns';
 import {
   UserPlus, Shield, Phone, MessageSquare, Send, FileText,
@@ -161,24 +161,36 @@ export function PropertyDetailSheet({ lead, open, onClose }: PropertyDetailSheet
                       <Separator />
                       <div className="space-y-1.5">
                         <span className="text-xs text-muted-foreground">Deal Stage</span>
-                        <Select
-                          value={(lead as unknown as { dealStage?: string }).dealStage ?? 'NEW_LEAD'}
-                          onValueChange={(stage) => dealStageMutation.mutate({
-                            leadInstanceId: lead.leadInstanceId,
-                            stage,
-                          })}
-                        >
-                          <SelectTrigger className="h-8 text-xs">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {DEAL_STAGES.map(s => (
-                              <SelectItem key={s.key} value={s.key} className="text-xs">
-                                {s.label}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                        {(() => {
+                          const currentDealStage = (lead as unknown as { dealStage?: string }).dealStage ?? 'NEW_LEAD';
+                          const validNextStages = VALID_DEAL_TRANSITIONS[currentDealStage] ?? [];
+                          return (
+                            <Select
+                              value={currentDealStage}
+                              onValueChange={(stage) => dealStageMutation.mutate({
+                                leadInstanceId: lead.leadInstanceId,
+                                stage,
+                              })}
+                            >
+                              <SelectTrigger className="h-8 text-xs">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value={currentDealStage} className="text-xs" disabled>
+                                  {DEAL_STAGES.find(s => s.key === currentDealStage)?.label ?? currentDealStage} (current)
+                                </SelectItem>
+                                {DEAL_STAGES
+                                  .filter(s => validNextStages.includes(s.key))
+                                  .map(s => (
+                                    <SelectItem key={s.key} value={s.key} className="text-xs">
+                                      {s.label}
+                                    </SelectItem>
+                                  ))
+                                }
+                              </SelectContent>
+                            </Select>
+                          );
+                        })()}
                       </div>
                     </div>
                   </div>
