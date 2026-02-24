@@ -18,6 +18,8 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { ScoreBadge } from '@/components/ui/score-badge';
+import { HoverCard, HoverCardContent, HoverCardTrigger } from '@/components/ui/hover-card';
+import { ScoreBreakdownTooltip, EVENT_LABELS } from '@/components/scoring/score-breakdown-tooltip';
 import { Checkbox } from '@/components/ui/checkbox';
 import { EmptyState } from '@/components/ui/empty-state';
 import { ErrorState } from '@/components/ui/error-state';
@@ -342,6 +344,7 @@ export default function LeadsPage() {
                   <TableHead>Owner</TableHead>
                   <TableHead>County</TableHead>
                   <SortableHeader label="Score" col="compositeScore" current={sortBy} order={sortOrder} onClick={handleSort} />
+                  <TableHead>Signals</TableHead>
                   <SortableHeader label="Status" col="status" current={sortBy} order={sortOrder} onClick={handleSort} />
                   <TableHead>Stage</TableHead>
                   <TableHead>Skip Trace</TableHead>
@@ -369,8 +372,31 @@ export default function LeadsPage() {
                     </TableCell>
                     <TableCell className="max-w-[150px] truncate">{lead.ownerName ?? '\u2014'}</TableCell>
                     <TableCell>{lead.county ?? '\u2014'}</TableCell>
+                    <TableCell onClick={(e) => e.stopPropagation()}>
+                      <HoverCard openDelay={200} closeDelay={100}>
+                        <HoverCardTrigger asChild>
+                          <span className="cursor-help inline-flex">
+                            <ScoreBadge score={lead.compositeScore} />
+                          </span>
+                        </HoverCardTrigger>
+                        <HoverCardContent className="w-80" side="right">
+                          <ScoreBreakdownTooltip
+                            compositeScore={lead.compositeScore}
+                            motivationScore={lead.motivationScore}
+                            dealScore={lead.dealScore}
+                            dominionLeadId={lead.dominionLeadId}
+                          />
+                        </HoverCardContent>
+                      </HoverCard>
+                    </TableCell>
                     <TableCell>
-                      <ScoreBadge score={lead.compositeScore} />
+                      <div className="flex flex-wrap gap-1">
+                        {(lead.topSignals ?? []).slice(0, 3).map((s: string) => (
+                          <Badge key={s} variant="outline" className="text-[10px] px-1.5 py-0">
+                            {EVENT_LABELS[s]?.label ?? s}
+                          </Badge>
+                        ))}
+                      </div>
                     </TableCell>
                     <TableCell>
                       <StatusBadge status={lead.status} />
