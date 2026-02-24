@@ -372,6 +372,18 @@ function checkSuppression(property: Property, config: SuppressionConfig | null):
     }
   }
 
+  // Charter Section VIII: custom_flags suppression (DNC, LITIGANT, OPT_OUT)
+  const customFlags = config.custom_flags ?? [];
+  if (customFlags.includes('DNC') && property.dncFlag === true) {
+    return 'Suppressed: custom_flag DNC';
+  }
+  if (customFlags.includes('LITIGANT') && property.litigantFlag === true) {
+    return 'Suppressed: custom_flag LITIGANT';
+  }
+  if (customFlags.includes('OPT_OUT') && property.optOutFlag === true) {
+    return 'Suppressed: custom_flag OPT_OUT';
+  }
+
   return null;
 }
 
