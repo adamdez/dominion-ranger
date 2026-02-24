@@ -34,11 +34,11 @@ export default function LeadsPage() {
   const [searchInput, setSearchInput] = useState('');
   const [sortBy, setSortBy] = useState<string>('createdAt');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
-  const [viewFilter, setViewFilter] = useState<'all' | 'mine' | 'unassigned'>('all');
   const [selectedLead, setSelectedLead] = useState<LeadWithProperty | null>(null);
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
   const [filterName, setFilterName] = useState('');
   const [activeFilterId, setActiveFilterId] = useState<string | null>(null);
+  const [view, setView] = useState<'all' | 'mine' | 'unassigned'>('all');
 
   const savedFilters = useSavedFilters();
   const createFilter = useCreateSavedFilter();
@@ -51,6 +51,7 @@ export default function LeadsPage() {
     search: search || undefined,
     sortBy,
     sortOrder,
+    view,
   });
 
   const handleSearch = useCallback(() => {
@@ -126,9 +127,9 @@ export default function LeadsPage() {
           <button
             key={v}
             type="button"
-            onClick={() => { setViewFilter(v); setPage(1); }}
+            onClick={() => { setView(v); setPage(1); }}
             className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
-              viewFilter === v ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
+              view === v ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
             }`}
           >
             {v === 'all' ? 'All Leads' : v === 'mine' ? 'My Leads' : 'Unassigned'}

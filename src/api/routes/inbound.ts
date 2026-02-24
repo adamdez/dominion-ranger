@@ -3,6 +3,7 @@ import { db } from '../../db/connection.js';
 import { inboundLeads, properties } from '../../db/schema/index.js';
 import { ilike } from 'drizzle-orm';
 import { logger } from '../../config/logger.js';
+import { logActivity } from '../../modules/analytics/activity-logger.js';
 
 export async function inboundRoutes(app: FastifyInstance): Promise<void> {
 
@@ -74,10 +75,16 @@ export async function inboundRoutes(app: FastifyInstance): Promise<void> {
         source: source || 'dominionhomedeals.com',
       }, 'Inbound website lead captured');
 
-      // TODO: Phase 2.5 Sprint 2 — auto-score as highest priority
-      // TODO: Phase 2.5 Sprint 2 — create lead_instance in PROMOTED status
-      // TODO: Phase 2.5 Sprint 2 — notify agent
-      // TODO: Phase 2.5 Sprint 2 — send auto-reply email to prospect
+      if (matchedProperty) {
+        try {
+          await logActivity({
+            dominionLeadId: matchedProperty.dominionLeadId,
+            activityType: 'INBOUND_FORM',
+            channel: 'INBOUND_WEBSITE',
+            meta: { inboundLeadId: lead.id, source: source || 'dominionhomedeals.com' },
+          });
+        } catch { /* non-critical */ }
+      }
 
       return reply.send({
         success: true,

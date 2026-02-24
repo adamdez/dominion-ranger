@@ -1,4 +1,4 @@
-import { eq, desc } from 'drizzle-orm';
+import { eq, desc, and, gte } from 'drizzle-orm';
 import { db } from '../../db/connection.js';
 import {
   promotedLeads,
@@ -33,6 +33,28 @@ export async function evaluateForPromotion(
   dominionLeadId: string,
   scoringResult: ScoringResult,
 ): Promise<PromotedLead | null> {
+  // Idempotency guard: skip if already promoted for this model version within 24h
+  const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  const [existing] = await db
+    .select({ promotionId: promotedLeads.promotionId })
+    .from(promotedLeads)
+    .where(
+      and(
+        eq(promotedLeads.dominionLeadId, dominionLeadId),
+        eq(promotedLeads.scoreModelVersion, scoringResult.modelVersion),
+        gte(promotedLeads.promotedAt, oneDayAgo),
+      ),
+    )
+    .limit(1);
+
+  if (existing) {
+    logger.debug(
+      { dominionLeadId, modelVersion: scoringResult.modelVersion },
+      'Duplicate promotion blocked — already promoted within 24h for this model version',
+    );
+    return null;
+  }
+
   // Load active config for thresholds
   const [config] = await db
     .select()

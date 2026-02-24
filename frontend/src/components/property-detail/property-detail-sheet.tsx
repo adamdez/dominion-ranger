@@ -46,6 +46,19 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 
+const VALID_DEAL_TRANSITIONS: Record<string, string[]> = {
+  NEW_LEAD:       ['SKIP_TRACED', 'DEAD'],
+  SKIP_TRACED:    ['CONTACTED', 'DEAD'],
+  CONTACTED:      ['INTERESTED', 'DEAD'],
+  INTERESTED:     ['OFFER_MADE', 'DEAD'],
+  OFFER_MADE:     ['UNDER_CONTRACT', 'DEAD'],
+  UNDER_CONTRACT: ['TITLE_ESCROW', 'CLOSED_LOST'],
+  TITLE_ESCROW:   ['CLOSED_WON', 'CLOSED_LOST'],
+  CLOSED_WON:     [],
+  CLOSED_LOST:    [],
+  DEAD:           ['NEW_LEAD'],
+};
+
 interface PropertyDetailSheetProps {
   lead: LeadWithProperty | null;
   open: boolean;

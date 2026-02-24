@@ -39,11 +39,17 @@ export function generateClientToken(identity: string): string {
 
 export async function getCallablePhone(dominionLeadId: string): Promise<string | null> {
   const [prop] = await db
-    .select({ phone: properties.phone })
+    .select({
+      phone: properties.phone,
+      phone2: properties.phone2,
+      phone3: properties.phone3,
+    })
     .from(properties)
     .where(eq(properties.dominionLeadId, dominionLeadId))
     .limit(1);
   if (prop?.phone) return prop.phone;
+  if (prop?.phone2) return prop.phone2;
+  if (prop?.phone3) return prop.phone3;
 
   const [contact] = await db
     .select({ phone: propertyContacts.phone })

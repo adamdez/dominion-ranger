@@ -123,6 +123,20 @@ export async function claimLead(input: {
   });
 
   logger.info({ leadInstanceId: input.leadInstanceId, userId: input.userId }, 'Lead claimed');
+
+  try {
+    await logActivity({
+      dominionLeadId: instance.dominionLeadId,
+      leadInstanceId: input.leadInstanceId,
+      userId: input.userId,
+      activityType: 'LEAD_ASSIGNED',
+      channel: 'OUTBOUND_COLD',
+      meta: { version: instance.version },
+    });
+  } catch (err: unknown) {
+    logger.error({ err, leadInstanceId: input.leadInstanceId }, 'Failed to log claim activity');
+  }
+
   return instance;
 }
 
@@ -223,13 +237,18 @@ export async function runComplianceGating(leadInstanceId: string): Promise<LeadI
     });
   }
 
-  await logActivity({
-    dominionLeadId: updated.dominionLeadId,
-    leadInstanceId,
-    activityType: 'COMPLIANCE_CHECKED',
-    channel: 'OUTBOUND_COLD',
-    meta: { complianceCleared, dncResult, litigatorResult },
-  });
+  try {
+    await logActivity({
+      dominionLeadId: updated.dominionLeadId,
+      leadInstanceId,
+      activityType: 'COMPLIANCE_CHECKED',
+      channel: 'OUTBOUND_COLD',
+      outcome: complianceCleared ? undefined : 'DO_NOT_CALL',
+      meta: { complianceCleared, dnc: dncResult.isOnDnc, litigator: litigatorResult.isLitigator },
+    });
+  } catch (err: unknown) {
+    logger.error({ err, leadInstanceId }, 'Failed to log compliance activity');
+  }
 
   return updated;
 }
@@ -306,6 +325,19 @@ export async function transitionLead(input: {
     { leadInstanceId: input.leadInstanceId, from: current.status, to: input.toStatus },
     'Lead transitioned',
   );
+
+  try {
+    await logActivity({
+      dominionLeadId: updated.dominionLeadId,
+      leadInstanceId: input.leadInstanceId,
+      userId: input.userId,
+      activityType: 'STATUS_CHANGED',
+      channel: 'OUTBOUND_COLD',
+      meta: { from: current.status, to: input.toStatus, version: updated.version },
+    });
+  } catch (err: unknown) {
+    logger.error({ err, leadInstanceId: input.leadInstanceId }, 'Failed to log transition activity');
+  }
 
   return updated;
 }
