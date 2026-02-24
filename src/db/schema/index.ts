@@ -77,6 +77,10 @@ export * from './lead-tags';
 export * from './tasks';
 export * from './saved-filters';
 
+// ─── Comp Engine ──────────────────────────────────
+export { compReports } from './comp-reports';
+export type { CompReport, NewCompReport } from './comp-reports';
+
 // ─── Operational ───────────────────────────────────
 export { featureFlags } from './feature-flags';
 export type { FeatureFlag, NewFeatureFlag } from './feature-flags';

@@ -58,6 +58,7 @@ import {
 } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { useLeadNotes, useAddNote } from '@/hooks/use-notes';
+import { CompsTab } from '@/components/comps/comps-tab';
 
 interface PropertyDetailSheetProps {
   lead: LeadWithProperty | null;
@@ -117,6 +118,7 @@ export function PropertyDetailSheet({ lead, open, onClose }: PropertyDetailSheet
             </TabsTrigger>
             <TabsTrigger value="history">History</TabsTrigger>
             <TabsTrigger value="notes">Notes</TabsTrigger>
+            <TabsTrigger value="comps">Comps</TabsTrigger>
           </TabsList>
 
           <ScrollArea className="flex-1">
@@ -455,6 +457,11 @@ export function PropertyDetailSheet({ lead, open, onClose }: PropertyDetailSheet
               {/* ─── Notes Tab ─── */}
               <TabsContent value="notes" className="space-y-4 mt-4">
                 <NotesTab leadInstanceId={lead.leadInstanceId} legacyNotes={lead.notes} />
+              </TabsContent>
+
+              {/* ─── Comps Tab ─── */}
+              <TabsContent value="comps" className="space-y-4 mt-4">
+                <CompsTab dominionLeadId={lead.dominionLeadId} />
               </TabsContent>
 
             </div>
