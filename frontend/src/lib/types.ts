@@ -256,6 +256,8 @@ export interface PropertyDetail {
 export interface PipelineLead extends LeadWithProperty {
   dealStage: string | null;
   tags: Tag[];
+  offerAmountCents?: number | null;
+  offerStatus?: OfferStatus | null;
 }
 
 export interface SavedFilter {
@@ -269,6 +271,46 @@ export interface PipelineStats {
   stage: string;
   count: number;
   totalValueCents: number;
+}
+
+// ─── Offers ─────────────────────────────────────────
+
+export type OfferStatus = 'draft' | 'sent' | 'viewed' | 'countered' | 'accepted' | 'rejected' | 'expired' | 'withdrawn';
+
+export interface Offer {
+  id: string;
+  dominionLeadId: string;
+  propertyId: string;
+  leadInstanceId: string | null;
+  createdBy: string;
+  propertyAddress: string;
+  propertyCity: string | null;
+  propertyState: string | null;
+  propertyZip: string | null;
+  propertyCounty: string | null;
+  ownerName: string | null;
+  offerAmountCents: number;
+  earnestMoneyCents: number;
+  closingDays: number;
+  inspectionDays: number;
+  offerExpiryDays: number;
+  contingencies: string[] | null;
+  additionalTerms: string | null;
+  compReportId: string | null;
+  arvCents: number | null;
+  rehabEstimateCents: number | null;
+  maxOfferCents: number | null;
+  assignmentFeeCents: number | null;
+  status: OfferStatus;
+  counterAmountCents: number | null;
+  counterNotes: string | null;
+  sentAt: string | null;
+  respondedAt: string | null;
+  expiresAt: string | null;
+  pdfUrl: string | null;
+  notes: string | null;
+  createdAt: string;
+  updatedAt: string;
 }
 
 // ─── Communication / Dialer ─────────────────────────
