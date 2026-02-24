@@ -22,7 +22,12 @@
     "jobs:worker": "tsx src/jobs/worker.ts",
     "backfill:score": "tsx src/scripts/backfill-scoring.ts",
     "backfill:rescore": "tsx src/scripts/backfill-scoring.ts --rescore",
-    "db:migrate:seed": "tsx src/scripts/run-migration.ts 0008_seed_scoring_config.sql"
+    "db:migrate:seed": "tsx src/scripts/run-migration.ts 0008_seed_scoring_config.sql",
+    "system:status": "tsx src/scripts/recover-system.ts --status",
+    "system:seed-config": "tsx src/scripts/recover-system.ts --seed-config",
+    "system:score": "tsx src/scripts/recover-system.ts --score",
+    "system:recover": "tsx src/scripts/recover-system.ts --full",
+    "system:import": "tsx src/scripts/recover-system.ts --import"
   },
   "dependencies": {
     "@fastify/cors": "^10.0.1",

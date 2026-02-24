@@ -10,3 +10,5 @@ export {
   replayPropertyScoring,
   replayAllScoring,
 } from './replay.js';
+
+export { validateScoringConfig } from './validate-config.js';
