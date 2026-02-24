@@ -2,48 +2,29 @@ import { domainEvents } from './bus.js';
 import { logger } from '../config/logger.js';
 import { logAudit } from '../modules/compliance/index.js';
 import { createLeadInstance } from '../modules/workflow/index.js';
-import { scoreProperty } from '../modules/scoring/service.js';
-import { evaluateForPromotion } from '../modules/promotion/service.js';
+import { logActivity } from '../modules/analytics/activity-logger.js';
+import { scoringQueue } from '../jobs/queues.js';
+import { isFeatureEnabled } from '../modules/feature-flags/index.js';
 
-const pendingScoreQueue = new Set<string>();
-let scoreFlushTimer: ReturnType<typeof setTimeout> | null = null;
-const SCORE_FLUSH_DELAY_MS = 5_000;
-
-async function flushScoreQueue(): Promise<void> {
-  if (pendingScoreQueue.size === 0) return;
-  const batch = Array.from(pendingScoreQueue);
-  pendingScoreQueue.clear();
-
-  for (let i = 0; i < batch.length; i += 5) {
-    const chunk = batch.slice(i, i + 5);
-    await Promise.allSettled(
-      chunk.map(async (id) => {
-        try {
-          const result = await scoreProperty(id);
-          await evaluateForPromotion(id, result);
-        } catch (err) {
-          logger.warn({ err, dominionLeadId: id }, 'Auto-pipeline score/promote error');
-        }
-      }),
-    );
+async function enqueueForScoring(dominionLeadId: string): Promise<void> {
+  try {
+    await scoringQueue.add('score-property', {
+      dominionLeadId,
+      reason: 'event_ingested' as const,
+    }, {
+      jobId: `score-${dominionLeadId}`,
+    });
+    logger.debug({ dominionLeadId }, 'Enqueued scoring job (BullMQ)');
+  } catch (err: unknown) {
+    logger.error({ err, dominionLeadId }, 'Failed to enqueue scoring job — Redis may be unavailable');
   }
-}
-
-function enqueueForScoring(dominionLeadId: string): void {
-  pendingScoreQueue.add(dominionLeadId);
-  if (scoreFlushTimer) clearTimeout(scoreFlushTimer);
-  scoreFlushTimer = setTimeout(() => {
-    flushScoreQueue().catch((err) => logger.error({ err }, 'Auto-pipeline flush error'));
-    scoreFlushTimer = null;
-  }, SCORE_FLUSH_DELAY_MS);
 }
 
 /**
  * Wire domain event handlers.
  *
- * This is where cross-module side effects are configured.
- * Each handler runs in-process (not queued) for immediate side effects.
- * Heavy work should be pushed to BullMQ queues instead.
+ * Cross-module side effects: audit logging, activity logging,
+ * BullMQ scoring enqueue, and lead instance creation.
  */
 export function wireEventHandlers(): void {
 
@@ -56,32 +37,59 @@ export function wireEventHandlers(): void {
     });
   });
 
-  // ─── Distress Event Ingestion ──────────────────
+  // ─── Distress Event Ingestion → enqueue durable scoring ──
   domainEvents.on('distress_event.ingested', async ({ eventId, dominionLeadId, eventType, eventLayer }) => {
     await logAudit({
       dominionLeadId,
       actionType: 'distress_event.ingested',
       metadata: { eventId, eventType, eventLayer },
     });
-    enqueueForScoring(dominionLeadId);
+
+    if (await isFeatureEnabled('auto_pipeline')) {
+      await enqueueForScoring(dominionLeadId);
+    } else {
+      logger.debug({ dominionLeadId }, 'auto_pipeline disabled — skipping scoring enqueue');
+    }
   });
 
-  // ─── Scoring Completed ─────────────────────────
+  // ─── Scoring Completed → activity log ───────────
   domainEvents.on('scoring.completed', async ({ dominionLeadId, scoreId, compositeScore }) => {
     await logAudit({
       dominionLeadId,
       actionType: 'scoring.completed',
       metadata: { scoreId, compositeScore },
     });
+
+    try {
+      await logActivity({
+        dominionLeadId,
+        activityType: 'STATUS_CHANGED',
+        channel: 'OUTBOUND_COLD',
+        meta: { action: 'scoring_completed', scoreId, compositeScore },
+      });
+    } catch (err: unknown) {
+      logger.error({ err, dominionLeadId }, 'Failed to log scoring activity');
+    }
   });
 
-  // ─── Lead Promoted → Create Lead Instance ──────
+  // ─── Lead Promoted → Create Lead Instance + activity log ──
   domainEvents.on('lead.promoted', async ({ promotionId, dominionLeadId, compositeScore, marketingTier }) => {
     await logAudit({
       dominionLeadId,
       actionType: 'lead.promoted',
       metadata: { promotionId, compositeScore, marketingTier },
     });
+
+    try {
+      await logActivity({
+        dominionLeadId,
+        activityType: 'LEAD_PROMOTED',
+        channel: 'OUTBOUND_COLD',
+        meta: { promotionId, compositeScore, marketingTier },
+      });
+    } catch (err: unknown) {
+      logger.error({ err, dominionLeadId }, 'Failed to log promotion activity');
+    }
 
     try {
       await createLeadInstance({ dominionLeadId, promotionId });

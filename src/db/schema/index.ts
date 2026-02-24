@@ -73,3 +73,10 @@ export * from './property-contacts';
 export * from './lead-tags';
 export * from './tasks';
 export * from './saved-filters';
+
+// ─── Operational ───────────────────────────────────
+export { featureFlags } from './feature-flags';
+export type { FeatureFlag, NewFeatureFlag } from './feature-flags';
+
+export { errorLog } from './error-log';
+export type { ErrorLogEntry, NewErrorLogEntry } from './error-log';

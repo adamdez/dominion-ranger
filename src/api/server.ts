@@ -22,14 +22,17 @@ import { tagRoutes } from './routes/tags.js';
 import { taskRoutes } from './routes/tasks.js';
 import { contactRoutes } from './routes/contacts.js';
 import { savedFilterRoutes } from './routes/saved-filters.js';
+import { settingsRoutes } from './routes/settings.js';
 import { RangerError } from '../lib/errors.js';
 import { ZodError } from 'zod';
+import { logError } from '../modules/error-logging/index.js';
+import { isTwilioConfigured, isClientConfigured } from '../modules/dialer/index.js';
 
 export async function createServer() {
   const app = Fastify({
-    logger: false, // We use our own pino logger
+    logger: false,
     requestTimeout: 30_000,
-    bodyLimit: 10 * 1024 * 1024, // 10MB for ingestion payloads
+    bodyLimit: 10 * 1024 * 1024,
   });
 
   // ─── Plugins ───────────────────────────────────
@@ -49,15 +52,12 @@ export async function createServer() {
 
   // ─── Auth Hook (skip health check) ────────────
   app.addHook('preHandler', async (request, reply) => {
-    // Skip auth for health check
     if (request.url === '/health') return;
-    // Skip auth for public inbound lead endpoint
     if (request.url === '/api/inbound/website-lead') return;
-    // Skip auth for system stats in dev
     if (request.url === '/api/system/stats' && env.NODE_ENV === 'development') return;
-    // Skip auth for Twilio webhooks (validated via X-Twilio-Signature)
     if (request.url.startsWith('/api/dialer/voice') || request.url === '/api/dialer/status' || request.url === '/api/dialer/recording') return;
     if (request.url === '/api/sms/status' || request.url === '/api/sms/inbound') return;
+    if (request.url === '/api/health/deep') return;
 
     await authMiddleware(request, reply);
   });
@@ -83,6 +83,12 @@ export async function createServer() {
     }
 
     logger.error({ err: error, url: request.url }, 'Unhandled error');
+    logError({
+      errorType: 'UNHANDLED_API_ERROR',
+      message: error.message,
+      stack: error.stack,
+      context: { url: request.url, method: request.method },
+    }).catch(() => {});
     reply.code(500).send({
       error: 'INTERNAL_ERROR',
       message: env.NODE_ENV === 'production' ? 'Internal server error' : error.message,
@@ -107,6 +113,7 @@ export async function createServer() {
   await app.register(taskRoutes);
   await app.register(contactRoutes);
   await app.register(savedFilterRoutes);
+  await app.register(settingsRoutes);
 
   return app;
 }
@@ -117,6 +124,17 @@ export async function startServer() {
   try {
     await app.listen({ port: env.PORT, host: env.HOST });
     logger.info({ port: env.PORT, host: env.HOST }, 'Dominion Ranger API server started');
+
+    if (isTwilioConfigured()) {
+      logger.info({
+        configured: true,
+        clientConfigured: isClientConfigured(),
+        phoneNumber: env.TWILIO_PHONE_NUMBER,
+        baseUrl: env.BASE_URL ?? 'NOT SET',
+      }, 'Twilio dialer status');
+    } else {
+      logger.warn('Twilio not configured — dialer disabled');
+    }
   } catch (err: unknown) {
     logger.fatal({ err }, 'Failed to start server');
     process.exit(1);

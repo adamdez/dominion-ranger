@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import twilio from 'twilio';
-
+const { validateRequest } = twilio;
 const TwiML = twilio.twiml;
 import { requireRole } from '../middleware/auth.js';
 import { env } from '../../config/env.js';
@@ -15,6 +15,7 @@ import {
 } from '../../modules/dialer/index.js';
 import { getCallHistory } from '../../modules/dialer/index.js';
 import { z } from 'zod';
+import { isFeatureEnabled } from '../../modules/feature-flags/index.js';
 
 function validateTwilioWebhook(
   signature: string | undefined,
@@ -32,6 +33,9 @@ export async function smsRoutes(app: FastifyInstance): Promise<void> {
     '/api/sms/send',
     { preHandler: [requireRole('workflow.write')] },
     async (request, reply) => {
+      if (!await isFeatureEnabled('sms_outbound')) {
+        return reply.code(503).send({ error: 'FEATURE_DISABLED', message: 'SMS outbound is disabled. Enable via Settings > Feature Flags.' });
+      }
       if (!isTwilioConfigured()) {
         return reply.code(503).send({ error: 'TWILIO_NOT_CONFIGURED', message: 'Twilio is not configured' });
       }

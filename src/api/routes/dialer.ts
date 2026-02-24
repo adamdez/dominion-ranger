@@ -1,5 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import twilio from 'twilio';
+const { validateRequest } = twilio;
 import { requireRole } from '../middleware/auth.js';
 import { env } from '../../config/env.js';
 import { logger } from '../../config/logger.js';
@@ -17,6 +18,7 @@ import {
   isTwilioConfigured,
 } from '../../modules/dialer/index.js';
 import { z } from 'zod';
+import { isFeatureEnabled } from '../../modules/feature-flags/index.js';
 
 function mapCallStatusToOutcome(status: string) {
   switch (status) {
@@ -45,6 +47,9 @@ export async function dialerRoutes(app: FastifyInstance): Promise<void> {
     '/api/dialer/token',
     { preHandler: [requireRole('workflow.write')] },
     async (request) => {
+      if (!await isFeatureEnabled('twilio_dialer')) {
+        return { error: 'FEATURE_DISABLED', message: 'Twilio dialer is disabled. Enable via Settings > Feature Flags.' };
+      }
       if (!isClientConfigured()) {
         return { error: 'TWILIO_NOT_CONFIGURED', message: 'Twilio Client is not configured. Set TWILIO_API_KEY, TWILIO_API_SECRET, TWILIO_TWIML_APP_SID.' };
       }
@@ -69,6 +74,9 @@ export async function dialerRoutes(app: FastifyInstance): Promise<void> {
     '/api/dialer/call',
     { preHandler: [requireRole('workflow.write')] },
     async (request, reply) => {
+      if (!await isFeatureEnabled('twilio_dialer')) {
+        return reply.code(503).send({ error: 'FEATURE_DISABLED', message: 'Twilio dialer is disabled. Enable via Settings > Feature Flags.' });
+      }
       if (!isTwilioConfigured()) {
         return reply.code(503).send({ error: 'TWILIO_NOT_CONFIGURED', message: 'Twilio is not configured' });
       }
