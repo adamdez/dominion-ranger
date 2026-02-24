@@ -27,6 +27,7 @@ export const tasksListQuery = z.object({
   assignedTo: z.string().optional(),
   status: z.enum(['PENDING', 'COMPLETED', 'CANCELLED']).optional(),
   leadInstanceId: z.string().uuid().optional(),
+  dominionLeadId: z.string().uuid().optional(),
   dueBefore: z.string().datetime().optional(),
   dueAfter: z.string().datetime().optional(),
 });

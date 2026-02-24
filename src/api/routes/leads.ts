@@ -21,7 +21,7 @@ import {
 } from '../../modules/workflow/index.js';
 import { logAudit } from '../../modules/compliance/index.js';
 import { logDisposition, getDispositions } from '../../modules/dispositions/index.js';
-import { createFollowUpFromDisposition } from '../../modules/cadence/index.js';
+import { createTaskFromDisposition } from '../../modules/disposition-tasks/index.js';
 import { transitionDealStage } from '../../modules/deal-stage/index.js';
 import { requireRole } from '../middleware/auth.js';
 import { leadsListQuery, claimLeadBody, transitionLeadBody, dialQueueQuery } from '../schemas/leads.js';
@@ -34,9 +34,10 @@ const dispositionBody = z.object({
   disposition: z.enum([
     'NO_ANSWER', 'LEFT_VOICEMAIL', 'CALLBACK_REQUESTED',
     'NOT_INTERESTED', 'WRONG_NUMBER', 'DO_NOT_CALL',
-    'INTERESTED', 'APPOINTMENT_SET',
+    'INTERESTED', 'APPOINTMENT_SET', 'DISCONNECTED',
   ]),
   notes: z.string().optional(),
+  callbackDate: z.string().datetime().optional(),
 });
 
 export async function leadRoutes(app: FastifyInstance): Promise<void> {
@@ -467,12 +468,22 @@ export async function leadRoutes(app: FastifyInstance): Promise<void> {
         .from(leadInstances)
         .where(and(...closedConditions));
 
+      const newLeads24hConditions = [sql`${leadInstances.createdAt} >= now() - interval '24 hours'`];
+      if (!isAdminOrManager) {
+        newLeads24hConditions.push(eq(leadInstances.assignedTo, user.userId));
+      }
+      const [newLeads24hRow] = await db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(leadInstances)
+        .where(and(...newLeads24hConditions));
+
       return {
         total,
         active,
         dialReady,
         promoted,
         closedThisMonth: closedThisMonth.count,
+        newLeads24h: newLeads24hRow.count,
         byStatus: statuses,
       };
     },
@@ -575,7 +586,7 @@ export async function leadRoutes(app: FastifyInstance): Promise<void> {
         userId: user.userId,
       });
 
-      // Auto-create follow-up task via cadence engine
+      // Auto-create task from disposition (Phase 3.6)
       const [lead] = await db
         .select({
           dominionLeadId: leadInstances.dominionLeadId,
@@ -586,17 +597,12 @@ export async function leadRoutes(app: FastifyInstance): Promise<void> {
         .limit(1);
 
       if (lead) {
-        const [dispoCount] = await db
-          .select({ count: sql<number>`count(*)::int` })
-          .from(dispositions)
-          .where(eq(dispositions.leadInstanceId, leadInstanceId));
-
-        await createFollowUpFromDisposition({
+        await createTaskFromDisposition({
           leadInstanceId,
           dominionLeadId: lead.dominionLeadId,
           disposition: body.disposition,
           assignedTo: lead.assignedTo ?? user.userId,
-          currentAttempt: dispoCount.count,
+          callbackDate: body.callbackDate,
         });
       }
 
