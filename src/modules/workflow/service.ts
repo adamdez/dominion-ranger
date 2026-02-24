@@ -4,6 +4,7 @@ import { leadInstances, properties, LeadStatus } from '../../db/schema/index.js'
 import type { LeadInstance } from '../../db/schema/index.js';
 import { generateId } from '../../lib/index.js';
 import { checkDnc, checkLitigator, logAudit } from '../compliance/index.js';
+import { logActivity } from '../analytics/activity-logger.js';
 import { logger } from '../../config/logger.js';
 import { NotFoundError, ValidationError, ConcurrencyError, ComplianceError } from '../../lib/errors.js';
 
@@ -114,6 +115,20 @@ export async function claimLead(input: {
   });
 
   logger.info({ leadInstanceId: input.leadInstanceId, userId: input.userId }, 'Lead claimed');
+
+  try {
+    await logActivity({
+      dominionLeadId: instance.dominionLeadId,
+      leadInstanceId: input.leadInstanceId,
+      userId: input.userId,
+      activityType: 'LEAD_ASSIGNED',
+      channel: 'OUTBOUND_COLD',
+      meta: { version: instance.version },
+    });
+  } catch (err: unknown) {
+    logger.error({ err, leadInstanceId: input.leadInstanceId }, 'Failed to log claim activity');
+  }
+
   return instance;
 }
 
@@ -214,6 +229,19 @@ export async function runComplianceGating(leadInstanceId: string): Promise<LeadI
     });
   }
 
+  try {
+    await logActivity({
+      dominionLeadId: current.dominionLeadId,
+      leadInstanceId,
+      activityType: 'COMPLIANCE_CHECKED',
+      channel: 'OUTBOUND_COLD',
+      outcome: complianceCleared ? undefined : 'DO_NOT_CALL',
+      meta: { dnc: dncResult.isOnDnc, litigator: litigatorResult.isLitigator },
+    });
+  } catch (err: unknown) {
+    logger.error({ err, leadInstanceId }, 'Failed to log compliance activity');
+  }
+
   return updated;
 }
 
@@ -289,6 +317,19 @@ export async function transitionLead(input: {
     { leadInstanceId: input.leadInstanceId, from: current.status, to: input.toStatus },
     'Lead transitioned',
   );
+
+  try {
+    await logActivity({
+      dominionLeadId: updated.dominionLeadId,
+      leadInstanceId: input.leadInstanceId,
+      userId: input.userId,
+      activityType: 'STATUS_CHANGED',
+      channel: 'OUTBOUND_COLD',
+      meta: { from: current.status, to: input.toStatus, version: updated.version },
+    });
+  } catch (err: unknown) {
+    logger.error({ err, leadInstanceId: input.leadInstanceId }, 'Failed to log transition activity');
+  }
 
   return updated;
 }

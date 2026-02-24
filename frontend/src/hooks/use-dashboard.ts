@@ -17,5 +17,6 @@ export function useLeadStats() {
       const { data } = await api.get<LeadStatsResponse>('/api/leads/stats');
       return data;
     },
+    refetchInterval: 60_000,
   });
 }

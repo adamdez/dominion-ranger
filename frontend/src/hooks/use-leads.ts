@@ -13,6 +13,7 @@ export function useLeads(params: {
   search?: string;
   sortBy?: string;
   sortOrder?: 'asc' | 'desc';
+  view?: 'all' | 'mine' | 'unassigned';
 } = {}) {
   return useQuery({
     queryKey: ['leads', params],
@@ -27,12 +28,14 @@ export function useLeads(params: {
       if (params.search) searchParams.set('search', params.search);
       if (params.sortBy) searchParams.set('sortBy', params.sortBy);
       if (params.sortOrder) searchParams.set('sortOrder', params.sortOrder);
+      if (params.view) searchParams.set('view', params.view);
 
       const { data } = await api.get<PaginatedResponse<LeadWithProperty>>(
         `/api/leads?${searchParams}`
       );
       return data;
     },
+    refetchInterval: 30_000,
   });
 }
 

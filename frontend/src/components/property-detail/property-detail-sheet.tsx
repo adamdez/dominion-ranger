@@ -46,6 +46,19 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 
+const VALID_DEAL_TRANSITIONS: Record<string, string[]> = {
+  NEW_LEAD:       ['SKIP_TRACED', 'DEAD'],
+  SKIP_TRACED:    ['CONTACTED', 'DEAD'],
+  CONTACTED:      ['INTERESTED', 'DEAD'],
+  INTERESTED:     ['OFFER_MADE', 'DEAD'],
+  OFFER_MADE:     ['UNDER_CONTRACT', 'DEAD'],
+  UNDER_CONTRACT: ['TITLE_ESCROW', 'CLOSED_LOST'],
+  TITLE_ESCROW:   ['CLOSED_WON', 'CLOSED_LOST'],
+  CLOSED_WON:     [],
+  CLOSED_LOST:    [],
+  DEAD:           ['NEW_LEAD'],
+};
+
 interface PropertyDetailSheetProps {
   lead: LeadWithProperty | null;
   open: boolean;
@@ -172,11 +185,15 @@ export function PropertyDetailSheet({ lead, open, onClose }: PropertyDetailSheet
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
-                            {DEAL_STAGES.map(s => (
-                              <SelectItem key={s.key} value={s.key} className="text-xs">
-                                {s.label}
-                              </SelectItem>
-                            ))}
+                            {(() => {
+                              const currentStage = (lead as unknown as { dealStage?: string }).dealStage ?? 'NEW_LEAD';
+                              const validNext = VALID_DEAL_TRANSITIONS[currentStage] ?? [];
+                              return DEAL_STAGES.filter(s => s.key === currentStage || validNext.includes(s.key)).map(s => (
+                                <SelectItem key={s.key} value={s.key} className="text-xs">
+                                  {s.label}
+                                </SelectItem>
+                              ));
+                            })()}
                           </SelectContent>
                         </Select>
                       </div>

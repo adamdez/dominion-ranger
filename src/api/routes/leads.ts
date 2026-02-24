@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import { sql, eq, and, or, ilike, desc, asc, inArray } from 'drizzle-orm';
+import { sql, eq, and, or, ilike, desc, asc, inArray, isNull } from 'drizzle-orm';
 import { db } from '../../db/connection.js';
 import {
   leadInstances,
@@ -45,6 +45,12 @@ export async function leadRoutes(app: FastifyInstance): Promise<void> {
       const offset = (query.page - 1) * query.pageSize;
 
       const conditions = [];
+      if (query.view === 'mine') {
+        const user = (request as unknown as Record<string, { userId: string }>).user;
+        conditions.push(eq(leadInstances.assignedTo, user.userId));
+      } else if (query.view === 'unassigned') {
+        conditions.push(isNull(leadInstances.assignedTo));
+      }
       if (query.status) {
         const statuses = query.status.split(',') as LeadStatusValue[];
         if (statuses.length === 1) {

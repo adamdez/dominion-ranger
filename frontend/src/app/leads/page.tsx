@@ -38,6 +38,7 @@ export default function LeadsPage() {
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
   const [filterName, setFilterName] = useState('');
   const [activeFilterId, setActiveFilterId] = useState<string | null>(null);
+  const [view, setView] = useState<'all' | 'mine' | 'unassigned'>('all');
 
   const savedFilters = useSavedFilters();
   const createFilter = useCreateSavedFilter();
@@ -50,6 +51,7 @@ export default function LeadsPage() {
     search: search || undefined,
     sortBy,
     sortOrder,
+    view,
   });
 
   const handleSearch = useCallback(() => {
@@ -119,6 +121,20 @@ export default function LeadsPage() {
 
   return (
     <div className="space-y-4">
+      {/* View Tabs */}
+      <div className="flex gap-1">
+        {(['all', 'mine', 'unassigned'] as const).map((v) => (
+          <Button
+            key={v}
+            size="sm"
+            variant={view === v ? 'default' : 'ghost'}
+            onClick={() => { setView(v); setPage(1); }}
+          >
+            {v === 'all' ? 'All Leads' : v === 'mine' ? 'My Leads' : 'Unassigned'}
+          </Button>
+        ))}
+      </div>
+
       {/* Saved Filters Bar */}
       <div className="flex items-center gap-2">
         <Select value={activeFilterId ?? 'ALL'} onValueChange={handleApplyFilter}>

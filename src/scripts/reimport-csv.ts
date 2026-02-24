@@ -22,6 +22,7 @@ import type { DistressEvent } from '../db/schema/index.js';
 import { EventLayer } from '../db/schema/constants.js';
 import { generateEventFingerprint } from '../lib/fingerprint.js';
 import { generateId } from '../lib/ids.js';
+import { recalculateSignalAccumulation } from '../modules/signals/service.js';
 import { env } from '../config/env.js';
 
 // Use a small pool to avoid Neon limits
@@ -442,6 +443,18 @@ async function main() {
         await db.insert(distressEvents).values({ ...evt, fingerprint })
           .onConflictDoNothing({ target: [distressEvents.fingerprint] });
         eventsCreated++;
+      }
+
+      // Recalculate signal accumulation for scoring readiness
+      if (newEvents.length > 0) {
+        try {
+          await recalculateSignalAccumulation(dominionLeadId);
+        } catch (err: unknown) {
+          if (errors <= 5) {
+            const msg = err instanceof Error ? err.message : String(err);
+            console.error(`  Signal accumulation error for ${dominionLeadId}: ${msg}`);
+          }
+        }
       }
 
       // Progress logging
