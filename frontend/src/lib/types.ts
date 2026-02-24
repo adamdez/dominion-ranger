@@ -176,6 +176,37 @@ export interface RankedLead {
   urgencyLevel: string;
 }
 
+// ─── Prospects ───────────────────────────────────────
+
+export interface Prospect {
+  dominionLeadId: string;
+  propertyId: string;
+  streetAddress: string | null;
+  city: string | null;
+  state: string | null;
+  zip: string | null;
+  county: string | null;
+  ownerName: string | null;
+  phone: string | null;
+  equityEstimate: string | null;
+  absenteeOwner: boolean;
+  mortgageStatus: string;
+  compositeScore: number | null;
+  motivationScore: number | null;
+  dealScore: number | null;
+  confidenceScore: number | null;
+  leadInstanceId: string | null;
+  leadStatus: string | null;
+  signalCount: number | null;
+  lastEventDate: string | null;
+}
+
+export interface PromoteResult {
+  promoted: number;
+  skipped: number;
+  errors: number;
+}
+
 // ─── Phase 3: Pipeline / Deal Management ─────────────
 
 export interface Tag {
