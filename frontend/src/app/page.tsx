@@ -3,7 +3,6 @@
 import { useState } from 'react';
 import {
   Building2, Users, Phone, CheckCircle,
-  PhoneCall, SearchCheck, Clock, DollarSign,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -27,7 +26,6 @@ export default function DashboardPage() {
   const leadStats = useLeadStats();
   const pipelineStats = usePipelineStats();
 
-  // Suppress unused-var lint — dateRange reserved for future analytics filtering
   void dateRange;
 
   if (stats.error) {
@@ -35,26 +33,24 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="space-y-6">
-      {/* Header with date range */}
+    <div className="space-y-5">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
         <Select value={dateRange} onValueChange={(v) => setDateRange(v as DateRange)}>
-          <SelectTrigger className="w-32">
+          <SelectTrigger className="w-28 h-7 text-[12px]">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="7d">Last 7 days</SelectItem>
-            <SelectItem value="30d">Last 30 days</SelectItem>
-            <SelectItem value="90d">Last 90 days</SelectItem>
+            <SelectItem value="7d">7 days</SelectItem>
+            <SelectItem value="30d">30 days</SelectItem>
+            <SelectItem value="90d">90 days</SelectItem>
           </SelectContent>
         </Select>
       </div>
 
       {/* Stat Cards */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard
-          title="Total Properties"
+          title="Properties"
           value={stats.data?.overview?.totalProperties}
           icon={Building2}
           loading={stats.isLoading}
@@ -72,7 +68,7 @@ export default function DashboardPage() {
           loading={leadStats.isLoading}
         />
         <StatCard
-          title="Closed This Month"
+          title="Closed"
           value={leadStats.data?.closedThisMonth}
           icon={CheckCircle}
           loading={leadStats.isLoading}
@@ -80,38 +76,35 @@ export default function DashboardPage() {
       </div>
 
       {/* Pipeline Value + Pending Actions + Tasks */}
-      <div className="grid gap-4 lg:grid-cols-3">
+      <div className="grid gap-3 lg:grid-cols-3">
         {/* Pipeline Value */}
         <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base flex items-center gap-2">
-              <DollarSign className="h-4 w-4" />
-              Pipeline Value
-            </CardTitle>
+          <CardHeader className="pb-2">
+            <CardTitle>Pipeline Value</CardTitle>
           </CardHeader>
           <CardContent>
             {pipelineStats.isLoading ? (
-              <Skeleton className="h-20 w-full" />
+              <Skeleton className="h-16 w-full" />
             ) : (
               <div className="space-y-3">
                 <div>
-                  <div className="text-2xl font-bold tabular-nums">
+                  <div className="text-2xl font-semibold font-mono tabular-nums text-foreground">
                     ${formatCurrency((pipelineStats.data ?? []).reduce((sum, s) => sum + s.totalValueCents, 0))}
                   </div>
-                  <p className="text-xs text-muted-foreground">
+                  <p className="text-[11px] text-muted-foreground uppercase tracking-wider">
                     {(pipelineStats.data ?? []).reduce((sum, s) => sum + s.count, 0)} active leads
                   </p>
                 </div>
-                <div className="space-y-1">
+                <div className="space-y-0">
                   {(pipelineStats.data ?? [])
                     .filter(s => s.totalValueCents > 0 || ['OFFER_MADE', 'UNDER_CONTRACT', 'TITLE_ESCROW'].includes(s.stage))
                     .slice(0, 5)
                     .map(s => {
                       const stageConfig = DEAL_STAGES.find(d => d.key === s.stage);
                       return (
-                        <div key={s.stage} className="flex items-center justify-between text-xs">
-                          <span className="text-muted-foreground">{stageConfig?.label ?? s.stage}</span>
-                          <span className="font-medium tabular-nums">
+                        <div key={s.stage} className="flex items-center justify-between py-1 border-b border-border/50 last:border-0">
+                          <span className="text-[12px] text-muted-foreground">{stageConfig?.label ?? s.stage}</span>
+                          <span className="text-[12px] font-mono tabular-nums text-foreground">
                             ${formatCurrency(s.totalValueCents)} ({s.count})
                           </span>
                         </div>
@@ -125,34 +118,19 @@ export default function DashboardPage() {
 
         {/* Pending Actions */}
         <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base">Pending Actions</CardTitle>
+          <CardHeader className="pb-2">
+            <CardTitle>Pending Actions</CardTitle>
           </CardHeader>
           <CardContent>
             {leadStats.isLoading ? (
-              <div className="space-y-3">
-                {[1, 2, 3].map(i => <Skeleton key={i} className="h-6 w-full" />)}
+              <div className="space-y-2">
+                {[1, 2, 3].map(i => <Skeleton key={i} className="h-5 w-full" />)}
               </div>
             ) : (
-              <div className="space-y-3">
-                <ActionRow
-                  icon={PhoneCall}
-                  label="Leads need calls"
-                  count={leadStats.data?.dialReady ?? 0}
-                  color="text-green-600 dark:text-green-400"
-                />
-                <ActionRow
-                  icon={SearchCheck}
-                  label="Need skip trace"
-                  count={0}
-                  color="text-blue-600 dark:text-blue-400"
-                />
-                <ActionRow
-                  icon={Clock}
-                  label="Callbacks due today"
-                  count={0}
-                  color="text-amber-600 dark:text-amber-400"
-                />
+              <div className="space-y-0">
+                <ActionRow label="Leads need calls" count={leadStats.data?.dialReady ?? 0} />
+                <ActionRow label="Need skip trace" count={0} />
+                <ActionRow label="Callbacks due today" count={0} />
               </div>
             )}
           </CardContent>
@@ -163,15 +141,15 @@ export default function DashboardPage() {
       </div>
 
       {/* Score Distribution + Intelligence Overview */}
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid gap-3 lg:grid-cols-2">
         <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Score Distribution</CardTitle>
+          <CardHeader className="pb-2">
+            <CardTitle>Score Distribution</CardTitle>
           </CardHeader>
           <CardContent>
             {stats.isLoading ? (
-              <div className="space-y-3">
-                {[1, 2, 3, 4].map(i => <Skeleton key={i} className="h-8 w-full" />)}
+              <div className="space-y-2">
+                {[1, 2, 3, 4].map(i => <Skeleton key={i} className="h-5 w-full" />)}
               </div>
             ) : (
               <ScoreDistribution scoring={stats.data?.scoring ?? null} />
@@ -180,16 +158,16 @@ export default function DashboardPage() {
         </Card>
 
         <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Intelligence Overview</CardTitle>
+          <CardHeader className="pb-2">
+            <CardTitle>Intelligence Overview</CardTitle>
           </CardHeader>
           <CardContent>
             {stats.isLoading ? (
-              <div className="space-y-3">
-                {[1, 2, 3, 4].map(i => <Skeleton key={i} className="h-6 w-full" />)}
+              <div className="space-y-2">
+                {[1, 2, 3, 4].map(i => <Skeleton key={i} className="h-5 w-full" />)}
               </div>
             ) : (
-              <div className="space-y-3 text-sm">
+              <div className="space-y-0">
                 <MetricRow label="Total Events" value={stats.data?.overview?.totalEvents ?? 0} />
                 <MetricRow label="Confirmed Signals" value={stats.data?.overview?.confirmedEvents ?? 0} />
                 <MetricRow label="Predictive Signals" value={stats.data?.overview?.predictiveEvents ?? 0} />
@@ -204,20 +182,20 @@ export default function DashboardPage() {
 
       {/* Lead Pipeline */}
       <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Lead Pipeline</CardTitle>
+        <CardHeader className="pb-2">
+          <CardTitle>Lead Pipeline</CardTitle>
         </CardHeader>
         <CardContent>
           {leadStats.isLoading ? (
-            <div className="flex gap-4 flex-wrap">
-              {[1, 2, 3, 4, 5].map(i => <Skeleton key={i} className="h-10 w-28" />)}
+            <div className="flex gap-3 flex-wrap">
+              {[1, 2, 3, 4, 5].map(i => <Skeleton key={i} className="h-8 w-24" />)}
             </div>
           ) : (
-            <div className="flex flex-wrap gap-3">
+            <div className="flex flex-wrap gap-2">
               {(leadStats.data?.byStatus ?? []).map((s: { status: string; count: number }) => (
-                <div key={s.status} className="flex items-center gap-2 rounded-lg border px-3 py-2">
+                <div key={s.status} className="flex items-center gap-2 rounded-md border border-border px-2.5 py-1.5">
                   <StatusBadge status={s.status} />
-                  <span className="font-semibold tabular-nums">{s.count}</span>
+                  <span className="font-mono text-[13px] font-medium tabular-nums">{s.count}</span>
                 </div>
               ))}
             </div>
@@ -228,36 +206,30 @@ export default function DashboardPage() {
   );
 }
 
-function ActionRow({ icon: Icon, label, count, color }: {
-  icon: React.ElementType;
-  label: string;
-  count: number;
-  color: string;
-}) {
+function ActionRow({ label, count }: { label: string; count: number }) {
   return (
-    <div className="flex items-center gap-3">
-      <Icon className={`h-4 w-4 ${color}`} />
-      <span className="text-sm text-muted-foreground flex-1">{label}</span>
-      <span className="font-semibold tabular-nums text-sm">{count}</span>
+    <div className="flex items-center justify-between py-1.5 border-b border-border/50 last:border-0">
+      <span className="text-[13px] text-muted-foreground">{label}</span>
+      <span className="font-mono text-[13px] font-medium tabular-nums text-foreground">{count}</span>
     </div>
   );
 }
 
 function ScoreDistribution({ scoring }: { scoring: { totalScored: number; avgScore: number; maxScore: number } | null }) {
   if (!scoring || scoring.totalScored === 0) {
-    return <p className="text-sm text-muted-foreground">No scoring data yet. Run scoring first.</p>;
+    return <p className="text-[13px] text-muted-foreground">No scoring data yet. Run scoring first.</p>;
   }
 
   const tiers = [
-    { key: 'A' as const, range: '80–100' },
-    { key: 'B' as const, range: '60–79' },
-    { key: 'C' as const, range: '40–59' },
-    { key: 'D' as const, range: '0–39' },
+    { key: 'A' as const, range: '80–100', barColor: 'bg-emerald-500' },
+    { key: 'B' as const, range: '60–79', barColor: 'bg-amber-500' },
+    { key: 'C' as const, range: '40–59', barColor: 'bg-orange-500' },
+    { key: 'D' as const, range: '0–39', barColor: 'bg-zinc-600' },
   ];
 
   return (
-    <div className="space-y-4">
-      <div className="flex justify-between text-sm text-muted-foreground">
+    <div className="space-y-3">
+      <div className="flex justify-between text-[11px] text-muted-foreground uppercase tracking-wider">
         <span>Avg: {(scoring.avgScore ?? 0).toFixed(1)}</span>
         <span>Max: {(scoring.maxScore ?? 0).toFixed(1)}</span>
         <span>Scored: {(scoring.totalScored ?? 0).toLocaleString()}</span>
@@ -270,14 +242,14 @@ function ScoreDistribution({ scoring }: { scoring: { totalScored: number; avgSco
             : 0;
           return (
             <div key={tier.key} className="flex items-center gap-3">
-              <span className="w-14 text-xs text-muted-foreground">{config.label}</span>
-              <div className="flex-1 rounded-full bg-muted h-3 overflow-hidden">
+              <span className="w-10 text-[11px] font-mono text-muted-foreground">{config.label.replace('Tier ', '')}</span>
+              <div className="flex-1 h-2 rounded-sm bg-secondary overflow-hidden">
                 <div
-                  className={`h-full rounded-full ${config.color} transition-all duration-500`}
+                  className={`h-full rounded-sm ${tier.barColor} transition-all duration-300`}
                   style={{ width: `${pct}%` }}
                 />
               </div>
-              <span className="w-12 text-xs text-right text-muted-foreground">{tier.range}</span>
+              <span className="w-12 text-[11px] font-mono text-right text-muted-foreground">{tier.range}</span>
             </div>
           );
         })}
@@ -288,9 +260,9 @@ function ScoreDistribution({ scoring }: { scoring: { totalScored: number; avgSco
 
 function MetricRow({ label, value }: { label: string; value: number }) {
   return (
-    <div className="flex items-center justify-between py-1">
-      <span className="text-muted-foreground">{label}</span>
-      <span className="font-semibold tabular-nums">{value.toLocaleString()}</span>
+    <div className="flex items-center justify-between py-1.5 border-b border-border/50 last:border-0">
+      <span className="text-[13px] text-muted-foreground">{label}</span>
+      <span className="font-mono text-[13px] font-medium tabular-nums text-foreground">{value.toLocaleString()}</span>
     </div>
   );
 }

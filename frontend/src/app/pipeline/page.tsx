@@ -78,12 +78,12 @@ export default function PipelinePage() {
 
   if (isLoading) {
     return (
-      <div className="flex gap-4 overflow-x-auto pb-4">
+      <div className="flex gap-3 overflow-x-auto pb-4">
         {DEAL_STAGES.map(s => (
-          <div key={s.key} className="w-72 shrink-0 space-y-3">
-            <Skeleton className="h-16 w-full" />
-            <Skeleton className="h-32 w-full" />
-            <Skeleton className="h-32 w-full" />
+          <div key={s.key} className="w-64 shrink-0 space-y-2">
+            <Skeleton className="h-10 w-full" />
+            <Skeleton className="h-20 w-full" />
+            <Skeleton className="h-20 w-full" />
           </div>
         ))}
       </div>
@@ -101,36 +101,30 @@ export default function PipelinePage() {
   }
 
   return (
-    <div className="h-[calc(100vh-8rem)]">
+    <div className="h-[calc(100vh-7rem)]">
       <ScrollArea className="h-full w-full">
         <DragDropContext onDragEnd={handleDragEnd}>
-          <div className="flex gap-3 pb-4 min-w-max px-1">
-            {DEAL_STAGES.map(stage => {
+          <div className="flex gap-0 pb-4 min-w-max">
+            {DEAL_STAGES.map((stage, stageIdx) => {
               const cards = columns[stage.key] ?? [];
-              const totalValue = 0; // TODO: sum from deals.assignment_fee_cents when backend merges
               return (
                 <div
                   key={stage.key}
-                  className={`w-72 shrink-0 rounded-lg border ${stage.color} flex flex-col`}
+                  className={`w-64 shrink-0 flex flex-col ${stageIdx > 0 ? 'border-l border-border' : ''}`}
                 >
-                  <div className="p-3 border-b space-y-1">
-                    <div className="flex items-center justify-between">
-                      <h3 className="text-sm font-semibold">{stage.label}</h3>
-                      <span className="text-xs font-medium text-muted-foreground rounded-full bg-background px-2 py-0.5">
-                        {cards.length}
-                      </span>
-                    </div>
-                    <div className="text-xs text-muted-foreground">
-                      {totalValue > 0 ? `$${(totalValue / 100_000).toFixed(0)}K` : '$0'}
-                    </div>
+                  <div className="px-3 py-2 flex items-center justify-between">
+                    <h3 className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">{stage.label}</h3>
+                    <span className="text-[10px] font-mono text-muted-foreground">
+                      {cards.length}
+                    </span>
                   </div>
                   <Droppable droppableId={stage.key}>
                     {(provided, snapshot) => (
                       <div
                         ref={provided.innerRef}
                         {...provided.droppableProps}
-                        className={`flex-1 p-2 space-y-2 min-h-[120px] transition-colors ${
-                          snapshot.isDraggingOver ? 'bg-primary/5' : ''
+                        className={`flex-1 px-2 pb-2 space-y-1.5 min-h-[120px] transition-colors ${
+                          snapshot.isDraggingOver ? 'bg-white/[0.02]' : ''
                         }`}
                       >
                         {cards.map((lead, index) => (
@@ -144,7 +138,7 @@ export default function PipelinePage() {
                                 ref={dragProvided.innerRef}
                                 {...dragProvided.draggableProps}
                                 {...dragProvided.dragHandleProps}
-                                className={dragSnapshot.isDragging ? 'opacity-90 rotate-1' : ''}
+                                className={dragSnapshot.isDragging ? 'opacity-80' : ''}
                               >
                                 <LeadCard
                                   lead={lead}

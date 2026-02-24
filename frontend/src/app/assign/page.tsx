@@ -2,15 +2,9 @@
 
 import { UserPlus, Shield } from 'lucide-react';
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
-import { Skeleton } from '@/components/ui/skeleton';
 import { ScoreBadge } from '@/components/ui/score-badge';
 import { EmptyState } from '@/components/ui/empty-state';
 import { ErrorState } from '@/components/ui/error-state';
@@ -34,11 +28,7 @@ export default function AssignPage() {
 
   if (isLoading) {
     return (
-      <div className="space-y-2">
-        {Array.from({ length: 6 }).map((_, i) => (
-          <Skeleton key={i} className="h-14 w-full" />
-        ))}
-      </div>
+      <div className="text-[13px] text-muted-foreground py-8 text-center">Loading...</div>
     );
   }
 
@@ -53,17 +43,15 @@ export default function AssignPage() {
   }
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <p className="text-sm text-muted-foreground">
-          {data?.pagination?.total ?? 0} promoted leads available for assignment
-        </p>
-      </div>
+    <div className="space-y-3">
+      <p className="text-[12px] text-muted-foreground font-mono">
+        {data?.pagination?.total ?? 0} promoted leads available
+      </p>
 
-      <div className="rounded-md border overflow-x-auto">
+      <div className="border rounded-md overflow-x-auto">
         <Table>
           <TableHeader>
-            <TableRow>
+            <TableRow className="bg-secondary/50">
               <TableHead>Address</TableHead>
               <TableHead>Owner</TableHead>
               <TableHead>County</TableHead>
@@ -75,39 +63,37 @@ export default function AssignPage() {
           <TableBody>
             {data.data.map((lead) => (
               <TableRow key={lead.leadInstanceId}>
-                <TableCell className="font-medium max-w-[200px] truncate">
+                <TableCell className="font-medium text-foreground max-w-[200px] truncate">
                   {lead.streetAddress ?? '—'}
                 </TableCell>
-                <TableCell className="max-w-[150px] truncate">
+                <TableCell className="text-muted-foreground max-w-[150px] truncate">
                   {lead.ownerName ?? '—'}
                 </TableCell>
-                <TableCell>{lead.county ?? '—'}</TableCell>
+                <TableCell className="text-muted-foreground">{lead.county ?? '—'}</TableCell>
                 <TableCell>
                   <ScoreBadge score={lead.compositeScore} />
                 </TableCell>
-                <TableCell className="text-sm text-muted-foreground">
+                <TableCell className="text-muted-foreground">
                   {formatDistanceToNow(new Date(lead.createdAt), { addSuffix: true })}
                 </TableCell>
                 <TableCell className="text-right">
-                  <div className="flex items-center justify-end gap-2">
-                    <Button
-                      size="sm"
-                      disabled={claimMutation.isPending}
-                      onClick={() =>
-                        claimMutation.mutate(
-                          { leadInstanceId: lead.leadInstanceId, expectedVersion: lead.version },
-                          {
-                            onSuccess: (result) => {
-                              complianceMutation.mutate(result.leadInstanceId);
-                            },
-                          }
-                        )
-                      }
-                    >
-                      <UserPlus className="mr-1.5 h-3.5 w-3.5" />
-                      Claim
-                    </Button>
-                  </div>
+                  <Button
+                    size="xs"
+                    disabled={claimMutation.isPending}
+                    onClick={() =>
+                      claimMutation.mutate(
+                        { leadInstanceId: lead.leadInstanceId, expectedVersion: lead.version },
+                        {
+                          onSuccess: (result) => {
+                            complianceMutation.mutate(result.leadInstanceId);
+                          },
+                        }
+                      )
+                    }
+                  >
+                    <UserPlus className="mr-1 h-3 w-3" />
+                    {claimMutation.isPending ? '...' : 'Claim'}
+                  </Button>
                 </TableCell>
               </TableRow>
             ))}
@@ -115,17 +101,12 @@ export default function AssignPage() {
         </Table>
       </div>
 
-      <div className="rounded-lg border border-dashed p-4">
-        <div className="flex items-start gap-3">
-          <Shield className="h-5 w-5 text-muted-foreground mt-0.5" />
-          <div>
-            <p className="text-sm font-medium">Compliance Gating</p>
-            <p className="text-xs text-muted-foreground">
-              When you claim a lead, compliance checks (DNC, litigant) run automatically.
-              If the lead passes, it moves to DIAL_READY. If blocked, it moves to DEAD.
-            </p>
-          </div>
-        </div>
+      <div className="flex items-start gap-2.5 py-2 text-[12px] text-muted-foreground">
+        <Shield className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+        <span>
+          Compliance checks (DNC, litigant) run automatically on claim.
+          Passed leads move to DIAL_READY; blocked leads move to DEAD.
+        </span>
       </div>
     </div>
   );

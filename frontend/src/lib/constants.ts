@@ -1,14 +1,14 @@
 export const LEAD_STATUS = {
-  PROMOTED: { label: 'Promoted', color: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300' },
-  ASSIGNED: { label: 'Assigned', color: 'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300' },
-  COMPLIANCE_PENDING: { label: 'Compliance', color: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300' },
-  DIAL_READY: { label: 'Dial Ready', color: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300' },
-  DIALING: { label: 'Dialing', color: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300' },
-  CONTACTED: { label: 'Contacted', color: 'bg-cyan-100 text-cyan-800 dark:bg-cyan-900/30 dark:text-cyan-300' },
-  OFFER_SENT: { label: 'Offer Sent', color: 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300' },
-  CONTRACTED: { label: 'Contracted', color: 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300' },
-  CLOSED: { label: 'Closed', color: 'bg-green-200 text-green-900 dark:bg-green-900/40 dark:text-green-200' },
-  DEAD: { label: 'Dead', color: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300' },
+  PROMOTED: { label: 'Promoted', color: 'bg-emerald-500/10 text-emerald-400' },
+  ASSIGNED: { label: 'Assigned', color: 'bg-zinc-500/10 text-zinc-300' },
+  COMPLIANCE_PENDING: { label: 'Compliance', color: 'bg-amber-500/10 text-amber-400' },
+  DIAL_READY: { label: 'Dial Ready', color: 'bg-emerald-500/10 text-emerald-400' },
+  DIALING: { label: 'Dialing', color: 'bg-emerald-500/15 text-emerald-300' },
+  CONTACTED: { label: 'Contacted', color: 'bg-zinc-500/10 text-zinc-300' },
+  OFFER_SENT: { label: 'Offer Sent', color: 'bg-amber-500/10 text-amber-400' },
+  CONTRACTED: { label: 'Contracted', color: 'bg-amber-500/15 text-amber-300' },
+  CLOSED: { label: 'Closed', color: 'bg-emerald-500/15 text-emerald-300' },
+  DEAD: { label: 'Dead', color: 'bg-rose-500/10 text-rose-400' },
 } as const;
 
 export const DISPOSITION_TYPES = {
@@ -23,23 +23,23 @@ export const DISPOSITION_TYPES = {
 } as const;
 
 export const SCORE_TIERS = {
-  A: { min: 80, label: 'Tier A', color: 'bg-green-500', textColor: 'text-green-700 dark:text-green-400' },
-  B: { min: 60, label: 'Tier B', color: 'bg-yellow-500', textColor: 'text-yellow-700 dark:text-yellow-400' },
-  C: { min: 40, label: 'Tier C', color: 'bg-orange-500', textColor: 'text-orange-700 dark:text-orange-400' },
-  D: { min: 0, label: 'Tier D', color: 'bg-red-500', textColor: 'text-red-700 dark:text-red-400' },
+  A: { min: 80, label: 'Tier A', color: 'bg-emerald-500', textColor: 'text-emerald-400' },
+  B: { min: 60, label: 'Tier B', color: 'bg-amber-500', textColor: 'text-amber-400' },
+  C: { min: 40, label: 'Tier C', color: 'bg-orange-500', textColor: 'text-orange-400' },
+  D: { min: 0, label: 'Tier D', color: 'bg-zinc-600', textColor: 'text-zinc-500' },
 } as const;
 
 export const DEAL_STAGES = [
-  { key: 'NEW_LEAD', label: 'New Lead', color: 'bg-slate-100 dark:bg-slate-800' },
-  { key: 'SKIP_TRACED', label: 'Skip Traced', color: 'bg-blue-50 dark:bg-blue-950' },
-  { key: 'CONTACTED', label: 'Contacted', color: 'bg-indigo-50 dark:bg-indigo-950' },
-  { key: 'INTERESTED', label: 'Interested', color: 'bg-amber-50 dark:bg-amber-950' },
-  { key: 'OFFER_MADE', label: 'Offer Made', color: 'bg-orange-50 dark:bg-orange-950' },
-  { key: 'UNDER_CONTRACT', label: 'Under Contract', color: 'bg-green-50 dark:bg-green-950' },
-  { key: 'TITLE_ESCROW', label: 'Title / Escrow', color: 'bg-emerald-50 dark:bg-emerald-950' },
-  { key: 'CLOSED_WON', label: 'Closed Won', color: 'bg-green-100 dark:bg-green-900' },
-  { key: 'CLOSED_LOST', label: 'Closed Lost', color: 'bg-red-50 dark:bg-red-950' },
-  { key: 'DEAD', label: 'Dead', color: 'bg-red-100 dark:bg-red-900' },
+  { key: 'NEW_LEAD', label: 'New Lead', color: 'border-zinc-700' },
+  { key: 'SKIP_TRACED', label: 'Skip Traced', color: 'border-zinc-700' },
+  { key: 'CONTACTED', label: 'Contacted', color: 'border-zinc-700' },
+  { key: 'INTERESTED', label: 'Interested', color: 'border-amber-800' },
+  { key: 'OFFER_MADE', label: 'Offer Made', color: 'border-amber-700' },
+  { key: 'UNDER_CONTRACT', label: 'Under Contract', color: 'border-emerald-800' },
+  { key: 'TITLE_ESCROW', label: 'Title / Escrow', color: 'border-emerald-700' },
+  { key: 'CLOSED_WON', label: 'Closed Won', color: 'border-emerald-600' },
+  { key: 'CLOSED_LOST', label: 'Closed Lost', color: 'border-rose-800' },
+  { key: 'DEAD', label: 'Dead', color: 'border-rose-700' },
 ] as const;
 
 export type DealStageKey = typeof DEAL_STAGES[number]['key'];
@@ -58,12 +58,12 @@ export const VALID_DEAL_TRANSITIONS: Record<string, string[]> = {
 };
 
 export const TASK_TYPES = {
-  CALLBACK: { label: 'Callback', color: 'bg-blue-100 text-blue-800' },
-  FOLLOW_UP: { label: 'Follow Up', color: 'bg-indigo-100 text-indigo-800' },
-  RESEARCH: { label: 'Research', color: 'bg-purple-100 text-purple-800' },
-  SEND_OFFER: { label: 'Send Offer', color: 'bg-orange-100 text-orange-800' },
-  SITE_VISIT: { label: 'Site Visit', color: 'bg-green-100 text-green-800' },
-  GENERAL: { label: 'General', color: 'bg-gray-100 text-gray-800' },
+  CALLBACK: { label: 'Callback', color: 'text-emerald-400' },
+  FOLLOW_UP: { label: 'Follow Up', color: 'text-zinc-300' },
+  RESEARCH: { label: 'Research', color: 'text-zinc-400' },
+  SEND_OFFER: { label: 'Send Offer', color: 'text-amber-400' },
+  SITE_VISIT: { label: 'Site Visit', color: 'text-zinc-300' },
+  GENERAL: { label: 'General', color: 'text-zinc-500' },
 } as const;
 
 export type ScoreTier = keyof typeof SCORE_TIERS;
@@ -78,6 +78,6 @@ export function getScoreTier(score: number | null): ScoreTier {
 
 export function getStatusConfig(status: string) {
   return LEAD_STATUS[status as keyof typeof LEAD_STATUS] ?? {
-    label: status, color: 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300'
+    label: status, color: 'bg-zinc-500/10 text-zinc-400'
   };
 }

@@ -1,19 +1,13 @@
 'use client';
 
 import { useState } from 'react';
-import { BarChart3, X } from 'lucide-react';
+import { X, ChevronLeft, ChevronRight } from 'lucide-react';
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { Skeleton } from '@/components/ui/skeleton';
 import { ScoreBadge } from '@/components/ui/score-badge';
 import { EmptyState } from '@/components/ui/empty-state';
 import { ErrorState } from '@/components/ui/error-state';
@@ -26,11 +20,12 @@ import { formatDistanceToNow } from 'date-fns';
 export default function ScoringPage() {
   const [page, setPage] = useState(1);
   const [minScore, setMinScore] = useState<string>('');
+  const pageSize = 25;
 
   const stats = useScoringStats();
   const { data, isLoading, error, refetch } = useLeads({
     page,
-    pageSize: 25,
+    pageSize,
     sortBy: 'compositeScore',
     sortOrder: 'desc',
     minScore: minScore ? Number(minScore) : undefined,
@@ -41,31 +36,27 @@ export default function ScoringPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {/* Stats Row */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard
           title="Properties Scored"
           value={stats.data?.propertiesScored}
-          icon={BarChart3}
           loading={stats.isLoading}
         />
         <StatCard
           title="Average Score"
           value={stats.data?.avgScore ? stats.data.avgScore.toFixed(1) : undefined}
-          icon={BarChart3}
           loading={stats.isLoading}
         />
         <StatCard
           title="Max Score"
           value={stats.data?.maxScore ? stats.data.maxScore.toFixed(1) : undefined}
-          icon={BarChart3}
           loading={stats.isLoading}
         />
         <StatCard
           title="Total Promoted"
           value={stats.data?.totalPromoted}
-          icon={BarChart3}
           loading={stats.isLoading}
         />
       </div>
@@ -73,21 +64,23 @@ export default function ScoringPage() {
       {/* Tier Overview */}
       {stats.data && (
         <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Tier Distribution</CardTitle>
+          <CardHeader className="pb-2">
+            <CardTitle>Tier Distribution</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-4 gap-4">
+            <div className="grid grid-cols-4 gap-3">
               {[
-                { tier: 'A' as const, count: stats.data?.tierA ?? 0 },
-                { tier: 'B' as const, count: stats.data?.tierB ?? 0 },
-                { tier: 'C' as const, count: stats.data?.tierC ?? 0 },
-                { tier: 'D' as const, count: stats.data?.belowThreshold ?? 0 },
-              ].map(({ tier, count }) => (
-                <div key={tier} className="text-center rounded-lg border p-3">
-                  <div className={`inline-block h-3 w-3 rounded-full ${SCORE_TIERS[tier].color} mb-2`} />
-                  <p className="text-2xl font-bold tabular-nums">{count}</p>
-                  <p className="text-xs text-muted-foreground">{SCORE_TIERS[tier].label}</p>
+                { tier: 'A' as const, count: stats.data?.tierA ?? 0, barColor: 'bg-emerald-500' },
+                { tier: 'B' as const, count: stats.data?.tierB ?? 0, barColor: 'bg-amber-500' },
+                { tier: 'C' as const, count: stats.data?.tierC ?? 0, barColor: 'bg-orange-500' },
+                { tier: 'D' as const, count: stats.data?.belowThreshold ?? 0, barColor: 'bg-zinc-600' },
+              ].map(({ tier, count, barColor }) => (
+                <div key={tier} className="space-y-1.5 p-2.5 border border-border rounded-md">
+                  <div className="flex items-center gap-2">
+                    <div className={`h-2 w-2 rounded-sm ${barColor}`} />
+                    <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">{SCORE_TIERS[tier].label}</span>
+                  </div>
+                  <p className="text-xl font-semibold font-mono tabular-nums text-foreground">{count}</p>
                 </div>
               ))}
             </div>
@@ -96,45 +89,40 @@ export default function ScoringPage() {
       )}
 
       {/* Filters */}
-      <div className="flex flex-wrap items-center gap-3">
+      <div className="flex flex-wrap items-center gap-2">
         <Input
           placeholder="Min score..."
           type="number"
           value={minScore}
           onChange={(e) => { setMinScore(e.target.value); setPage(1); }}
-          className="w-32"
+          className="w-28 h-7 text-[12px]"
         />
         {minScore && (
-          <Button variant="ghost" size="sm" onClick={() => { setMinScore(''); setPage(1); }}>
+          <Button variant="ghost" size="xs" onClick={() => { setMinScore(''); setPage(1); }}>
             <X className="mr-1 h-3 w-3" />
             Clear
           </Button>
         )}
-        <span className="ml-auto text-sm text-muted-foreground">
+        <span className="ml-auto text-[12px] text-muted-foreground font-mono">
           {data?.pagination.total ?? 0} results
         </span>
       </div>
 
       {/* Leaderboard Table */}
       {isLoading ? (
-        <div className="space-y-2">
-          {Array.from({ length: 8 }).map((_, i) => (
-            <Skeleton key={i} className="h-12 w-full" />
-          ))}
-        </div>
+        <div className="text-[13px] text-muted-foreground py-8 text-center">Loading...</div>
       ) : data?.data.length === 0 ? (
         <EmptyState
-          icon={BarChart3}
           title="No scored leads"
           description="Run the scoring engine to populate this leaderboard."
         />
       ) : (
         <>
-          <div className="rounded-md border overflow-x-auto">
+          <div className="border rounded-md overflow-x-auto">
             <Table>
               <TableHeader>
-                <TableRow>
-                  <TableHead className="w-12">#</TableHead>
+                <TableRow className="bg-secondary/50">
+                  <TableHead className="w-10">#</TableHead>
                   <TableHead>Address</TableHead>
                   <TableHead>Owner</TableHead>
                   <TableHead>County</TableHead>
@@ -149,20 +137,20 @@ export default function ScoringPage() {
                 {data?.data.map((lead, idx) => (
                   <TableRow key={lead.leadInstanceId}>
                     <TableCell className="font-mono text-muted-foreground">
-                      {(page - 1) * 25 + idx + 1}
+                      {(page - 1) * pageSize + idx + 1}
                     </TableCell>
-                    <TableCell className="font-medium max-w-[180px] truncate">
+                    <TableCell className="font-medium text-foreground max-w-[180px] truncate">
                       {lead.streetAddress ?? '—'}
                     </TableCell>
-                    <TableCell className="max-w-[140px] truncate">{lead.ownerName ?? '—'}</TableCell>
-                    <TableCell>{lead.county ?? '—'}</TableCell>
+                    <TableCell className="text-muted-foreground max-w-[140px] truncate">{lead.ownerName ?? '—'}</TableCell>
+                    <TableCell className="text-muted-foreground">{lead.county ?? '—'}</TableCell>
                     <TableCell><ScoreBadge score={lead.compositeScore} /></TableCell>
                     <TableCell><ScoreBadge score={lead.motivationScore} /></TableCell>
                     <TableCell><ScoreBadge score={lead.dealScore} /></TableCell>
                     <TableCell>
-                      <span className="text-sm text-muted-foreground">{lead.status}</span>
+                      <span className="text-[10px] text-muted-foreground uppercase tracking-wide">{lead.status}</span>
                     </TableCell>
-                    <TableCell className="text-sm text-muted-foreground">
+                    <TableCell className="text-muted-foreground">
                       {formatDistanceToNow(new Date(lead.updatedAt), { addSuffix: true })}
                     </TableCell>
                   </TableRow>
@@ -173,15 +161,15 @@ export default function ScoringPage() {
 
           {data && data.pagination.totalPages > 1 && (
             <div className="flex items-center justify-between">
-              <span className="text-sm text-muted-foreground">
+              <span className="text-[12px] text-muted-foreground font-mono">
                 Page {data.pagination.page} of {data.pagination.totalPages}
               </span>
-              <div className="flex gap-2">
-                <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage(p => p - 1)}>
-                  Previous
+              <div className="flex gap-1">
+                <Button variant="ghost" size="icon-xs" disabled={page <= 1} onClick={() => setPage(p => p - 1)}>
+                  <ChevronLeft className="h-3.5 w-3.5" />
                 </Button>
-                <Button variant="outline" size="sm" disabled={page >= data.pagination.totalPages} onClick={() => setPage(p => p + 1)}>
-                  Next
+                <Button variant="ghost" size="icon-xs" disabled={page >= data.pagination.totalPages} onClick={() => setPage(p => p + 1)}>
+                  <ChevronRight className="h-3.5 w-3.5" />
                 </Button>
               </div>
             </div>

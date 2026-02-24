@@ -2,21 +2,13 @@
 
 import { useState, useCallback, useEffect } from 'react';
 import {
-  Phone,
-  PhoneCall,
-  SkipForward,
-  SearchCheck,
-  Zap,
-  AlertCircle,
-  Wifi,
-  WifiOff,
+  Phone, PhoneCall, SkipForward, SearchCheck, Zap,
+  AlertCircle, Wifi, WifiOff,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
-import { Separator } from '@/components/ui/separator';
-import { Skeleton } from '@/components/ui/skeleton';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { ScoreBadge } from '@/components/ui/score-badge';
 import { EmptyState } from '@/components/ui/empty-state';
@@ -48,17 +40,15 @@ export default function DialQueuePage() {
   const currentLead = leads[currentIndex] ?? null;
   const dispositionHistory = useDispositions(currentLead?.leadInstanceId ?? null);
 
-  // Initialize Twilio device when page loads if configured
   useEffect(() => {
     if (twilioAvailable && !twilio.deviceReady) {
       twilio.initDevice();
     }
   }, [twilioAvailable, twilio.deviceReady]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Listen for call state changes from softphone widget
   useEffect(() => {
     if (twilio.callState === 'ended') {
-      setIsDialing(false);
+      setIsDialing(false); // eslint-disable-line react-hooks/set-state-in-effect -- external subscription pattern
       refetch();
     }
   }, [twilio.callState, refetch]);
@@ -67,7 +57,6 @@ export default function DialQueuePage() {
     if (!currentLead) return;
 
     if (twilioAvailable && twilio.deviceReady && currentLead.phone) {
-      // Browser-based Twilio call
       twilio.startCall({
         dominionLeadId: currentLead.dominionLeadId,
         leadInstanceId: currentLead.leadInstanceId,
@@ -135,10 +124,7 @@ export default function DialQueuePage() {
 
   if (isLoading) {
     return (
-      <div className="grid gap-4 lg:grid-cols-[1fr_340px]">
-        <Skeleton className="h-96" />
-        <Skeleton className="h-96" />
-      </div>
+      <div className="text-[13px] text-muted-foreground py-8 text-center">Loading...</div>
     );
   }
 
@@ -153,111 +139,113 @@ export default function DialQueuePage() {
   }
 
   return (
-    <div className="grid gap-4 lg:grid-cols-[1fr_340px]">
+    <div className="grid gap-3 lg:grid-cols-[1fr_280px]">
       {/* Left: Current Lead */}
-      <div className="space-y-4">
-        {/* Twilio status indicator */}
-        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+      <div className="space-y-3">
+        {/* Twilio status */}
+        <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
           {twilioAvailable && twilio.deviceReady ? (
-            <><Wifi className="h-3.5 w-3.5 text-emerald-500" /> Browser dialer active</>
+            <><Wifi className="h-3 w-3 text-emerald-400" /> Browser dialer active</>
           ) : twilioAvailable ? (
-            <><Wifi className="h-3.5 w-3.5 text-amber-500 animate-pulse" /> Dialer connecting...</>
+            <><Wifi className="h-3 w-3 text-amber-400" /> Connecting...</>
           ) : (
-            <><WifiOff className="h-3.5 w-3.5" /> Manual dial mode (Twilio not configured)</>
+            <><WifiOff className="h-3 w-3" /> Manual dial mode</>
           )}
           {twilio.error && (
-            <span className="text-red-500 ml-2">{twilio.error}</span>
+            <span className="text-rose-400 ml-2">{twilio.error}</span>
           )}
         </div>
 
         {currentLead && (
           <Card>
-            <CardHeader className="pb-3">
+            <CardHeader className="pb-2">
               <div className="flex items-center justify-between">
-                <CardTitle className="text-xl">
+                <CardTitle className="text-base">
                   {currentLead.streetAddress ?? 'Unknown Address'}
                 </CardTitle>
                 <StatusBadge status={isDialing ? 'DIALING' : currentLead.status} />
               </div>
-              <p className="text-sm text-muted-foreground">
-                {currentLead.ownerName ?? 'Unknown'} • {currentLead.county ?? '—'}, {currentLead.city ?? '—'}
+              <p className="text-[12px] text-muted-foreground">
+                {currentLead.ownerName ?? 'Unknown'} · {currentLead.county ?? '—'}, {currentLead.city ?? '—'}
               </p>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-3 gap-4">
-                <div className="rounded-lg border p-3 text-center">
-                  <p className="text-xs text-muted-foreground mb-1">Composite</p>
+            <CardContent className="space-y-3">
+              <div className="grid grid-cols-3 gap-3">
+                <div className="border border-border rounded-md p-2.5 text-center">
+                  <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">Composite</p>
                   <ScoreBadge score={currentLead.compositeScore} size="lg" />
                 </div>
-                <div className="rounded-lg border p-3 text-center">
-                  <p className="text-xs text-muted-foreground mb-1">Motivation</p>
+                <div className="border border-border rounded-md p-2.5 text-center">
+                  <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">Motivation</p>
                   <ScoreBadge score={currentLead.motivationScore} size="md" />
                 </div>
-                <div className="rounded-lg border p-3 text-center">
-                  <p className="text-xs text-muted-foreground mb-1">Deal</p>
+                <div className="border border-border rounded-md p-2.5 text-center">
+                  <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">Deal</p>
                   <ScoreBadge score={currentLead.dealScore} size="md" />
                 </div>
               </div>
 
               {currentLead.phone ? (
-                <div className="flex items-center gap-2 rounded-lg bg-muted p-3">
-                  <Phone className="h-4 w-4 text-muted-foreground" />
-                  <span className="font-mono text-lg font-semibold">{currentLead.phone}</span>
+                <div className="flex items-center gap-2 border border-border rounded-md p-2.5">
+                  <Phone className="h-3.5 w-3.5 text-muted-foreground" />
+                  <span className="font-mono text-base font-semibold text-foreground">{currentLead.phone}</span>
                 </div>
               ) : (
-                <div className="rounded-lg border border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/30 p-3 space-y-2">
-                  <div className="flex items-center gap-2 text-amber-700 dark:text-amber-400">
-                    <AlertCircle className="h-4 w-4" />
-                    <span className="text-sm font-medium">No phone number — run skip trace</span>
+                <div className="border border-amber-800/50 rounded-md p-2.5 space-y-2">
+                  <div className="flex items-center gap-2 text-amber-400">
+                    <AlertCircle className="h-3.5 w-3.5" />
+                    <span className="text-[13px] font-medium">No phone — run skip trace</span>
                   </div>
                   <div className="flex gap-2">
                     <Button
-                      size="sm"
-                      variant="outline"
+                      size="xs"
+                      variant="ghost"
+                      className="border border-border"
                       disabled={skipTrace.isPending}
                       onClick={() => skipTrace.mutate({
                         dominionLeadId: currentLead.dominionLeadId,
                         tier: 'STANDARD',
                       })}
                     >
-                      <SearchCheck className="mr-1.5 h-3.5 w-3.5" />
-                      {skipTrace.isPending ? 'Tracing...' : 'Standard ($0.10)'}
+                      <SearchCheck className="mr-1 h-3 w-3" />
+                      {skipTrace.isPending ? '...' : 'Standard ($0.10)'}
                     </Button>
                     <Button
-                      size="sm"
-                      variant="outline"
+                      size="xs"
+                      variant="ghost"
+                      className="border border-border"
                       disabled={skipTrace.isPending}
                       onClick={() => skipTrace.mutate({
                         dominionLeadId: currentLead.dominionLeadId,
                         tier: 'ADVANCED',
                       })}
                     >
-                      <Zap className="mr-1.5 h-3.5 w-3.5" />
+                      <Zap className="mr-1 h-3 w-3" />
                       Advanced ($0.40)
                     </Button>
                   </div>
                 </div>
               )}
 
-              <Separator />
+              <div className="border-t border-border/50" />
 
               {!isDialing ? (
-                <Button className="w-full" size="lg" onClick={handleStartCall} disabled={!currentLead.phone}>
+                <Button className="w-full" size="default" onClick={handleStartCall} disabled={!currentLead.phone}>
                   {twilioAvailable && twilio.deviceReady ? (
-                    <PhoneCall className="mr-2 h-4 w-4" />
+                    <PhoneCall className="mr-1.5 h-3.5 w-3.5" />
                   ) : (
-                    <Phone className="mr-2 h-4 w-4" />
+                    <Phone className="mr-1.5 h-3.5 w-3.5" />
                   )}
                   {twilioAvailable && twilio.deviceReady ? 'Call via Browser' : 'Start Call'}
                 </Button>
               ) : (
-                <div className="space-y-3">
-                  <div className="flex items-center gap-2 rounded-lg bg-emerald-500/10 px-3 py-2 text-emerald-600 dark:text-emerald-400">
-                    <span className="relative flex h-2 w-2">
-                      <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-500 opacity-75" />
-                      <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
+                <div className="space-y-2.5">
+                  <div className="flex items-center gap-2 border border-emerald-800/50 rounded-md px-2.5 py-1.5 text-emerald-400">
+                    <span className="relative flex h-1.5 w-1.5">
+                      <span className="absolute inline-flex h-full w-full rounded-full bg-emerald-500 opacity-75" />
+                      <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-emerald-500" />
                     </span>
-                    <span className="text-sm font-medium">
+                    <span className="text-[13px] font-medium">
                       {twilio.callState === 'connected'
                         ? `Connected — ${Math.floor(twilio.callDuration / 60)}:${(twilio.callDuration % 60).toString().padStart(2, '0')}`
                         : twilio.callState === 'ringing'
@@ -267,7 +255,7 @@ export default function DialQueuePage() {
                   </div>
 
                   <Select value={disposition} onValueChange={setDisposition}>
-                    <SelectTrigger>
+                    <SelectTrigger className="h-8 text-[13px]">
                       <SelectValue placeholder="Select disposition..." />
                     </SelectTrigger>
                     <SelectContent>
@@ -281,20 +269,24 @@ export default function DialQueuePage() {
                     placeholder="Notes (optional)..."
                     value={notes}
                     onChange={(e) => setNotes(e.target.value)}
-                    rows={3}
+                    rows={2}
+                    className="text-[13px]"
                   />
 
                   <div className="flex gap-2">
                     <Button
                       className="flex-1"
+                      size="sm"
                       disabled={!disposition || logDisposition.isPending}
                       onClick={() => handleSubmitDisposition(true)}
                     >
-                      <SkipForward className="mr-1.5 h-4 w-4" />
+                      <SkipForward className="mr-1 h-3.5 w-3.5" />
                       Submit & Next
                     </Button>
                     <Button
-                      variant="outline"
+                      variant="ghost"
+                      size="sm"
+                      className="border border-border"
                       disabled={!disposition || logDisposition.isPending}
                       onClick={() => handleSubmitDisposition(false)}
                     >
@@ -307,13 +299,13 @@ export default function DialQueuePage() {
               {/* Disposition History */}
               {(dispositionHistory.data ?? []).length > 0 && (
                 <>
-                  <Separator />
+                  <div className="border-t border-border/50" />
                   <div>
-                    <h4 className="text-sm font-semibold text-muted-foreground mb-2">Recent Dispositions</h4>
-                    <div className="space-y-1">
+                    <h4 className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground mb-1.5">Recent Dispositions</h4>
+                    <div className="space-y-0">
                       {(dispositionHistory.data ?? []).slice(0, 5).map((d) => (
-                        <div key={d.id} className="flex items-center justify-between text-xs">
-                          <span className="font-medium">{DISPOSITION_TYPES[d.disposition as keyof typeof DISPOSITION_TYPES]?.label ?? d.disposition}</span>
+                        <div key={d.id} className="flex items-center justify-between py-1 border-b border-border/50 last:border-0 text-[12px]">
+                          <span className="font-medium text-foreground">{DISPOSITION_TYPES[d.disposition as keyof typeof DISPOSITION_TYPES]?.label ?? d.disposition}</span>
                           <span className="text-muted-foreground">{d.notes ? `"${d.notes.slice(0, 30)}"` : ''}</span>
                         </div>
                       ))}
@@ -328,24 +320,24 @@ export default function DialQueuePage() {
 
       {/* Right: Queue Preview */}
       <Card className="h-fit">
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base flex items-center justify-between">
-            <span>Queue</span>
-            <span className="text-sm font-normal text-muted-foreground">
-              {data?.pagination.total ?? 0} leads
+        <CardHeader className="pb-2">
+          <div className="flex items-center justify-between">
+            <CardTitle>Queue</CardTitle>
+            <span className="text-[11px] font-mono text-muted-foreground">
+              {data?.pagination.total ?? 0}
             </span>
-          </CardTitle>
+          </div>
         </CardHeader>
         <CardContent className="p-0">
-          <ScrollArea className="h-[calc(100vh-240px)]">
-            <div className="space-y-0.5 px-4 pb-4">
+          <ScrollArea className="h-[calc(100vh-200px)]">
+            <div className="space-y-0 px-3 pb-3">
               {leads.map((lead, idx) => (
                 <button
                   key={lead.leadInstanceId}
-                  className={`w-full rounded-md px-3 py-2 text-left transition-colors ${
+                  className={`w-full px-2 py-1.5 text-left transition-colors rounded-md ${
                     idx === currentIndex
-                      ? 'bg-primary/10 border border-primary/20'
-                      : 'hover:bg-muted/50'
+                      ? 'bg-white/5 border-l-2 border-emerald-500 pl-[6px]'
+                      : 'hover:bg-white/[0.02] border-l-2 border-transparent pl-[6px]'
                   }`}
                   onClick={() => {
                     if (!isDialing || idx === currentIndex) {
@@ -357,12 +349,12 @@ export default function DialQueuePage() {
                   }}
                 >
                   <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium truncate max-w-[180px]">
+                    <span className="text-[13px] font-medium text-foreground truncate max-w-[140px]">
                       {lead.streetAddress ?? 'Unknown'}
                     </span>
                     <ScoreBadge score={lead.compositeScore} />
                   </div>
-                  <p className="text-xs text-muted-foreground truncate">
+                  <p className="text-[11px] text-muted-foreground truncate">
                     {lead.ownerName ?? '—'}
                   </p>
                 </button>

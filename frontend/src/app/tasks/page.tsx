@@ -1,12 +1,11 @@
 'use client';
 
 import { useState } from 'react';
-import { CheckCircle, Clock, AlertCircle, Phone, FileText, Calendar, Trash2 } from 'lucide-react';
+import { CheckCircle, Phone, FileText, Calendar, Trash2 } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Skeleton } from '@/components/ui/skeleton';
 import { CreateTaskDialog } from '@/components/tasks/create-task-dialog';
 import { useTaskView, useCompleteTask, useCancelTask } from '@/hooks/use-tasks';
 import type { Task } from '@/lib/types';
@@ -37,49 +36,46 @@ export default function TasksPage() {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold tracking-tight">Tasks</h1>
-        <Button onClick={() => setCreateOpen(true)} size="sm">
-          <Plus className="mr-1.5 h-3.5 w-3.5" />
+        <div className="flex items-center gap-4">
+          <Tabs value={view} onValueChange={(v) => setView(v as View)}>
+            <TabsList className="h-7">
+              <TabsTrigger value="today" className="text-[12px] h-6 px-2">
+                Today ({stats.todayPending})
+              </TabsTrigger>
+              <TabsTrigger value="overdue" className="text-[12px] h-6 px-2">
+                Overdue
+                {stats.overdue > 0 && (
+                  <span className="ml-1 text-[10px] text-rose-400">{stats.overdue}</span>
+                )}
+              </TabsTrigger>
+              <TabsTrigger value="upcoming" className="text-[12px] h-6 px-2">Upcoming</TabsTrigger>
+              <TabsTrigger value="completed" className="text-[12px] h-6 px-2">Done</TabsTrigger>
+            </TabsList>
+          </Tabs>
+        </div>
+        <Button onClick={() => setCreateOpen(true)} size="xs">
+          <Plus className="mr-1 h-3 w-3" />
           New Task
         </Button>
       </div>
 
-      {/* Stats cards */}
+      {/* Stats row */}
       <div className="grid grid-cols-4 gap-3">
-        <StatCard label="Overdue" value={stats.overdue} icon={AlertCircle} color="text-red-500" />
-        <StatCard label="Due Today" value={stats.todayPending} icon={Clock} color="text-amber-500" />
-        <StatCard label="Total Pending" value={stats.totalPending} icon={Calendar} color="text-blue-500" />
-        <StatCard label="Done Today" value={stats.completedToday} icon={CheckCircle} color="text-emerald-500" />
+        <MiniStat label="Overdue" value={stats.overdue} color={stats.overdue > 0 ? 'text-rose-400' : 'text-muted-foreground'} />
+        <MiniStat label="Due Today" value={stats.todayPending} color={stats.todayPending > 0 ? 'text-amber-400' : 'text-muted-foreground'} />
+        <MiniStat label="Total Pending" value={stats.totalPending} color="text-foreground" />
+        <MiniStat label="Done Today" value={stats.completedToday} color="text-emerald-400" />
       </div>
-
-      {/* View tabs */}
-      <Tabs value={view} onValueChange={(v) => setView(v as View)}>
-        <TabsList>
-          <TabsTrigger value="today">
-            Today ({stats.todayPending})
-          </TabsTrigger>
-          <TabsTrigger value="overdue">
-            Overdue
-            {stats.overdue > 0 && (
-              <Badge variant="destructive" className="ml-1.5 text-[10px] px-1 py-0">{stats.overdue}</Badge>
-            )}
-          </TabsTrigger>
-          <TabsTrigger value="upcoming">Upcoming</TabsTrigger>
-          <TabsTrigger value="completed">Completed</TabsTrigger>
-        </TabsList>
-      </Tabs>
 
       {/* Task list */}
       {isLoading ? (
-        <div className="space-y-2">
-          {[1, 2, 3, 4, 5].map(i => <Skeleton key={i} className="h-16 w-full" />)}
-        </div>
+        <div className="text-[13px] text-muted-foreground py-8 text-center">Loading...</div>
       ) : tasks.length === 0 ? (
-        <div className="text-center py-12 text-muted-foreground">
+        <div className="text-center py-12 text-[13px] text-muted-foreground">
           {view === 'completed' ? 'No tasks completed today' : 'No tasks — you\'re all caught up.'}
         </div>
       ) : (
-        <div className="space-y-2">
+        <div className="space-y-1">
           {tasks.map((task) => (
             <TaskCard
               key={task.id}
@@ -116,62 +112,56 @@ function TaskCard({
   const isPending = task.status === 'PENDING';
 
   return (
-    <Card className={isOverdue || isOverdueView ? 'border-red-200 dark:border-red-800' : ''}>
-      <CardContent className="flex items-center justify-between py-3 px-4">
-        <div className="flex items-center gap-3 flex-1 min-w-0">
-          <Icon className={`h-4 w-4 shrink-0 ${isOverdue ? 'text-red-500' : 'text-muted-foreground'}`} />
+    <Card className={isOverdue || isOverdueView ? 'border-rose-800/50' : ''}>
+      <CardContent className="flex items-center justify-between py-2 px-3">
+        <div className="flex items-center gap-2.5 flex-1 min-w-0">
+          <Icon className={`h-3.5 w-3.5 shrink-0 ${isOverdue ? 'text-rose-400' : 'text-muted-foreground'}`} />
           <div className="min-w-0">
-            <p className={`font-medium text-sm truncate ${task.status === 'COMPLETED' ? 'line-through text-muted-foreground' : ''}`}>
+            <p className={`text-[13px] font-medium truncate ${task.status === 'COMPLETED' ? 'line-through text-muted-foreground' : 'text-foreground'}`}>
               {task.title}
             </p>
             <div className="flex items-center gap-2 flex-wrap">
               {task.dueAt && (
-                <span className={`text-xs ${isOverdue ? 'text-red-500 font-medium' : 'text-muted-foreground'}`}>
-                  Due: {new Date(task.dueAt).toLocaleString()}
+                <span className={`text-[11px] ${isOverdue ? 'text-rose-400' : 'text-muted-foreground'}`}>
+                  {new Date(task.dueAt).toLocaleString()}
                 </span>
               )}
               {task.cadenceRule && (
-                <span className="text-xs text-muted-foreground">
+                <span className="text-[11px] text-muted-foreground">
                   {task.cadenceRule} #{task.attemptNumber}
-                </span>
-              )}
-              {task.assignedTo && (
-                <span className="text-xs text-muted-foreground">
-                  {task.assignedTo}
                 </span>
               )}
             </div>
           </div>
         </div>
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex items-center gap-1.5 shrink-0">
           <Badge
             variant={task.priority === 'HIGH' ? 'destructive' : 'outline'}
-            className="text-[10px]"
           >
             {task.priority}
           </Badge>
           {task.source === 'CADENCE' && (
-            <Badge variant="secondary" className="text-[10px]">Auto</Badge>
+            <Badge variant="outline">Auto</Badge>
           )}
           {isPending && (
             <>
               <Button
-                size="sm"
+                size="icon-xs"
                 variant="ghost"
                 onClick={onComplete}
                 disabled={loading}
                 title="Complete"
               >
-                <CheckCircle className="h-4 w-4 text-emerald-600" />
+                <CheckCircle className="h-3.5 w-3.5 text-emerald-400" />
               </Button>
               <Button
-                size="sm"
+                size="icon-xs"
                 variant="ghost"
                 onClick={onCancel}
                 disabled={loading}
                 title="Cancel"
               >
-                <Trash2 className="h-3.5 w-3.5 text-muted-foreground" />
+                <Trash2 className="h-3 w-3 text-muted-foreground" />
               </Button>
             </>
           )}
@@ -181,21 +171,11 @@ function TaskCard({
   );
 }
 
-function StatCard({ label, value, icon: Icon, color }: {
-  label: string;
-  value: number;
-  icon: React.ElementType;
-  color: string;
-}) {
+function MiniStat({ label, value, color }: { label: string; value: number; color: string }) {
   return (
-    <Card>
-      <CardContent className="flex items-center gap-3 py-3 px-4">
-        <Icon className={`h-5 w-5 ${color}`} />
-        <div>
-          <p className="text-2xl font-bold tabular-nums">{value}</p>
-          <p className="text-xs text-muted-foreground">{label}</p>
-        </div>
-      </CardContent>
-    </Card>
+    <div className="border border-border rounded-md p-2.5">
+      <p className={`text-xl font-semibold font-mono tabular-nums ${color}`}>{value}</p>
+      <p className="text-[10px] uppercase tracking-wider text-muted-foreground">{label}</p>
+    </div>
   );
 }

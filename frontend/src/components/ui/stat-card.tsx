@@ -2,37 +2,35 @@
 
 import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
-import type { LucideIcon } from 'lucide-react';
 
 interface StatCardProps {
   title: string;
   value: number | string | undefined;
-  icon: LucideIcon;
   loading?: boolean;
   description?: string;
+  icon?: React.ComponentType<{ className?: string }>;
 }
 
-export function StatCard({ title, value, icon: Icon, loading, description }: StatCardProps) {
+export function StatCard({ title, value, loading, description }: StatCardProps) {
+  const isZero = value === 0 || value === '0';
+
   return (
     <Card>
       <CardContent className="p-4">
-        <div className="flex items-center justify-between">
-          <div className="space-y-1">
-            <p className="text-sm text-muted-foreground">{title}</p>
-            {loading ? (
-              <Skeleton className="h-8 w-20" />
-            ) : (
-              <p className="text-2xl font-bold tabular-nums">
-                {typeof value === 'number' ? value.toLocaleString() : (value ?? '—')}
-              </p>
-            )}
-            {description && (
-              <p className="text-xs text-muted-foreground">{description}</p>
-            )}
-          </div>
-          <div className="rounded-md bg-primary/10 p-2.5">
-            <Icon className="h-5 w-5 text-primary" />
-          </div>
+        <div className="space-y-1">
+          {loading ? (
+            <Skeleton className="h-7 w-20" />
+          ) : (
+            <p className={`text-2xl font-semibold font-mono tabular-nums ${isZero ? 'text-muted-foreground' : 'text-foreground'}`}>
+              {typeof value === 'number' ? value.toLocaleString() : (value ?? '—')}
+            </p>
+          )}
+          <p className="text-[11px] uppercase tracking-wider text-muted-foreground">
+            {title}
+          </p>
+          {description && (
+            <p className="text-xs text-muted-foreground">{description}</p>
+          )}
         </div>
       </CardContent>
     </Card>

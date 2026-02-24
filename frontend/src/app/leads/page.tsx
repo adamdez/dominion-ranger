@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useCallback } from 'react';
-import { Users, Search, X, Save, Trash2 } from 'lucide-react';
+import { useState, useCallback, useMemo } from 'react';
+import { Users, Search, X, Save, Trash2, UserPlus, Download, ChevronLeft, ChevronRight } from 'lucide-react';
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table';
@@ -14,18 +14,23 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
-import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { ScoreBadge } from '@/components/ui/score-badge';
+import { HoverCard, HoverCardContent, HoverCardTrigger } from '@/components/ui/hover-card';
+import { ScoreBreakdownTooltip, EVENT_LABELS } from '@/components/scoring/score-breakdown-tooltip';
+import { Checkbox } from '@/components/ui/checkbox';
 import { EmptyState } from '@/components/ui/empty-state';
 import { ErrorState } from '@/components/ui/error-state';
 import { PropertyDetailSheet } from '@/components/property-detail/property-detail-sheet';
 import { useLeads } from '@/hooks/use-leads';
+import { useSkipTrace } from '@/hooks/use-skip-trace';
+import { useBulkAssign, useBulkSkipTrace } from '@/hooks/use-bulk-actions';
 import { useSavedFilters, useCreateSavedFilter, useDeleteSavedFilter } from '@/hooks/use-saved-filters';
 import { LEAD_STATUS } from '@/lib/constants';
 import type { LeadWithProperty } from '@/lib/types';
 import { formatDistanceToNow } from 'date-fns';
+import { toast } from 'sonner';
 
 export default function LeadsPage() {
   const [page, setPage] = useState(1);
@@ -39,20 +44,57 @@ export default function LeadsPage() {
   const [filterName, setFilterName] = useState('');
   const [activeFilterId, setActiveFilterId] = useState<string | null>(null);
   const [view, setView] = useState<'all' | 'mine' | 'unassigned'>('all');
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [assignDialogOpen, setAssignDialogOpen] = useState(false);
+  const [assignAgent, setAssignAgent] = useState('');
+  const pageSize = 50;
 
   const savedFilters = useSavedFilters();
   const createFilter = useCreateSavedFilter();
   const deleteFilter = useDeleteSavedFilter();
+  const skipTraceMutation = useSkipTrace();
+  const bulkAssignMutation = useBulkAssign();
+  const bulkSkipTraceMutation = useBulkSkipTrace();
 
   const { data, isLoading, error, refetch } = useLeads({
     page,
-    pageSize: 25,
+    pageSize,
     status: status || undefined,
     search: search || undefined,
     sortBy,
     sortOrder,
     view,
   });
+
+  const rows = useMemo(() => data?.data ?? [], [data?.data]);
+
+  const selectedRows = useMemo(
+    () => rows.filter((r) => selectedIds.has(r.leadInstanceId)),
+    [rows, selectedIds],
+  );
+
+  const allPageSelected = rows.length > 0 && rows.every((r) => selectedIds.has(r.leadInstanceId));
+
+  const toggleAll = useCallback(() => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (allPageSelected) {
+        for (const r of rows) next.delete(r.leadInstanceId);
+      } else {
+        for (const r of rows) next.add(r.leadInstanceId);
+      }
+      return next;
+    });
+  }, [rows, allPageSelected]);
+
+  const toggleOne = useCallback((id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
 
   const handleSearch = useCallback(() => {
     setSearch(searchInput);
@@ -115,21 +157,86 @@ export default function LeadsPage() {
     setPage(1);
   }, [savedFilters.data, clearFilters]);
 
+  const triggerSkipTrace = useCallback((dominionLeadId: string) => {
+    skipTraceMutation.mutate({ dominionLeadId, tier: 'STANDARD' });
+  }, [skipTraceMutation]);
+
+  const handleBulkAssign = useCallback(() => {
+    if (!assignAgent.trim() || selectedRows.length === 0) return;
+    bulkAssignMutation.mutate(
+      { leadInstanceIds: selectedRows.map((r) => r.leadInstanceId), assignedTo: assignAgent.trim() },
+      {
+        onSuccess: (result) => {
+          toast.success(`Assigned ${result.updated} leads`);
+          setAssignDialogOpen(false);
+          setAssignAgent('');
+          setSelectedIds(new Set());
+        },
+      },
+    );
+  }, [assignAgent, selectedRows, bulkAssignMutation]);
+
+  const handleBulkSkipTrace = useCallback(() => {
+    const untracedIds = selectedRows
+      .filter((r) => !r.skipTracedAt)
+      .map((r) => r.dominionLeadId);
+    if (untracedIds.length === 0) {
+      toast.info('All selected leads are already traced');
+      return;
+    }
+    bulkSkipTraceMutation.mutate(
+      { dominionLeadIds: untracedIds },
+      {
+        onSuccess: (result) => {
+          toast.success(`Enqueued ${result.enqueued} leads for skip trace`);
+          setSelectedIds(new Set());
+        },
+      },
+    );
+  }, [selectedRows, bulkSkipTraceMutation]);
+
+  const handleExportCsv = useCallback(() => {
+    if (selectedRows.length === 0) return;
+    const header = ['Address', 'Owner', 'County', 'Phone', 'Email', 'Score', 'Status'];
+    const csvRows = selectedRows.map((r) => [
+      r.streetAddress ?? '',
+      r.ownerName ?? '',
+      r.county ?? '',
+      r.phone ?? '',
+      r.email ?? '',
+      r.compositeScore?.toString() ?? '',
+      r.status,
+    ]);
+    const csv = [header, ...csvRows].map((row) => row.map((c) => `"${c.replace(/"/g, '""')}"`).join(',')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `leads-export-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast.success(`Exported ${selectedRows.length} leads`);
+  }, [selectedRows]);
+
   if (error) {
     return <ErrorState message="Failed to load leads" onRetry={() => refetch()} />;
   }
 
+  const rangeStart = data ? (page - 1) * pageSize + 1 : 0;
+  const rangeEnd = data ? Math.min(page * pageSize, data.pagination.total) : 0;
+  const total = data?.pagination.total ?? 0;
+
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       {/* View Filter Tabs */}
-      <div className="flex items-center gap-1 p-1 rounded-lg bg-muted w-fit">
+      <div className="flex items-center gap-0.5">
         {(['all', 'mine', 'unassigned'] as const).map((v) => (
           <button
             key={v}
             type="button"
             onClick={() => { setView(v); setPage(1); }}
-            className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
-              view === v ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
+            className={`px-2.5 py-1 text-[12px] font-medium rounded-md transition-colors ${
+              view === v ? 'bg-white/5 text-foreground' : 'text-muted-foreground hover:text-foreground'
             }`}
           >
             {v === 'all' ? 'All Leads' : v === 'mine' ? 'My Leads' : 'Unassigned'}
@@ -137,53 +244,23 @@ export default function LeadsPage() {
         ))}
       </div>
 
-      {/* Saved Filters Bar */}
-      <div className="flex items-center gap-2">
-        <Select value={activeFilterId ?? 'ALL'} onValueChange={handleApplyFilter}>
-          <SelectTrigger className="w-48">
-            <SelectValue placeholder="All Leads" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="ALL">All Leads</SelectItem>
-            {(savedFilters.data ?? []).map(f => (
-              <SelectItem key={f.filterId} value={f.filterId}>
-                {f.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        {activeFilterId && (
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8 text-destructive"
-            onClick={() => {
-              if (activeFilterId) deleteFilter.mutate(activeFilterId);
-              clearFilters();
-            }}
-          >
-            <Trash2 className="h-3.5 w-3.5" />
-          </Button>
-        )}
-      </div>
-
       {/* Filters */}
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="flex items-center gap-1.5">
           <Input
             placeholder="Search address or owner..."
             value={searchInput}
             onChange={e => setSearchInput(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && handleSearch()}
-            className="w-64"
+            className="w-56 h-7 text-[12px]"
           />
-          <Button variant="outline" size="icon" onClick={handleSearch}>
-            <Search className="h-4 w-4" />
+          <Button variant="ghost" size="icon-xs" onClick={handleSearch}>
+            <Search className="h-3.5 w-3.5" />
           </Button>
         </div>
 
         <Select value={status} onValueChange={(v) => { setStatus(v === 'ALL' ? '' : v); setPage(1); }}>
-          <SelectTrigger className="w-44">
+          <SelectTrigger className="w-36 h-7 text-[12px]">
             <SelectValue placeholder="All Statuses" />
           </SelectTrigger>
           <SelectContent>
@@ -194,67 +271,126 @@ export default function LeadsPage() {
           </SelectContent>
         </Select>
 
+        <Select value={activeFilterId ?? 'ALL'} onValueChange={handleApplyFilter}>
+          <SelectTrigger className="w-36 h-7 text-[12px]">
+            <SelectValue placeholder="Saved Filters" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="ALL">All Leads</SelectItem>
+            {(savedFilters.data ?? []).map(f => (
+              <SelectItem key={f.filterId} value={f.filterId}>
+                {f.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        {activeFilterId && (
+          <Button
+            variant="ghost"
+            size="icon-xs"
+            className="text-destructive"
+            onClick={() => {
+              if (activeFilterId) deleteFilter.mutate(activeFilterId);
+              clearFilters();
+            }}
+          >
+            <Trash2 className="h-3 w-3" />
+          </Button>
+        )}
+
         {(status || search) && (
           <>
-            <Button variant="ghost" size="sm" onClick={clearFilters}>
+            <Button variant="ghost" size="xs" onClick={clearFilters}>
               <X className="mr-1 h-3 w-3" />
               Clear
             </Button>
-            <Button variant="outline" size="sm" onClick={() => setSaveDialogOpen(true)}>
+            <Button variant="ghost" size="xs" onClick={() => setSaveDialogOpen(true)}>
               <Save className="mr-1 h-3 w-3" />
-              Save Filter
+              Save
             </Button>
           </>
         )}
-
-        <span className="ml-auto text-sm text-muted-foreground">
-          {data?.pagination.total ?? 0} leads
-        </span>
       </div>
 
       {/* Table */}
       {isLoading ? (
-        <div className="space-y-2">
-          {Array.from({ length: 8 }).map((_, i) => (
-            <Skeleton key={i} className="h-12 w-full" />
-          ))}
-        </div>
+        <div className="text-[13px] text-muted-foreground py-8 text-center">Loading...</div>
       ) : data?.data.length === 0 ? (
         <EmptyState
           icon={Users}
           title="No leads found"
-          description="No lead instances match your filters. Import properties and run scoring + promotion first."
+          description="Import properties and run scoring + promotion."
         />
       ) : (
         <>
-          <div className="rounded-md border overflow-x-auto">
+          <div className="border rounded-md overflow-x-auto">
             <Table>
               <TableHeader>
-                <TableRow>
+                <TableRow className="bg-secondary/50">
+                  <TableHead className="w-8">
+                    <Checkbox
+                      checked={allPageSelected}
+                      onCheckedChange={toggleAll}
+                    />
+                  </TableHead>
                   <SortableHeader label="Address" col="streetAddress" current={sortBy} order={sortOrder} onClick={handleSort} />
                   <TableHead>Owner</TableHead>
                   <TableHead>County</TableHead>
                   <SortableHeader label="Score" col="compositeScore" current={sortBy} order={sortOrder} onClick={handleSort} />
+                  <TableHead>Signals</TableHead>
                   <SortableHeader label="Status" col="status" current={sortBy} order={sortOrder} onClick={handleSort} />
                   <TableHead>Stage</TableHead>
+                  <TableHead>Traced</TableHead>
                   <TableHead>Assigned</TableHead>
                   <SortableHeader label="Updated" col="updatedAt" current={sortBy} order={sortOrder} onClick={handleSort} />
+                  <TableHead className="w-12" />
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {data?.data.map((lead) => (
+                {rows.map((lead) => (
                   <TableRow
                     key={lead.leadInstanceId}
-                    className="cursor-pointer hover:bg-muted/50"
+                    className="cursor-pointer"
                     onClick={() => setSelectedLead(lead)}
+                    data-state={selectedIds.has(lead.leadInstanceId) ? 'selected' : undefined}
                   >
-                    <TableCell className="font-medium max-w-[200px] truncate">
-                      {lead.streetAddress ?? '—'}
+                    <TableCell onClick={(e) => e.stopPropagation()}>
+                      <Checkbox
+                        checked={selectedIds.has(lead.leadInstanceId)}
+                        onCheckedChange={() => toggleOne(lead.leadInstanceId)}
+                      />
                     </TableCell>
-                    <TableCell className="max-w-[150px] truncate">{lead.ownerName ?? '—'}</TableCell>
-                    <TableCell>{lead.county ?? '—'}</TableCell>
+                    <TableCell className="font-medium text-foreground max-w-[180px] truncate">
+                      {lead.streetAddress ?? '\u2014'}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground max-w-[130px] truncate">{lead.ownerName ?? '\u2014'}</TableCell>
+                    <TableCell className="text-muted-foreground">{lead.county ?? '\u2014'}</TableCell>
+                    <TableCell onClick={(e) => e.stopPropagation()}>
+                      <HoverCard openDelay={200} closeDelay={100}>
+                        <HoverCardTrigger asChild>
+                          <span className="cursor-help inline-flex">
+                            <ScoreBadge score={lead.compositeScore} />
+                          </span>
+                        </HoverCardTrigger>
+                        <HoverCardContent className="w-72" side="right">
+                          <ScoreBreakdownTooltip
+                            compositeScore={lead.compositeScore}
+                            motivationScore={lead.motivationScore}
+                            dealScore={lead.dealScore}
+                            dominionLeadId={lead.dominionLeadId}
+                          />
+                        </HoverCardContent>
+                      </HoverCard>
+                    </TableCell>
                     <TableCell>
-                      <ScoreBadge score={lead.compositeScore} />
+                      <div className="flex flex-wrap gap-0.5">
+                        {(lead.topSignals ?? []).slice(0, 3).map((s: string) => (
+                          <Badge key={s} variant="outline" className="text-[9px] px-1 py-0">
+                            {EVENT_LABELS[s]?.label ?? s}
+                          </Badge>
+                        ))}
+                      </div>
                     </TableCell>
                     <TableCell>
                       <StatusBadge status={lead.status} />
@@ -262,9 +398,24 @@ export default function LeadsPage() {
                     <TableCell>
                       <DealStageBadge status={lead.status} />
                     </TableCell>
-                    <TableCell className="text-sm">{lead.assignedTo ?? '—'}</TableCell>
-                    <TableCell className="text-sm text-muted-foreground">
+                    <TableCell>
+                      <SkipTraceBadge skipTracedAt={lead.skipTracedAt} tier={lead.skipTraceTier} />
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">{lead.assignedTo ?? '\u2014'}</TableCell>
+                    <TableCell className="text-muted-foreground">
                       {formatDistanceToNow(new Date(lead.updatedAt), { addSuffix: true })}
+                    </TableCell>
+                    <TableCell onClick={(e) => e.stopPropagation()}>
+                      {!lead.skipTracedAt && (
+                        <Button
+                          size="xs"
+                          variant="ghost"
+                          disabled={skipTraceMutation.isPending}
+                          onClick={() => triggerSkipTrace(lead.dominionLeadId)}
+                        >
+                          Trace
+                        </Button>
+                      )}
                     </TableCell>
                   </TableRow>
                 ))}
@@ -274,20 +425,45 @@ export default function LeadsPage() {
 
           {data && data.pagination.totalPages > 1 && (
             <div className="flex items-center justify-between">
-              <span className="text-sm text-muted-foreground">
-                Page {data.pagination.page} of {data.pagination.totalPages}
+              <span className="text-[12px] text-muted-foreground font-mono">
+                {rangeStart}–{rangeEnd} of {total}
               </span>
-              <div className="flex gap-2">
-                <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage(p => p - 1)}>
-                  Previous
+              <div className="flex gap-1">
+                <Button variant="ghost" size="icon-xs" disabled={page <= 1} onClick={() => setPage(p => p - 1)}>
+                  <ChevronLeft className="h-3.5 w-3.5" />
                 </Button>
-                <Button variant="outline" size="sm" disabled={page >= data.pagination.totalPages} onClick={() => setPage(p => p + 1)}>
-                  Next
+                <Button variant="ghost" size="icon-xs" disabled={page >= data.pagination.totalPages} onClick={() => setPage(p => p + 1)}>
+                  <ChevronRight className="h-3.5 w-3.5" />
                 </Button>
               </div>
             </div>
           )}
         </>
+      )}
+
+      {/* Bulk Actions Toolbar */}
+      {selectedIds.size > 0 && (
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 bg-card border border-border rounded-md px-3 py-2 flex items-center gap-2 z-50">
+          <span className="text-[12px] font-mono font-medium">{selectedIds.size} selected</span>
+          <Button size="xs" variant="ghost" className="border border-border" onClick={() => setAssignDialogOpen(true)}>
+            <UserPlus className="h-3 w-3 mr-1" /> Assign
+          </Button>
+          <Button
+            size="xs"
+            variant="ghost"
+            className="border border-border"
+            onClick={handleBulkSkipTrace}
+            disabled={bulkSkipTraceMutation.isPending}
+          >
+            <Search className="h-3 w-3 mr-1" /> Trace
+          </Button>
+          <Button size="xs" variant="ghost" className="border border-border" onClick={handleExportCsv}>
+            <Download className="h-3 w-3 mr-1" /> CSV
+          </Button>
+          <Button size="xs" variant="ghost" onClick={() => setSelectedIds(new Set())}>
+            <X className="h-3 w-3" />
+          </Button>
+        </div>
       )}
 
       <PropertyDetailSheet
@@ -314,21 +490,60 @@ export default function LeadsPage() {
                 autoFocus
               />
             </div>
-            <div className="text-xs text-muted-foreground space-y-1">
+            <div className="text-[11px] text-muted-foreground space-y-0.5">
               <p>Current filters:</p>
               {status && <p>Status: {LEAD_STATUS[status as keyof typeof LEAD_STATUS]?.label ?? status}</p>}
               {search && <p>Search: &ldquo;{search}&rdquo;</p>}
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setSaveDialogOpen(false)}>Cancel</Button>
-            <Button onClick={handleSaveFilter} disabled={!filterName.trim() || createFilter.isPending}>
-              {createFilter.isPending ? 'Saving...' : 'Save'}
+            <Button variant="ghost" size="sm" onClick={() => setSaveDialogOpen(false)}>Cancel</Button>
+            <Button size="sm" onClick={handleSaveFilter} disabled={!filterName.trim() || createFilter.isPending}>
+              {createFilter.isPending ? '...' : 'Save'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Bulk Assign Dialog */}
+      <Dialog open={assignDialogOpen} onOpenChange={setAssignDialogOpen}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Assign {selectedRows.length} Leads</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-2">
+              <Label htmlFor="assign-agent">Agent ID</Label>
+              <Input
+                id="assign-agent"
+                value={assignAgent}
+                onChange={e => setAssignAgent(e.target.value)}
+                placeholder="e.g. agent-001"
+                onKeyDown={e => e.key === 'Enter' && handleBulkAssign()}
+                autoFocus
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" size="sm" onClick={() => setAssignDialogOpen(false)}>Cancel</Button>
+            <Button size="sm" onClick={handleBulkAssign} disabled={!assignAgent.trim() || bulkAssignMutation.isPending}>
+              {bulkAssignMutation.isPending ? '...' : 'Assign'}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
+  );
+}
+
+function SkipTraceBadge({ skipTracedAt, tier }: { skipTracedAt: string | null; tier: string | null }) {
+  if (!skipTracedAt) {
+    return <span className="text-[10px] text-muted-foreground">—</span>;
+  }
+  return (
+    <span className="text-[10px] font-mono text-muted-foreground">
+      {tier === 'tier1' || tier === 'STANDARD' ? 'T1' : tier === 'tier2' || tier === 'ADVANCED' ? 'T2' : 'ST'}
+    </span>
   );
 }
 
@@ -347,9 +562,9 @@ function DealStageBadge({ status }: { status: string }) {
   };
   const label = stageMap[status] ?? status;
   return (
-    <Badge variant="outline" className="text-xs">
+    <span className="text-[10px] text-muted-foreground uppercase tracking-wide">
       {label}
-    </Badge>
+    </span>
   );
 }
 
@@ -370,7 +585,7 @@ function SortableHeader({
     >
       {label}
       {isActive && (
-        <span className="ml-1">{order === 'asc' ? '↑' : '↓'}</span>
+        <span className="ml-0.5 text-[10px]">{order === 'asc' ? '\u2191' : '\u2193'}</span>
       )}
     </TableHead>
   );

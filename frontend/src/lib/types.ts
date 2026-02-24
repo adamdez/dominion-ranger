@@ -135,6 +135,7 @@ export interface LeadWithProperty {
   dealScore: number | null;
   confidenceScore: number | null;
   eventCount: number;
+  topSignals?: string[];
 }
 
 export interface SkipTraceResponse {

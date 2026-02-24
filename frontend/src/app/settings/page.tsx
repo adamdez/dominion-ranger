@@ -1,11 +1,9 @@
 'use client';
 
-import { Settings, Database, BarChart3, RefreshCw, Play, ArrowUpCircle, AlertTriangle, Activity, ToggleLeft } from 'lucide-react';
+import { RefreshCw, Play, ArrowUpCircle, AlertTriangle } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
 import { ErrorState } from '@/components/ui/error-state';
 import { useSystemStats } from '@/hooks/use-system';
@@ -28,64 +26,62 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="space-y-6 max-w-3xl">
+    <div className="space-y-4 max-w-3xl">
 
       {/* Batch Operations */}
       <Card>
-        <CardHeader>
-          <CardTitle className="text-base flex items-center gap-2">
-            <Settings className="h-4 w-4" />
-            Batch Operations
-          </CardTitle>
+        <CardHeader className="pb-2">
+          <CardTitle>Batch Operations</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-3">
-          <div className="flex items-center justify-between">
+        <CardContent className="space-y-0">
+          <div className="flex items-center justify-between py-2.5 border-b border-border/50">
             <div>
-              <p className="text-sm font-medium">Rescore All Properties</p>
-              <p className="text-xs text-muted-foreground">
-                Re-run scoring engine for all properties using current model config
+              <p className="text-[13px] font-medium text-foreground">Rescore All Properties</p>
+              <p className="text-[11px] text-muted-foreground">
+                Re-run scoring engine for all properties
               </p>
             </div>
             <Button
-              variant="outline"
+              variant="ghost"
               size="sm"
+              className="border border-border"
               disabled={runScoring.isPending}
               onClick={() => runScoring.mutate({ rescore: true })}
             >
-              <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
-              Rescore
+              <RefreshCw className="mr-1.5 h-3 w-3" />
+              {runScoring.isPending ? '...' : 'Rescore'}
             </Button>
           </div>
-          <Separator />
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between py-2.5 border-b border-border/50">
             <div>
-              <p className="text-sm font-medium">Run Scoring Batch</p>
-              <p className="text-xs text-muted-foreground">Score unscored properties only</p>
+              <p className="text-[13px] font-medium text-foreground">Run Scoring Batch</p>
+              <p className="text-[11px] text-muted-foreground">Score unscored properties only</p>
             </div>
             <Button
-              variant="outline"
+              variant="ghost"
               size="sm"
+              className="border border-border"
               disabled={runScoring.isPending}
               onClick={() => runScoring.mutate({})}
             >
-              <Play className="mr-1.5 h-3.5 w-3.5" />
-              Score New
+              <Play className="mr-1.5 h-3 w-3" />
+              {runScoring.isPending ? '...' : 'Score New'}
             </Button>
           </div>
-          <Separator />
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between py-2.5">
             <div>
-              <p className="text-sm font-medium">Run Promotion</p>
-              <p className="text-xs text-muted-foreground">Evaluate all scored properties for lead promotion</p>
+              <p className="text-[13px] font-medium text-foreground">Run Promotion</p>
+              <p className="text-[11px] text-muted-foreground">Evaluate scored properties for lead promotion</p>
             </div>
             <Button
-              variant="outline"
+              variant="ghost"
               size="sm"
+              className="border border-border"
               disabled={runPromotion.isPending}
               onClick={() => runPromotion.mutate()}
             >
-              <ArrowUpCircle className="mr-1.5 h-3.5 w-3.5" />
-              Promote
+              <ArrowUpCircle className="mr-1.5 h-3 w-3" />
+              {runPromotion.isPending ? '...' : 'Promote'}
             </Button>
           </div>
         </CardContent>
@@ -93,25 +89,22 @@ export default function SettingsPage() {
 
       {/* Feature Flags */}
       <Card>
-        <CardHeader>
-          <CardTitle className="text-base flex items-center gap-2">
-            <ToggleLeft className="h-4 w-4" />
-            Feature Flags
-          </CardTitle>
+        <CardHeader className="pb-2">
+          <CardTitle>Feature Flags</CardTitle>
         </CardHeader>
         <CardContent>
           {flags.isLoading ? (
-            <div className="space-y-3">
-              {[1, 2, 3, 4].map(i => <Skeleton key={i} className="h-10 w-full" />)}
+            <div className="space-y-2">
+              {[1, 2, 3, 4].map(i => <Skeleton key={i} className="h-8 w-full" />)}
             </div>
           ) : flags.data && flags.data.length > 0 ? (
-            <div className="space-y-1">
+            <div className="space-y-0">
               {flags.data.map((flag) => (
-                <div key={flag.flagKey} className="flex items-center justify-between py-2.5">
+                <div key={flag.flagKey} className="flex items-center justify-between py-2 border-b border-border/50 last:border-0">
                   <div className="flex-1 min-w-0 pr-4">
-                    <p className="text-sm font-medium font-mono">{flag.flagKey}</p>
+                    <p className="text-[13px] font-mono text-foreground">{flag.flagKey}</p>
                     {flag.description && (
-                      <p className="text-xs text-muted-foreground truncate">{flag.description}</p>
+                      <p className="text-[11px] text-muted-foreground truncate">{flag.description}</p>
                     )}
                   </div>
                   <Switch
@@ -125,160 +118,142 @@ export default function SettingsPage() {
               ))}
             </div>
           ) : (
-            <p className="text-sm text-muted-foreground">No feature flags configured. Run migration 0006.</p>
+            <p className="text-[13px] text-muted-foreground">No feature flags configured.</p>
           )}
         </CardContent>
       </Card>
 
       {/* System Health */}
       <Card>
-        <CardHeader>
-          <CardTitle className="text-base flex items-center gap-2">
-            <Activity className="h-4 w-4" />
-            System Health
+        <CardHeader className="pb-2">
+          <div className="flex items-center justify-between">
+            <CardTitle>System Health</CardTitle>
             {health.data && (
-              <Badge variant={health.data.status === 'healthy' ? 'default' : 'destructive'} className="ml-auto text-xs">
+              <span className={`text-[10px] font-medium uppercase tracking-wider ${health.data.status === 'healthy' ? 'text-emerald-400' : 'text-rose-400'}`}>
                 {health.data.status}
-              </Badge>
+              </span>
             )}
-          </CardTitle>
+          </div>
         </CardHeader>
         <CardContent>
           {health.isLoading ? (
             <div className="space-y-2">
-              {[1, 2, 3, 4, 5, 6].map(i => <Skeleton key={i} className="h-6 w-full" />)}
+              {[1, 2, 3, 4].map(i => <Skeleton key={i} className="h-5 w-full" />)}
             </div>
           ) : health.data ? (
-            <div className="space-y-3">
-              <div className="space-y-2 text-sm">
-                <SettingRow label="Properties" value={health.data.counts.properties.toLocaleString()} />
-                <SettingRow label="Distress Events" value={health.data.counts.events.toLocaleString()} />
-                <SettingRow label="Scoring Records" value={health.data.counts.scores.toLocaleString()} />
-                <SettingRow label="Lead Instances" value={health.data.counts.leads.toLocaleString()} />
-                <SettingRow label="Active Scoring Configs" value={health.data.counts.active_configs.toLocaleString()} />
-                <SettingRow label="Signal Accumulations" value={health.data.counts.accumulations.toLocaleString()} />
-              </div>
+            <div className="space-y-0">
+              <SettingRow label="Properties" value={health.data.counts.properties.toLocaleString()} />
+              <SettingRow label="Distress Events" value={health.data.counts.events.toLocaleString()} />
+              <SettingRow label="Scoring Records" value={health.data.counts.scores.toLocaleString()} />
+              <SettingRow label="Lead Instances" value={health.data.counts.leads.toLocaleString()} />
+              <SettingRow label="Active Configs" value={health.data.counts.active_configs.toLocaleString()} />
+              <SettingRow label="Accumulations" value={health.data.counts.accumulations.toLocaleString()} />
               {health.data.issues.length > 0 && (
-                <>
-                  <Separator />
-                  <div className="space-y-1">
-                    {health.data.issues.map((issue, i) => (
-                      <div key={i} className="flex items-center gap-2 text-sm text-amber-600 dark:text-amber-400">
-                        <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
-                        {issue}
-                      </div>
-                    ))}
-                  </div>
-                </>
+                <div className="pt-2 mt-2 border-t border-border/50 space-y-1">
+                  {health.data.issues.map((issue, i) => (
+                    <div key={i} className="flex items-center gap-2 text-[12px] text-amber-400">
+                      <AlertTriangle className="h-3 w-3 shrink-0" />
+                      {issue}
+                    </div>
+                  ))}
+                </div>
               )}
-              <p className="text-xs text-muted-foreground">
-                Last checked: {new Date(health.data.timestamp).toLocaleTimeString()}
-              </p>
+              <div className="pt-2 mt-1">
+                <span className="text-[10px] text-muted-foreground">
+                  Last checked: {new Date(health.data.timestamp).toLocaleTimeString()}
+                </span>
+              </div>
             </div>
           ) : (
-            <p className="text-sm text-muted-foreground">Unable to fetch health data</p>
+            <p className="text-[13px] text-muted-foreground">Unable to fetch health data</p>
           )}
         </CardContent>
       </Card>
 
       {/* Recent Errors */}
       <Card>
-        <CardHeader>
-          <CardTitle className="text-base flex items-center gap-2">
-            <AlertTriangle className="h-4 w-4" />
-            Recent Errors
+        <CardHeader className="pb-2">
+          <div className="flex items-center justify-between">
+            <CardTitle>Recent Errors</CardTitle>
             {errors.data && errors.data.length > 0 && (
-              <Badge variant="destructive" className="ml-auto text-xs">
-                {errors.data.length}
-              </Badge>
+              <span className="text-[10px] font-mono text-rose-400">{errors.data.length}</span>
             )}
-          </CardTitle>
+          </div>
         </CardHeader>
         <CardContent>
           {errors.isLoading ? (
             <div className="space-y-2">
-              {[1, 2, 3].map(i => <Skeleton key={i} className="h-12 w-full" />)}
+              {[1, 2, 3].map(i => <Skeleton key={i} className="h-8 w-full" />)}
             </div>
           ) : errors.data && errors.data.length > 0 ? (
-            <div className="space-y-2">
+            <div className="space-y-0">
               {errors.data.slice(0, 10).map((err) => (
-                <div key={err.errorId} className="rounded-md border p-2.5 text-xs space-y-1">
+                <div key={err.errorId} className="py-2 border-b border-border/50 last:border-0">
                   <div className="flex items-center justify-between">
-                    <Badge variant="outline" className="text-[10px] font-mono">
-                      {err.errorType}
-                    </Badge>
-                    <span className="text-muted-foreground">
+                    <span className="text-[11px] font-mono text-muted-foreground">{err.errorType}</span>
+                    <span className="text-[10px] text-muted-foreground">
                       {new Date(err.createdAt).toLocaleString()}
                     </span>
                   </div>
-                  <p className="text-muted-foreground truncate">{err.message}</p>
+                  <p className="text-[12px] text-muted-foreground truncate mt-0.5">{err.message}</p>
                 </div>
               ))}
             </div>
           ) : (
-            <p className="text-sm text-muted-foreground">No recent errors</p>
+            <p className="text-[13px] text-muted-foreground">No recent errors</p>
           )}
         </CardContent>
       </Card>
 
       {/* Scoring Configuration */}
       <Card>
-        <CardHeader>
-          <CardTitle className="text-base flex items-center gap-2">
-            <BarChart3 className="h-4 w-4" />
-            Scoring Configuration
-          </CardTitle>
+        <CardHeader className="pb-2">
+          <CardTitle>Scoring Configuration</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="text-sm space-y-2">
-            <p className="text-muted-foreground">
-              Scoring weights and thresholds are config-driven via the database.
-              The values below are read from the active scoring_model_configs row.
-            </p>
-            <Separator />
-            <div className="space-y-2">
-              <h4 className="font-semibold text-xs text-muted-foreground uppercase">Tier Thresholds</h4>
-              {Object.entries(SCORE_TIERS).map(([key, config]) => (
-                <div key={key} className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <div className={`h-2.5 w-2.5 rounded-full ${config.color}`} />
-                    <span>{config.label}</span>
-                  </div>
-                  <span className="text-muted-foreground">&ge; {config.min}</span>
-                </div>
-              ))}
+        <CardContent className="space-y-3">
+          <p className="text-[12px] text-muted-foreground">
+            Scoring weights and thresholds are config-driven via the database.
+          </p>
+          <div className="space-y-0">
+            <div className="py-1.5 border-b border-border/50">
+              <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Tier Thresholds</span>
             </div>
+            {Object.entries(SCORE_TIERS).map(([key, config]) => (
+              <div key={key} className="flex items-center justify-between py-1.5 border-b border-border/50 last:border-0">
+                <div className="flex items-center gap-2">
+                  <div className={`h-2 w-2 rounded-sm ${config.color}`} />
+                  <span className="text-[13px] text-foreground">{config.label}</span>
+                </div>
+                <span className="text-[13px] font-mono text-muted-foreground">&ge; {config.min}</span>
+              </div>
+            ))}
           </div>
 
           {scoringStats.data && (
-            <>
-              <Separator />
-              <div className="space-y-2 text-sm">
-                <h4 className="font-semibold text-xs text-muted-foreground uppercase">Current Stats</h4>
-                <SettingRow label="Properties Scored" value={(scoringStats.data?.propertiesScored ?? 0).toLocaleString()} />
-                <SettingRow label="Average Score" value={(scoringStats.data?.avgScore ?? 0).toFixed(1)} />
-                <SettingRow label="Max Score" value={(scoringStats.data?.maxScore ?? 0).toFixed(1)} />
+            <div className="space-y-0 pt-2">
+              <div className="py-1.5 border-b border-border/50">
+                <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Current Stats</span>
               </div>
-            </>
+              <SettingRow label="Properties Scored" value={(scoringStats.data?.propertiesScored ?? 0).toLocaleString()} />
+              <SettingRow label="Average Score" value={(scoringStats.data?.avgScore ?? 0).toFixed(1)} />
+              <SettingRow label="Max Score" value={(scoringStats.data?.maxScore ?? 0).toFixed(1)} />
+            </div>
           )}
         </CardContent>
       </Card>
 
       {/* System Status */}
       <Card>
-        <CardHeader>
-          <CardTitle className="text-base flex items-center gap-2">
-            <Database className="h-4 w-4" />
-            System Status
-          </CardTitle>
+        <CardHeader className="pb-2">
+          <CardTitle>System Status</CardTitle>
         </CardHeader>
         <CardContent>
           {stats.isLoading ? (
             <div className="space-y-2">
-              {[1, 2, 3, 4, 5].map(i => <Skeleton key={i} className="h-6 w-full" />)}
+              {[1, 2, 3, 4].map(i => <Skeleton key={i} className="h-5 w-full" />)}
             </div>
           ) : (
-            <div className="space-y-2 text-sm">
+            <div className="space-y-0">
               <SettingRow label="Total Properties" value={(stats.data?.overview?.totalProperties ?? 0).toLocaleString()} />
               <SettingRow label="Total Events" value={(stats.data?.overview?.totalEvents ?? 0).toLocaleString()} />
               <SettingRow label="Promoted Leads" value={(stats.data?.overview?.promotedLeads ?? 0).toLocaleString()} />
@@ -295,9 +270,9 @@ export default function SettingsPage() {
 
 function SettingRow({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex items-center justify-between py-1">
-      <span className="text-muted-foreground">{label}</span>
-      <span className="font-medium tabular-nums">{value}</span>
+    <div className="flex items-center justify-between py-1.5 border-b border-border/50 last:border-0">
+      <span className="text-[13px] text-muted-foreground">{label}</span>
+      <span className="text-[13px] font-mono font-medium tabular-nums text-foreground">{value}</span>
     </div>
   );
 }

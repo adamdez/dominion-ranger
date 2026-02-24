@@ -2,7 +2,6 @@
 
 import { cn } from '@/lib/utils';
 import { getStatusConfig } from '@/lib/constants';
-import { Badge } from '@/components/ui/badge';
 
 interface StatusBadgeProps {
   status: string;
@@ -13,11 +12,14 @@ export function StatusBadge({ status, className }: StatusBadgeProps) {
   const config = getStatusConfig(status);
 
   return (
-    <Badge
-      variant="secondary"
-      className={cn(config.color, 'font-medium', className)}
+    <span
+      className={cn(
+        'inline-flex items-center rounded-sm border border-border px-1.5 py-0 text-[10px] font-medium tracking-wide uppercase',
+        config.color,
+        className
+      )}
     >
       {config.label}
-    </Badge>
+    </span>
   );
 }

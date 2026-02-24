@@ -25,11 +25,11 @@ export function TasksWidget() {
 
   return (
     <Card>
-      <CardHeader className="pb-3">
+      <CardHeader className="pb-2">
         <div className="flex items-center justify-between">
-          <CardTitle className="text-base">Tasks</CardTitle>
-          <Button variant="ghost" size="sm" onClick={() => setCreateOpen(true)}>
-            <Plus className="h-3.5 w-3.5 mr-1" />
+          <CardTitle>Tasks</CardTitle>
+          <Button variant="ghost" size="xs" onClick={() => setCreateOpen(true)}>
+            <Plus className="h-3 w-3 mr-1" />
             New
           </Button>
         </div>
@@ -37,15 +37,15 @@ export function TasksWidget() {
       <CardContent>
         {isLoading ? (
           <div className="space-y-2">
-            {[1, 2, 3].map(i => <Skeleton key={i} className="h-8 w-full" />)}
+            {[1, 2, 3].map(i => <Skeleton key={i} className="h-6 w-full" />)}
           </div>
         ) : dueToday.length === 0 && overdue.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No pending tasks.</p>
+          <p className="text-[13px] text-muted-foreground">No pending tasks.</p>
         ) : (
-          <div className="space-y-4">
+          <div className="space-y-3">
             {overdue.length > 0 && (
-              <div className="space-y-1.5">
-                <h4 className="text-xs font-semibold text-red-600 dark:text-red-400">
+              <div className="space-y-0.5">
+                <h4 className="text-[10px] font-medium uppercase tracking-wider text-rose-400 mb-1">
                   Overdue ({overdue.length})
                 </h4>
                 {overdue.slice(0, 5).map(task => (
@@ -54,8 +54,8 @@ export function TasksWidget() {
               </div>
             )}
             {dueToday.length > 0 && (
-              <div className="space-y-1.5">
-                <h4 className="text-xs font-semibold text-muted-foreground">
+              <div className="space-y-0.5">
+                <h4 className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground mb-1">
                   Due Today ({dueToday.length})
                 </h4>
                 {dueToday.slice(0, 5).map(task => (
@@ -75,17 +75,15 @@ export function TasksWidget() {
 function TaskRow({ task, overdue, onComplete }: { task: Task; overdue?: boolean; onComplete: (id: string) => void }) {
   const typeConfig = TASK_TYPES[task.taskType as keyof typeof TASK_TYPES];
   return (
-    <div className={`flex items-center gap-2 rounded-md px-2 py-1.5 text-sm ${
-      overdue ? 'bg-red-50/50 dark:bg-red-950/20' : ''
-    }`}>
+    <div className="flex items-center gap-2 px-1 py-1 rounded-md text-[13px]">
       <Checkbox
         checked={task.status === 'COMPLETED'}
         onCheckedChange={() => onComplete(task.id)}
         disabled={task.status === 'COMPLETED'}
       />
-      <span className="flex-1 truncate text-xs">{task.title}</span>
+      <span className="flex-1 truncate text-[12px] text-foreground">{task.title}</span>
       {typeConfig && (
-        <Badge variant="outline" className={`text-[10px] px-1 py-0 ${typeConfig.color}`}>
+        <Badge variant="outline" className={typeConfig.color}>
           {typeConfig.label}
         </Badge>
       )}
