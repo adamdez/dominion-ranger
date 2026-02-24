@@ -118,6 +118,9 @@ export function PropertyDetailSheet({ lead, open, onClose }: PropertyDetailSheet
             </TabsTrigger>
             <TabsTrigger value="history">History</TabsTrigger>
             <TabsTrigger value="notes">Notes</TabsTrigger>
+            <TabsTrigger value="tasks">
+              Tasks{tasks.data?.length ? ` (${tasks.data.length})` : ''}
+            </TabsTrigger>
             <TabsTrigger value="comps">Comps</TabsTrigger>
           </TabsList>
 
@@ -457,6 +460,19 @@ export function PropertyDetailSheet({ lead, open, onClose }: PropertyDetailSheet
               {/* ─── Notes Tab ─── */}
               <TabsContent value="notes" className="space-y-4 mt-4">
                 <NotesTab leadInstanceId={lead.leadInstanceId} legacyNotes={lead.notes} />
+              </TabsContent>
+
+              {/* ─── Tasks Tab ─── */}
+              <TabsContent value="tasks" className="space-y-4 mt-4">
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-sm font-semibold text-muted-foreground">TASKS</h4>
+                    <Button size="sm" variant="outline" onClick={() => setTaskDialogOpen(true)}>
+                      + New Task
+                    </Button>
+                  </div>
+                  <TaskList tasks={tasks.data ?? []} />
+                </div>
               </TabsContent>
 
               {/* ─── Comps Tab ─── */}
