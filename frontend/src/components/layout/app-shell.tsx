@@ -1,5 +1,4 @@
 'use client';
-
 import { useState, useEffect } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { Sidebar } from './sidebar';
@@ -17,6 +16,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     setApiAccessToken(accessToken);
   }, [accessToken]);
 
+  useEffect(() => {
+    if (!isLoading && !user && pathname !== '/login') {
+      router.push('/login');
+    }
+  }, [user, isLoading, router, pathname]);
+
   if (pathname === '/login') {
     return <>{children}</>;
   }
@@ -33,14 +38,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   }
 
   if (!user) {
-    router.push('/login');
     return null;
   }
 
   return (
     <div className="min-h-screen bg-background">
       <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
-      <div className="md:pl-60">
+      <div className="md:pl-[220px]">
         <Header onMenuClick={() => setSidebarOpen(true)} />
         <main className="p-4 md:p-6">{children}</main>
       </div>
