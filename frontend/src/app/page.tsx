@@ -1,9 +1,10 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
 import {
   Building2, Users, Phone, CheckCircle,
-  PhoneCall, SearchCheck, Clock, DollarSign,
+  PhoneCall, SearchCheck, Clock, DollarSign, AlertCircle,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -17,6 +18,7 @@ import { TasksWidget } from '@/components/tasks/tasks-widget';
 import { useSystemStats } from '@/hooks/use-system';
 import { useLeadStats } from '@/hooks/use-dashboard';
 import { usePipelineStats } from '@/hooks/use-pipeline';
+import { useTaskStats } from '@/hooks/use-tasks';
 import { SCORE_TIERS, DEAL_STAGES } from '@/lib/constants';
 
 type DateRange = '7d' | '30d' | '90d';
@@ -26,6 +28,7 @@ export default function DashboardPage() {
   const stats = useSystemStats();
   const leadStats = useLeadStats();
   const pipelineStats = usePipelineStats();
+  const taskStats = useTaskStats();
 
   // Suppress unused-var lint — dateRange reserved for future analytics filtering
   void dateRange;
@@ -77,6 +80,34 @@ export default function DashboardPage() {
           icon={CheckCircle}
           loading={leadStats.isLoading}
         />
+      </div>
+
+      {/* Task & New Lead Cards — clickable */}
+      <div className="grid gap-4 sm:grid-cols-3">
+        <Link href="/tasks" className="block transition-opacity hover:opacity-90">
+          <StatCard
+            title="Tasks Due Today"
+            value={taskStats.data?.todayPending ?? 0}
+            icon={Clock}
+            loading={taskStats.isLoading}
+          />
+        </Link>
+        <Link href="/tasks" className="block transition-opacity hover:opacity-90">
+          <StatCard
+            title="Overdue Tasks"
+            value={taskStats.data?.overdue ?? 0}
+            icon={AlertCircle}
+            loading={taskStats.isLoading}
+          />
+        </Link>
+        <Link href="/pipeline" className="block transition-opacity hover:opacity-90">
+          <StatCard
+            title="New Leads (24h)"
+            value={leadStats.data?.newLeads24h ?? 0}
+            icon={Users}
+            loading={leadStats.isLoading}
+          />
+        </Link>
       </div>
 
       {/* Pipeline Value + Pending Actions + Tasks */}
