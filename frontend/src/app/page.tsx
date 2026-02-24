@@ -3,8 +3,8 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import {
-  Building2, Users, Phone, CheckCircle,
-  PhoneCall, SearchCheck, Clock, DollarSign, AlertCircle,
+  Building2, Users, Phone, CheckCircle, TrendingUp,
+  PhoneCall, SearchCheck, Clock, DollarSign, AlertCircle, Home, Target,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -57,19 +57,40 @@ export default function DashboardPage() {
       </div>
 
       {/* Stat Cards */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard
-          title="Total Properties"
-          value={stats.data?.overview?.totalProperties}
-          icon={Building2}
-          loading={stats.isLoading}
-        />
-        <StatCard
-          title="Active Leads"
-          value={leadStats.data?.active}
-          icon={Users}
-          loading={leadStats.isLoading}
-        />
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+        <Link href="/prospects" className="block transition-opacity hover:opacity-90">
+          <StatCard
+            title="Total Prospects"
+            value={stats.data?.overview?.totalProperties}
+            icon={Home}
+            loading={stats.isLoading}
+          />
+        </Link>
+        <Link href="/pipeline" className="block transition-opacity hover:opacity-90">
+          <StatCard
+            title="In Pipeline"
+            value={leadStats.data?.total ?? stats.data?.overview?.promotedLeads}
+            icon={Target}
+            loading={leadStats.isLoading}
+          />
+        </Link>
+        <Card className="p-4">
+          {stats.isLoading || leadStats.isLoading ? (
+            <Skeleton className="h-12 w-full" />
+          ) : (
+            <div className="flex items-center gap-3">
+              <TrendingUp className="h-5 w-5 text-emerald-500" />
+              <div>
+                <p className="text-sm text-muted-foreground">Conversion Rate</p>
+                <p className="text-xl font-bold tabular-nums">
+                  {stats.data?.overview?.totalProperties && (leadStats.data?.total ?? stats.data?.overview?.promotedLeads)
+                    ? `${(((leadStats.data?.total ?? stats.data?.overview?.promotedLeads ?? 0) / stats.data.overview.totalProperties) * 100).toFixed(1)}%`
+                    : '0%'}
+                </p>
+              </div>
+            </div>
+          )}
+        </Card>
         <StatCard
           title="Dial Ready"
           value={leadStats.data?.dialReady}
