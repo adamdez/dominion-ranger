@@ -3,7 +3,6 @@
 import { useState, useCallback, useEffect } from 'react';
 import {
   Phone,
-  PhoneCall,
   MessageSquare,
   SkipForward,
   SearchCheck,
@@ -18,12 +17,11 @@ import { Textarea } from '@/components/ui/textarea';
 import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
-import { StatusBadge } from '@/components/ui/status-badge';
 import { ScoreBadge } from '@/components/ui/score-badge';
 import { EmptyState } from '@/components/ui/empty-state';
 import { ErrorState } from '@/components/ui/error-state';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { useDialQueue, useLogDisposition, useDispositions } from '@/hooks/use-dial-queue';
+import { useDialQueue, useLogDisposition } from '@/hooks/use-dial-queue';
 import { useTransitionLead } from '@/hooks/use-leads';
 import { useSkipTrace } from '@/hooks/use-skip-trace';
 import { useDialerStatus } from '@/hooks/use-dialer';
@@ -35,7 +33,6 @@ import {
 } from '@/hooks/use-property-detail';
 import { DISPOSITION_TYPES } from '@/lib/constants';
 import { EVENT_LABELS } from '@/components/scoring/score-breakdown-tooltip';
-import type { LeadWithProperty } from '@/lib/types';
 import { format, formatDistanceToNow } from 'date-fns';
 
 const DISPOSITION_BUTTONS = [
@@ -78,7 +75,6 @@ export default function DialQueuePage() {
   const propertyDetail = usePropertyDetail(currentLead?.dominionLeadId ?? null);
   const events = usePropertyEvents(currentLead?.dominionLeadId ?? null);
   const history = useLeadHistory(currentLead?.leadInstanceId ?? null);
-  const dispositionHistory = useDispositions(currentLead?.leadInstanceId ?? null);
 
   const showCallbackPicker = selectedDisposition === 'CALLBACK_REQUESTED' || selectedDisposition === 'INTERESTED';
 
@@ -89,10 +85,12 @@ export default function DialQueuePage() {
   }, [twilioAvailable, twilio.deviceReady]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
+    /* eslint-disable react-hooks/set-state-in-effect -- sync call end to local state */
     if (twilio.callState === 'ended') {
       setIsDialing(false);
       refetch();
     }
+    /* eslint-enable react-hooks/set-state-in-effect */
   }, [twilio.callState, refetch]);
 
   const handleStartSession = useCallback(() => {
@@ -172,7 +170,14 @@ export default function DialQueuePage() {
     [currentLead, selectedDisposition, notes, callbackDate, showCallbackPicker, logDisposition, transitionLead, currentIndex, leads.length, refetch],
   );
 
-  const sessionElapsed = sessionStart ? Math.floor((Date.now() - sessionStart.getTime()) / 1000) : 0;
+  const [sessionElapsed, setSessionElapsed] = useState(0);
+  useEffect(() => {
+    if (!sessionStart) return;
+    const tick = () => setSessionElapsed(Math.floor((Date.now() - sessionStart.getTime()) / 1000));
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [sessionStart]);
   const sessionTimeStr = `${String(Math.floor(sessionElapsed / 3600)).padStart(2, '0')}:${String(Math.floor((sessionElapsed % 3600) / 60)).padStart(2, '0')}:${String(sessionElapsed % 60).padStart(2, '0')}`;
 
   if (error) {

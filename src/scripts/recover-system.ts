@@ -245,8 +245,8 @@ async function populateSignalAccumulation(): Promise<number> {
       signal_count_30d = EXCLUDED.signal_count_30d,
       updated_at = NOW()
   `);
-  const [count] = await db.select({ count: sql<number>`count(*)::int` }).from(signalAccumulation);
-  return count ?? 0;
+  const [row] = await db.select({ count: sql<number>`count(*)::int` }).from(signalAccumulation);
+  return row?.count ?? 0;
 }
 
 // ─── Batch score + promote ─────────────────────────────────────

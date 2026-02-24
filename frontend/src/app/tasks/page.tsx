@@ -1,10 +1,9 @@
 'use client';
 
 import { useState } from 'react';
-import { CheckCircle, Clock, Phone, FileText, Calendar, Trash2, Plus } from 'lucide-react';
+import { CheckCircle, Phone, FileText, Calendar, Trash2, Plus } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Skeleton } from '@/components/ui/skeleton';
 import { CreateTaskDialog } from '@/components/tasks/create-task-dialog';
@@ -49,7 +48,6 @@ export default function TasksPage() {
   const today = todayQuery.data ?? [];
   const upcoming = (upcomingQuery.data?.tasks ?? []).slice(0, 20);
   const completed = completedQuery.data?.tasks ?? [];
-  const stats = upcomingQuery.data?.stats ?? { overdue: overdue.length, todayPending: today.length, totalPending: 0, completedToday: completed.length };
 
   const selectedLead = useLeadInstance(selectedTaskLeadId);
 

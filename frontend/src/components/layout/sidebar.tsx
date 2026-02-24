@@ -69,7 +69,7 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
   const isActive = (href: string) => {
     if (href === '/') return pathname === '/';
     if (href.startsWith('/pipeline')) {
-      const [base, search] = href.split('?');
+      const [, search] = href.split('?');
       if (search) {
         const params = new URLSearchParams(search);
         const view = params.get('view');

@@ -30,11 +30,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
   const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  const refreshTokenRef = useRef<() => Promise<void>>(null);
+
   const scheduleRefresh = useCallback((expiresIn: number) => {
     if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current);
     const refreshAt = (expiresIn - 60) * 1000;
     refreshTimerRef.current = setTimeout(() => {
-      refreshToken();
+      refreshTokenRef.current?.();
     }, Math.max(refreshAt, 5000));
   }, []);
 
@@ -53,7 +55,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [scheduleRefresh]);
 
   useEffect(() => {
+    refreshTokenRef.current = refreshToken;
+  }, [refreshToken]);
+
+  useEffect(() => {
+    /* eslint-disable react-hooks/set-state-in-effect -- initial auth check on mount */
     refreshToken().finally(() => setIsLoading(false));
+    /* eslint-enable react-hooks/set-state-in-effect */
     return () => {
       if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current);
     };

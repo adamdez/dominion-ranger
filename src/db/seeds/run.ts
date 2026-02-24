@@ -6,7 +6,16 @@ import { logger } from '../../config/logger.js';
 async function runSeeds(): Promise<void> {
   logger.info('Running database seeds...');
 
-  await seedScoringModel();
+  try {
+    await seedScoringModel();
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (msg.includes('does not exist')) {
+      logger.warn('scoring_model_configs table not found, skipping seed');
+    } else {
+      throw err;
+    }
+  }
   await seedSystemSettings();
 
   logger.info('All seeds completed');

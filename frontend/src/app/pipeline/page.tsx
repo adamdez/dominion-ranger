@@ -107,8 +107,10 @@ export default function PipelinePage() {
   const [optimisticMoves, setOptimisticMoves] = useState<Record<string, string>>({});
 
   useEffect(() => {
+    /* eslint-disable react-hooks/set-state-in-effect -- sync URL params to local state */
     if (viewParam === 'board') setView('board');
     if (filterParam === 'unassigned') setLeadView('unassigned');
+    /* eslint-enable react-hooks/set-state-in-effect */
   }, [viewParam, filterParam]);
 
   const savedFilters = useSavedFilters();

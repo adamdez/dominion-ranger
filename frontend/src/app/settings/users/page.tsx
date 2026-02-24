@@ -51,8 +51,6 @@ export default function UsersPage() {
   const [form, setForm] = useState<UserFormData>(emptyForm);
   const [error, setError] = useState('');
 
-  if (!isAdmin) { router.push('/'); return null; }
-
   const { data, isLoading } = useQuery({
     queryKey: ['auth-users'],
     queryFn: () => api.get('/api/auth/users').then(r => r.data),
@@ -72,6 +70,11 @@ export default function UsersPage() {
   });
 
   const users: UserRow[] = data?.users ?? [];
+
+  if (!isAdmin) {
+    router.push('/');
+    return null;
+  }
 
   function openCreate() { setEditingUser(null); setForm(emptyForm); setError(''); setDialogOpen(true); }
 
