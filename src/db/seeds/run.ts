@@ -8,15 +8,23 @@ async function runSeeds(): Promise<void> {
 
   try {
     await seedScoringModel();
-  } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : String(err);
-    if (msg.includes('does not exist')) {
+  } catch (err: any) {
+    if (err.message?.includes('does not exist')) {
       logger.warn('scoring_model_configs table not found, skipping seed');
     } else {
       throw err;
     }
   }
-  await seedSystemSettings();
+
+  try {
+    await seedSystemSettings();
+  } catch (err: any) {
+    if (err.message?.includes('does not exist')) {
+      logger.warn('system_settings table not found, skipping seed');
+    } else {
+      throw err;
+    }
+  }
 
   logger.info('All seeds completed');
   await closeDatabase();
