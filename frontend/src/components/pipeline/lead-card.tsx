@@ -1,6 +1,6 @@
 'use client';
 
-import { Phone, AlertTriangle, Clock } from 'lucide-react';
+import { Phone, AlertTriangle, Clock, DollarSign, Check } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { ScoreBadge } from '@/components/ui/score-badge';
 import { HoverCard, HoverCardContent, HoverCardTrigger } from '@/components/ui/hover-card';
@@ -86,6 +86,21 @@ export function LeadCard({ lead, onClick }: LeadCardProps) {
           </span>
         )}
       </div>
+
+      {lead.offerAmountCents && (
+        <div className="flex items-center gap-1 text-[10px]">
+          {lead.offerStatus === 'accepted' ? (
+            <span className="flex items-center gap-0.5 text-emerald-500 font-medium">
+              <Check className="h-3 w-3" /> Offer Accepted
+            </span>
+          ) : (
+            <span className="flex items-center gap-0.5 text-blue-500">
+              <DollarSign className="h-3 w-3" />
+              Offer: ${(lead.offerAmountCents / 100).toLocaleString()}
+            </span>
+          )}
+        </div>
+      )}
 
       <div className="flex items-center justify-between text-[10px] text-muted-foreground">
         {lead.assignedTo && <span>Assigned: {lead.assignedTo}</span>}
