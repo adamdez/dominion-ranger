@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useCallback, useMemo, useEffect } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { useSearchParams, useRouter } from 'next/navigation';
 import {
   DragDropContext,
   Droppable,
@@ -83,6 +83,7 @@ function mapStatusToDealStage(status: string): string {
 
 export default function PipelinePage() {
   const searchParams = useSearchParams();
+  const router = useRouter();
   const viewParam = searchParams.get('view');
   const filterParam = searchParams.get('filter');
 
@@ -305,7 +306,10 @@ export default function PipelinePage() {
             variant={view === 'table' ? 'default' : 'ghost'}
             size="sm"
             className={view === 'table' ? 'bg-emerald-600 hover:bg-emerald-700' : ''}
-            onClick={() => setView('table')}
+            onClick={() => {
+              setView('table');
+              router.replace('/pipeline');
+            }}
           >
             <Users className="h-3.5 w-3.5 mr-1.5" />
             Table
@@ -314,7 +318,10 @@ export default function PipelinePage() {
             variant={view === 'board' ? 'default' : 'ghost'}
             size="sm"
             className={view === 'board' ? 'bg-emerald-600 hover:bg-emerald-700' : ''}
-            onClick={() => setView('board')}
+            onClick={() => {
+              setView('board');
+              router.replace('/pipeline?view=board');
+            }}
           >
             <LayoutGrid className="h-3.5 w-3.5 mr-1.5" />
             Board

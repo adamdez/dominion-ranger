@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useSearchParams } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/lib/auth-context';
 import {
@@ -63,6 +63,7 @@ const navGroups: NavGroup[] = [
 
 export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void }) {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const { isAdmin } = useAuth();
 
   const isActive = (href: string) => {
@@ -72,10 +73,10 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
       if (search) {
         const params = new URLSearchParams(search);
         const view = params.get('view');
-        const currentView = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('view') : null;
-        return pathname.startsWith('/pipeline') && (view === currentView || (!view && !currentView));
+        const currentView = searchParams.get('view');
+        return pathname.startsWith('/pipeline') && view === currentView;
       }
-      return pathname.startsWith('/pipeline');
+      return pathname.startsWith('/pipeline') && !searchParams.get('view');
     }
     return pathname.startsWith(href);
   };
