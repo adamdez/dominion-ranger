@@ -6,9 +6,10 @@ import { cn } from '@/lib/utils';
 import { useAuth } from '@/lib/auth-context';
 import {
   LayoutDashboard,
-  Users,
+  Target,
   Phone,
   CheckSquare,
+  Home,
   DollarSign,
   Kanban,
   BarChart3,
@@ -34,11 +35,17 @@ const navGroups: NavGroup[] = [
     items: [{ href: '/', label: 'Dashboard', icon: LayoutDashboard }],
   },
   {
-    label: 'PIPELINE',
+    label: 'WORK',
     items: [
-      { href: '/pipeline', label: 'Pipeline', icon: Users },
+      { href: '/pipeline', label: 'Pipeline', icon: Target },
       { href: '/dial-queue', label: 'Dial Queue', icon: Phone },
       { href: '/tasks', label: 'Tasks', icon: CheckSquare },
+    ],
+  },
+  {
+    label: 'INVENTORY',
+    items: [
+      { href: '/prospects', label: 'Prospects', icon: Home },
     ],
   },
   {
