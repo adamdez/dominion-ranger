@@ -9,9 +9,9 @@ import { createContactBody, updateContactBody, markDndBody, contactsListQuery } 
 
 export async function contactRoutes(app: FastifyInstance): Promise<void> {
 
-  // GET /api/properties/:dominionLeadId/contacts — list all contacts for a property
+  // GET /api/contacts/property/:dominionLeadId — list all contacts for a property
   app.get<{ Params: { dominionLeadId: string }; Querystring: Record<string, string> }>(
-    '/api/properties/:dominionLeadId/contacts',
+    '/api/contacts/property/:dominionLeadId',
     { preHandler: [requireRole('properties.read')] },
     async (request) => {
       const { dominionLeadId } = request.params;
@@ -35,9 +35,9 @@ export async function contactRoutes(app: FastifyInstance): Promise<void> {
     },
   );
 
-  // POST /api/properties/:dominionLeadId/contacts — add a manual contact
+  // POST /api/contacts/property/:dominionLeadId — add a manual contact
   app.post<{ Params: { dominionLeadId: string }; Body: Record<string, unknown> }>(
-    '/api/properties/:dominionLeadId/contacts',
+    '/api/contacts/property/:dominionLeadId',
     { preHandler: [requireRole('workflow.write')] },
     async (request, reply) => {
       const { dominionLeadId } = request.params;
