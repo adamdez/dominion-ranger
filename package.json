@@ -24,7 +24,12 @@
     "backfill:rescore": "tsx src/scripts/backfill-scoring.ts --rescore",
     "db:migrate:seed": "tsx src/scripts/run-migration.ts 0008_seed_scoring_config.sql",
     "seed:admin": "tsx src/scripts/seed-admin.ts",
-    "db:migrate:auth": "tsx src/scripts/run-migration.ts 0010_users_auth.sql"
+    "db:migrate:auth": "tsx src/scripts/run-migration.ts 0010_users_auth.sql",
+    "system:status": "tsx src/scripts/recover-system.ts --status",
+    "system:seed-config": "tsx src/scripts/recover-system.ts --seed-config",
+    "system:score": "tsx src/scripts/recover-system.ts --score",
+    "system:import": "tsx src/scripts/recover-system.ts --import",
+    "system:recover": "tsx src/scripts/recover-system.ts --full"
   },
   "dependencies": {
     "@fastify/cookie": "^11.0.2",
