@@ -81,6 +81,10 @@ export * from './saved-filters';
 export { compReports } from './comp-reports';
 export type { CompReport, NewCompReport } from './comp-reports';
 
+// ─── Offers ──────────────────────────────────────────
+export { offers } from './offers';
+export type { Offer, NewOffer } from './offers';
+
 // ─── Operational ───────────────────────────────────
 export { featureFlags } from './feature-flags';
 export type { FeatureFlag, NewFeatureFlag } from './feature-flags';
