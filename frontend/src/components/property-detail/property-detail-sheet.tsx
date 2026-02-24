@@ -46,7 +46,7 @@ import {
   UserPlus, Shield, Phone, MessageSquare, Send, FileText,
   CheckCircle, XCircle, AlertTriangle, SearchCheck, Zap,
   Mail, MapPin, Home, Calendar, TrendingUp, ArrowRight,
-  ClipboardCheck,
+  ClipboardCheck, DollarSign,
 } from 'lucide-react';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel,
@@ -59,6 +59,8 @@ import {
 import { Textarea } from '@/components/ui/textarea';
 import { useLeadNotes, useAddNote } from '@/hooks/use-notes';
 import { CompsTab } from '@/components/comps/comps-tab';
+import { OffersTab } from '@/components/offers/offers-tab';
+import { NewOfferDialog } from '@/components/offers/new-offer-dialog';
 
 interface PropertyDetailSheetProps {
   lead: LeadWithProperty | null;
@@ -69,6 +71,7 @@ interface PropertyDetailSheetProps {
 export function PropertyDetailSheet({ lead, open, onClose }: PropertyDetailSheetProps) {
   const [tab, setTab] = useState('overview');
   const [taskDialogOpen, setTaskDialogOpen] = useState(false);
+  const [offerDialogOpen, setOfferDialogOpen] = useState(false);
 
   const claimMutation = useClaimLead();
   const transitionMutation = useTransitionLead();
@@ -121,6 +124,7 @@ export function PropertyDetailSheet({ lead, open, onClose }: PropertyDetailSheet
             <TabsTrigger value="tasks">
               Tasks{tasks.data?.length ? ` (${tasks.data.length})` : ''}
             </TabsTrigger>
+            <TabsTrigger value="offers">Offers</TabsTrigger>
             <TabsTrigger value="comps">Comps</TabsTrigger>
           </TabsList>
 
@@ -275,6 +279,9 @@ export function PropertyDetailSheet({ lead, open, onClose }: PropertyDetailSheet
                       })}
                       loading={isLoading}
                     />
+                    <Button size="sm" variant="outline" onClick={() => setOfferDialogOpen(true)}>
+                      <DollarSign className="mr-1.5 h-3.5 w-3.5" />Make Offer
+                    </Button>
                   </div>
                 </div>
 
@@ -475,6 +482,14 @@ export function PropertyDetailSheet({ lead, open, onClose }: PropertyDetailSheet
                 </div>
               </TabsContent>
 
+              {/* ─── Offers Tab ─── */}
+              <TabsContent value="offers" className="space-y-4 mt-4">
+                <OffersTab
+                  lead={lead}
+                  onNewOffer={() => setOfferDialogOpen(true)}
+                />
+              </TabsContent>
+
               {/* ─── Comps Tab ─── */}
               <TabsContent value="comps" className="space-y-4 mt-4">
                 <CompsTab dominionLeadId={lead.dominionLeadId} />
@@ -489,6 +504,18 @@ export function PropertyDetailSheet({ lead, open, onClose }: PropertyDetailSheet
           onClose={() => setTaskDialogOpen(false)}
           dominionLeadId={lead.dominionLeadId}
           leadInstanceId={lead.leadInstanceId}
+        />
+
+        <NewOfferDialog
+          open={offerDialogOpen}
+          onOpenChange={setOfferDialogOpen}
+          prefill={{
+            dominionLeadId: lead.dominionLeadId,
+            propertyId: (property as unknown as { propertyId?: string })?.propertyId ?? lead.dominionLeadId,
+            leadInstanceId: lead.leadInstanceId,
+            address: `${lead.streetAddress ?? ''}${lead.city ? `, ${lead.city}` : ''}`,
+            ownerName: lead.ownerName ?? undefined,
+          }}
         />
       </SheetContent>
     </Sheet>
