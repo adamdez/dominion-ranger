@@ -9,5 +9,7 @@ export function useSystemStats() {
       const { data } = await api.get<SystemStatsResponse>('/api/system/stats');
       return data;
     },
+    refetchInterval: 60_000,
+    refetchIntervalInBackground: false,
   });
 }

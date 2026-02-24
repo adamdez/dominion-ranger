@@ -8,7 +8,6 @@ import {
   distressEvents,
   tags,
   leadInstanceTags,
-  activityLog,
   LeadStatus,
 } from '../../db/schema/index.js';
 import {
@@ -45,6 +44,15 @@ export async function leadRoutes(app: FastifyInstance): Promise<void> {
       const offset = (query.page - 1) * query.pageSize;
 
       const conditions = [];
+      // View filter: mine = assigned to current user, unassigned = PROMOTED + no assignee
+      const user = (request as unknown as Record<string, { userId: string }>).user;
+      const userId = user?.userId ?? 'admin-bootstrap';
+      if (query.view === 'mine') {
+        conditions.push(eq(leadInstances.assignedTo, userId));
+      } else if (query.view === 'unassigned') {
+        conditions.push(sql`${leadInstances.assignedTo} IS NULL`);
+        conditions.push(eq(leadInstances.status, LeadStatus.PROMOTED));
+      }
       if (query.status) {
         const statuses = query.status.split(',') as LeadStatusValue[];
         if (statuses.length === 1) {
@@ -156,6 +164,7 @@ export async function leadRoutes(app: FastifyInstance): Promise<void> {
           skipTraceTier: properties.skipTraceTier,
           skipTracedAt: properties.skipTracedAt,
           skipTraceSource: properties.skipTraceSource,
+          equityEstimate: properties.equityEstimate,
           compositeScore: latestScores.compositeScore,
           motivationScore: latestScores.motivationScore,
           dealScore: latestScores.dealScore,
@@ -178,8 +187,9 @@ export async function leadRoutes(app: FastifyInstance): Promise<void> {
       }
 
       const leadIds = rows.map(r => r.leadInstanceId);
+      const dominionLeadIds = [...new Set(rows.map(r => r.dominionLeadId))];
 
-      const [tagRows, activityRows] = await Promise.all([
+      const [tagRows, activityRows, signalRows] = await Promise.all([
         db
           .select({
             leadInstanceId: leadInstanceTags.leadInstanceId,
@@ -197,6 +207,16 @@ export async function leadRoutes(app: FastifyInstance): Promise<void> {
           WHERE lead_instance_id = ANY(${leadIds})
           ORDER BY lead_instance_id, occurred_at DESC
         `),
+
+        db
+          .select({
+            dominionLeadId: distressEvents.dominionLeadId,
+            eventType: distressEvents.eventType,
+            eventLayer: distressEvents.eventLayer,
+          })
+          .from(distressEvents)
+          .where(inArray(distressEvents.dominionLeadId, dominionLeadIds))
+          .orderBy(asc(distressEvents.dominionLeadId), desc(distressEvents.createdAt)),
       ]);
 
       const tagsByLead = new Map<string, Array<{ name: string; color: string | null }>>();
@@ -216,11 +236,25 @@ export async function leadRoutes(app: FastifyInstance): Promise<void> {
         });
       }
 
-      const enrichedRows = rows.map(r => ({
-        ...r,
-        tags: tagsByLead.get(r.leadInstanceId) ?? [],
-        lastActivity: activityByLead.get(r.leadInstanceId) ?? null,
-      }));
+      const signalMap = new Map<string, Array<{ eventType: string; eventLayer: string }>>();
+      for (const s of signalRows) {
+        const existing = signalMap.get(s.dominionLeadId) ?? [];
+        if (existing.length < 4) {
+          existing.push({ eventType: s.eventType, eventLayer: s.eventLayer });
+          signalMap.set(s.dominionLeadId, existing);
+        }
+      }
+
+      const enrichedRows = rows.map(r => {
+        const phonesFound = [r.phone, r.phone2, r.phone3].filter(Boolean).length;
+        return {
+          ...r,
+          tags: tagsByLead.get(r.leadInstanceId) ?? [],
+          lastActivity: activityByLead.get(r.leadInstanceId) ?? null,
+          topSignals: signalMap.get(r.dominionLeadId) ?? [],
+          phonesFound,
+        };
+      });
 
       return paginate(enrichedRows, countResult.count, query.page, query.pageSize);
     },

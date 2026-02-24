@@ -29,7 +29,7 @@ import { useSkipTrace } from '@/hooks/use-skip-trace';
 import { usePropertyDetail, usePropertyEvents, usePropertyTasks, usePropertyTags } from '@/hooks/use-property-detail';
 import { useDealStageTransition } from '@/hooks/use-pipeline';
 import { useAddTag, useRemoveTag } from '@/hooks/use-tags';
-import type { LeadWithProperty, AuditLogEntry, DistressEvent, Tag } from '@/lib/types';
+import type { LeadWithProperty, AuditLogEntry, DistressEvent, Tag, PropertyDetail } from '@/lib/types';
 import { DEAL_STAGES } from '@/lib/constants';
 import { format } from 'date-fns';
 import {
@@ -72,7 +72,8 @@ export function PropertyDetailSheet({ lead, open, onClose }: PropertyDetailSheet
 
   if (!lead) return null;
 
-  const property = propertyDetail.data;
+  const raw = propertyDetail.data as { property?: PropertyDetail } | PropertyDetail | null;
+  const property = raw && typeof raw === 'object' && 'property' in raw ? raw.property : (raw as PropertyDetail | null);
   const isLoading = claimMutation.isPending || transitionMutation.isPending || complianceMutation.isPending;
 
   return (
@@ -94,6 +95,7 @@ export function PropertyDetailSheet({ lead, open, onClose }: PropertyDetailSheet
         <Tabs value={tab} onValueChange={setTab} className="flex-1 flex flex-col overflow-hidden">
           <TabsList className="mx-6 w-fit">
             <TabsTrigger value="overview">Overview</TabsTrigger>
+            <TabsTrigger value="property">Property</TabsTrigger>
             <TabsTrigger value="contacts">Contacts</TabsTrigger>
             <TabsTrigger value="events">Events</TabsTrigger>
             <TabsTrigger value="activity">Activity</TabsTrigger>
@@ -261,6 +263,31 @@ export function PropertyDetailSheet({ lead, open, onClose }: PropertyDetailSheet
                     </Button>
                   </div>
                   <TaskList tasks={tasks.data ?? []} />
+                </div>
+              </TabsContent>
+
+              {/* ─── Property Tab ─── */}
+              <TabsContent value="property" className="space-y-6 mt-4">
+                <div className="space-y-4">
+                  <div className="space-y-3">
+                    <h4 className="text-sm font-semibold text-muted-foreground">PROPERTY</h4>
+                    <div className="rounded-lg border p-3 space-y-2">
+                      <InfoRow icon={Home} label="Address" value={property?.streetAddress} />
+                      <InfoRow icon={MapPin} label="City" value={property ? `${property.city ?? '—'}, ${property.state ?? '—'} ${property.zip ?? ''}`.replace(/—, —/g, '—') : null} />
+                      <InfoRow icon={TrendingUp} label="Equity Est." value={property?.equityEstimate ? `$${Number(property.equityEstimate).toLocaleString()}` : null} />
+                      <InfoRow icon={Calendar} label="Ownership" value={property?.ownershipDurationMonths ? `${Math.floor(property.ownershipDurationMonths / 12)} years` : null} />
+                      <InfoRow icon={Home} label="Absentee Owner" value={property?.absenteeOwner != null ? (property.absenteeOwner ? 'Yes' : 'No') : null} />
+                      <InfoRow icon={TrendingUp} label="Mortgage Status" value={property?.mortgageStatus ?? null} />
+                    </div>
+                  </div>
+                  {property?.mailingAddress && (
+                    <div className="space-y-3">
+                      <h4 className="text-sm font-semibold text-muted-foreground">MAILING ADDRESS</h4>
+                      <div className="rounded-lg border p-3">
+                        <p className="text-sm">{property.mailingAddress}</p>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </TabsContent>
 

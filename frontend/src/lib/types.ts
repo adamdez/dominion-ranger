@@ -105,6 +105,11 @@ export interface SystemStatsResponse {
   timestamp: string;
 }
 
+export interface TopSignal {
+  eventType: string;
+  eventLayer: string;
+}
+
 export interface LeadWithProperty {
   leadInstanceId: string;
   dominionLeadId: string;
@@ -134,7 +139,11 @@ export interface LeadWithProperty {
   motivationScore: number | null;
   dealScore: number | null;
   confidenceScore: number | null;
-  eventCount: number;
+  eventCount?: number;
+  dealStage?: string | null;
+  topSignals?: TopSignal[];
+  phonesFound?: number;
+  equityEstimate?: string | null;
 }
 
 export interface SkipTraceResponse {
