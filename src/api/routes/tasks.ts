@@ -1,11 +1,12 @@
 import type { FastifyInstance } from 'fastify';
-import { eq, and, sql, lte, gte, desc } from 'drizzle-orm';
+import { eq, and, sql, lte, gte, desc, asc } from 'drizzle-orm';
 import { db } from '../../db/connection.js';
 import { tasks, TaskStatus } from '../../db/schema/index.js';
 import { requireRole } from '../middleware/auth.js';
 import { paginate } from '../types.js';
 import { NotFoundError } from '../../lib/errors.js';
 import { logActivity } from '../../modules/analytics/activity-logger.js';
+import { getTaskStats } from '../../modules/cadence/index.js';
 import { logger } from '../../config/logger.js';
 import { createTaskBody, updateTaskBody, tasksListQuery } from '../schemas/tasks.js';
 
@@ -81,6 +82,66 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
         )
         .orderBy(tasks.dueAt);
       return rows;
+    },
+  );
+
+  // GET /api/tasks/stats — task counts for dashboard
+  app.get(
+    '/api/tasks/stats',
+    { preHandler: [requireRole('properties.read')] },
+    async (request) => {
+      const user = (request as unknown as Record<string, { userId: string }>).user;
+      return getTaskStats(user.userId);
+    },
+  );
+
+  // GET /api/tasks/view/:view — view-based task list (today, overdue, upcoming, completed)
+  app.get<{ Params: { view: string } }>(
+    '/api/tasks/view/:view',
+    { preHandler: [requireRole('properties.read')] },
+    async (request) => {
+      const user = (request as unknown as Record<string, { userId: string }>).user;
+      const { view } = request.params;
+
+      const now = new Date();
+      const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const todayEnd = new Date(todayStart.getTime() + 86400000);
+      const weekEnd = new Date(todayStart.getTime() + 7 * 86400000);
+
+      const conditions = [eq(tasks.assignedTo, user.userId)];
+
+      switch (view) {
+        case 'today':
+          conditions.push(eq(tasks.status, TaskStatus.PENDING));
+          conditions.push(gte(tasks.dueAt, todayStart));
+          conditions.push(lte(tasks.dueAt, todayEnd));
+          break;
+        case 'overdue':
+          conditions.push(eq(tasks.status, TaskStatus.PENDING));
+          conditions.push(lte(tasks.dueAt, now));
+          break;
+        case 'upcoming':
+          conditions.push(eq(tasks.status, TaskStatus.PENDING));
+          conditions.push(gte(tasks.dueAt, todayEnd));
+          conditions.push(lte(tasks.dueAt, weekEnd));
+          break;
+        case 'completed':
+          conditions.push(eq(tasks.status, TaskStatus.COMPLETED));
+          conditions.push(gte(tasks.completedAt, todayStart));
+          break;
+        default:
+          conditions.push(eq(tasks.status, TaskStatus.PENDING));
+      }
+
+      const rows = await db
+        .select()
+        .from(tasks)
+        .where(and(...conditions))
+        .orderBy(asc(tasks.dueAt))
+        .limit(100);
+
+      const stats = await getTaskStats(user.userId);
+      return { tasks: rows, stats };
     },
   );
 

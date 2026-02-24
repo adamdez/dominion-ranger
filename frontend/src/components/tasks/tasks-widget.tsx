@@ -49,7 +49,7 @@ export function TasksWidget() {
                   Overdue ({overdue.length})
                 </h4>
                 {overdue.slice(0, 5).map(task => (
-                  <TaskRow key={task.taskId} task={task} overdue onComplete={completeTask.mutate} />
+                  <TaskRow key={task.id} task={task} overdue onComplete={completeTask.mutate} />
                 ))}
               </div>
             )}
@@ -59,7 +59,7 @@ export function TasksWidget() {
                   Due Today ({dueToday.length})
                 </h4>
                 {dueToday.slice(0, 5).map(task => (
-                  <TaskRow key={task.taskId} task={task} onComplete={completeTask.mutate} />
+                  <TaskRow key={task.id} task={task} onComplete={completeTask.mutate} />
                 ))}
               </div>
             )}
@@ -80,7 +80,7 @@ function TaskRow({ task, overdue, onComplete }: { task: Task; overdue?: boolean;
     }`}>
       <Checkbox
         checked={task.status === 'COMPLETED'}
-        onCheckedChange={() => onComplete(task.taskId)}
+        onCheckedChange={() => onComplete(task.id)}
         disabled={task.status === 'COMPLETED'}
       />
       <span className="flex-1 truncate text-xs">{task.title}</span>

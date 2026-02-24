@@ -9,6 +9,7 @@ export const createTaskBody = z.object({
   dominionLeadId: z.string().uuid().optional(),
   assignedTo: z.string().max(128).optional(),
   dueAt: z.string().datetime().optional(),
+  priority: z.enum(['HIGH', 'NORMAL', 'LOW']).default('NORMAL'),
 });
 
 export const updateTaskBody = z.object({

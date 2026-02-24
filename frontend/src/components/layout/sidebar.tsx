@@ -11,6 +11,7 @@ import {
   BarChart3,
   Settings,
   UserPlus,
+  CheckSquare,
   Shield,
 } from 'lucide-react';
 
@@ -18,6 +19,7 @@ const navItems = [
   { href: '/', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/leads', label: 'Leads', icon: Users },
   { href: '/pipeline', label: 'Pipeline', icon: LayoutGrid },
+  { href: '/tasks', label: 'Tasks', icon: CheckSquare },
   { href: '/assign', label: 'Assign', icon: UserPlus },
   { href: '/dial-queue', label: 'Dial Queue', icon: Phone },
   { href: '/scoring', label: 'Scoring', icon: BarChart3 },
