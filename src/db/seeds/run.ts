@@ -6,8 +6,25 @@ import { logger } from '../../config/logger.js';
 async function runSeeds(): Promise<void> {
   logger.info('Running database seeds...');
 
-  await seedScoringModel();
-  await seedSystemSettings();
+  try {
+    await seedScoringModel();
+  } catch (err: any) {
+    if (err.message?.includes('does not exist')) {
+      logger.warn('scoring_model_configs table not found, skipping seed');
+    } else {
+      throw err;
+    }
+  }
+
+  try {
+    await seedSystemSettings();
+  } catch (err: any) {
+    if (err.message?.includes('does not exist')) {
+      logger.warn('system_settings table not found, skipping seed');
+    } else {
+      throw err;
+    }
+  }
 
   logger.info('All seeds completed');
   await closeDatabase();
@@ -18,3 +35,4 @@ runSeeds().catch((err) => {
   logger.fatal({ err }, 'Seed failed');
   process.exit(1);
 });
+```
