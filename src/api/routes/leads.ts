@@ -9,6 +9,7 @@ import {
   tags,
   leadInstanceTags,
   activityLog,
+  dispositions,
   LeadStatus,
 } from '../../db/schema/index.js';
 import {
@@ -17,6 +18,7 @@ import {
   transitionLead,
 } from '../../modules/workflow/index.js';
 import { logDisposition, getDispositions } from '../../modules/dispositions/index.js';
+import { createFollowUpFromDisposition } from '../../modules/cadence/index.js';
 import { transitionDealStage } from '../../modules/deal-stage/index.js';
 import { requireRole } from '../middleware/auth.js';
 import { leadsListQuery, claimLeadBody, transitionLeadBody, dialQueueQuery } from '../schemas/leads.js';
@@ -471,6 +473,31 @@ export async function leadRoutes(app: FastifyInstance): Promise<void> {
         notes: body.notes,
         userId: user.userId,
       });
+
+      // Auto-create follow-up task via cadence engine
+      const [lead] = await db
+        .select({
+          dominionLeadId: leadInstances.dominionLeadId,
+          assignedTo: leadInstances.assignedTo,
+        })
+        .from(leadInstances)
+        .where(eq(leadInstances.leadInstanceId, leadInstanceId))
+        .limit(1);
+
+      if (lead) {
+        const [dispoCount] = await db
+          .select({ count: sql<number>`count(*)::int` })
+          .from(dispositions)
+          .where(eq(dispositions.leadInstanceId, leadInstanceId));
+
+        await createFollowUpFromDisposition({
+          leadInstanceId,
+          dominionLeadId: lead.dominionLeadId,
+          disposition: body.disposition,
+          assignedTo: lead.assignedTo ?? user.userId,
+          currentAttempt: dispoCount.count,
+        });
+      }
 
       return record;
     },

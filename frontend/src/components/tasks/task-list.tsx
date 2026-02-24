@@ -28,7 +28,7 @@ export function TaskList({ tasks }: TaskListProps) {
 
         return (
           <div
-            key={task.taskId}
+            key={task.id}
             className={`flex items-start gap-2 rounded-md border px-3 py-2 text-sm ${
               isOverdue ? 'border-red-200 bg-red-50/50 dark:border-red-900 dark:bg-red-950/20' : ''
             }`}
@@ -36,7 +36,7 @@ export function TaskList({ tasks }: TaskListProps) {
             <Checkbox
               checked={isCompleted}
               onCheckedChange={() => {
-                if (!isCompleted) completeTask.mutate(task.taskId);
+                if (!isCompleted) completeTask.mutate(task.id);
               }}
               disabled={isCompleted || completeTask.isPending}
               className="mt-0.5"

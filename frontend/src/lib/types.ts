@@ -189,7 +189,7 @@ export interface LeadTag {
 }
 
 export interface Task {
-  taskId: string;
+  id: string;
   dominionLeadId: string | null;
   leadInstanceId: string | null;
   assignedTo: string | null;
@@ -199,6 +199,10 @@ export interface Task {
   dueAt: string | null;
   completedAt: string | null;
   status: 'PENDING' | 'COMPLETED' | 'CANCELLED';
+  priority: string;
+  source: string;
+  cadenceRule: string | null;
+  attemptNumber: number | null;
   createdAt: string;
   updatedAt: string;
 }

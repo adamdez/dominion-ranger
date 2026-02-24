@@ -4,6 +4,7 @@ import {
   varchar,
   text,
   timestamp,
+  integer,
   index,
   pgEnum,
 } from 'drizzle-orm/pg-core';
@@ -38,6 +39,11 @@ export const tasks = pgTable(
 
     assignedTo: varchar('assigned_to', { length: 128 }),
     createdBy: varchar('created_by', { length: 128 }),
+
+    priority: varchar('priority', { length: 10 }).notNull().default('NORMAL'),
+    source: varchar('source', { length: 64 }).notNull().default('MANUAL'),
+    cadenceRule: varchar('cadence_rule', { length: 64 }),
+    attemptNumber: integer('attempt_number').default(1),
 
     dueAt: timestamp('due_at', { withTimezone: true }),
     completedAt: timestamp('completed_at', { withTimezone: true }),
