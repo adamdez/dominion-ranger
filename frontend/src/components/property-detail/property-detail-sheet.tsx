@@ -45,6 +45,7 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
+import { CompsTab } from '@/components/comps/comps-tab';
 
 interface PropertyDetailSheetProps {
   lead: LeadWithProperty | null;
@@ -98,6 +99,7 @@ export function PropertyDetailSheet({ lead, open, onClose }: PropertyDetailSheet
             <TabsTrigger value="events">Events</TabsTrigger>
             <TabsTrigger value="activity">Activity</TabsTrigger>
             <TabsTrigger value="notes">Notes</TabsTrigger>
+            <TabsTrigger value="comps">Comps</TabsTrigger>
           </TabsList>
 
           <ScrollArea className="flex-1">
@@ -402,6 +404,11 @@ export function PropertyDetailSheet({ lead, open, onClose }: PropertyDetailSheet
                 ) : (
                   <p className="text-sm text-muted-foreground">No notes recorded.</p>
                 )}
+              </TabsContent>
+
+              {/* ─── Comps Tab ─── */}
+              <TabsContent value="comps" className="space-y-4 mt-4">
+                <CompsTab dominionLeadId={lead.dominionLeadId} />
               </TabsContent>
 
             </div>
