@@ -130,10 +130,21 @@ export async function startServer() {
         configured: true,
         clientConfigured: isClientConfigured(),
         phoneNumber: env.TWILIO_PHONE_NUMBER,
-        baseUrl: env.BASE_URL ?? 'NOT SET',
+        baseUrl: env.BASE_URL ?? 'NOT SET — webhooks will not work',
       }, 'Twilio dialer status');
+
+      if (!env.BASE_URL || env.BASE_URL.includes('localhost')) {
+        logger.warn(
+          'BASE_URL is localhost or not set — Twilio webhooks (status callbacks, recordings) will not fire back. ' +
+          'Browser-based calling via @twilio/voice-sdk still works for outbound calls. ' +
+          'For full webhook functionality, use ngrok (ngrok http 3100) and set BASE_URL to the tunnel URL.',
+        );
+      }
     } else {
-      logger.warn('Twilio not configured — dialer disabled');
+      logger.warn(
+        'Twilio not configured — dialer disabled. ' +
+        'Set TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_PHONE_NUMBER in .env to enable.',
+      );
     }
   } catch (err: unknown) {
     logger.fatal({ err }, 'Failed to start server');

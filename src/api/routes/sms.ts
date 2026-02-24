@@ -1,10 +1,8 @@
 import type { FastifyInstance } from 'fastify';
 import twilio from 'twilio';
-const { validateRequest } = twilio;
 const TwiML = twilio.twiml;
 import { requireRole } from '../middleware/auth.js';
 import { env } from '../../config/env.js';
-import { logger } from '../../config/logger.js';
 import { logActivity } from '../../modules/analytics/activity-logger.js';
 import {
   sendSms,

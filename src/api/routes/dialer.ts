@@ -1,9 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import twilio from 'twilio';
-const { validateRequest } = twilio;
 import { requireRole } from '../middleware/auth.js';
 import { env } from '../../config/env.js';
-import { logger } from '../../config/logger.js';
 import { logActivity } from '../../modules/analytics/activity-logger.js';
 import {
   generateClientToken,
