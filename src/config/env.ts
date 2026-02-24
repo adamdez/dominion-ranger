@@ -24,7 +24,7 @@ const envSchema = z.object({
   TRACERFY_API_KEY: z.string().optional(),
 
   // Auth
-  JWT_SECRET: z.string().min(32).optional(),
+  JWT_SECRET: z.string().min(32).default('dominion-ranger-dev-jwt-secret-32chars!'),
   ADMIN_BOOTSTRAP_TOKEN: z.string().optional(),
 
   // Twilio

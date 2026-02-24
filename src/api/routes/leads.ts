@@ -47,9 +47,12 @@ export async function leadRoutes(app: FastifyInstance): Promise<void> {
       const offset = (query.page - 1) * query.pageSize;
 
       const conditions = [];
-      const user = (request as unknown as Record<string, { userId: string }>).user;
+      const user = (request as unknown as Record<string, { userId: string; role: string }>).user;
       const userId = user?.userId ?? 'admin-bootstrap';
-      if (query.view === 'mine') {
+      const isAdminOrManager = user?.role === 'ADMIN' || user?.role === 'MANAGER';
+      if (!isAdminOrManager) {
+        conditions.push(eq(leadInstances.assignedTo, userId));
+      } else if (query.view === 'mine') {
         conditions.push(eq(leadInstances.assignedTo, userId));
       } else if (query.view === 'unassigned') {
         conditions.push(isNull(leadInstances.assignedTo));
@@ -361,13 +364,23 @@ export async function leadRoutes(app: FastifyInstance): Promise<void> {
   app.get(
     '/api/leads/stats',
     { preHandler: [requireRole('properties.read')] },
-    async () => {
+    async (request) => {
+      const user = (request as unknown as Record<string, { userId: string; role: string }>).user;
+      const isAdminOrManager = user?.role === 'ADMIN' || user?.role === 'MANAGER';
+
+      const statsConditions = [];
+      if (!isAdminOrManager) {
+        statsConditions.push(eq(leadInstances.assignedTo, user.userId));
+      }
+      const statsWhere = statsConditions.length > 0 ? and(...statsConditions) : undefined;
+
       const statuses = await db
         .select({
           status: leadInstances.status,
           count: sql<number>`count(*)::int`,
         })
         .from(leadInstances)
+        .where(statsWhere)
         .groupBy(leadInstances.status);
 
       const total = statuses.reduce((sum, s) => sum + s.count, 0);
@@ -377,15 +390,17 @@ export async function leadRoutes(app: FastifyInstance): Promise<void> {
       const dialReady = statuses.find(s => s.status === LeadStatus.DIAL_READY)?.count ?? 0;
       const promoted = statuses.find(s => s.status === LeadStatus.PROMOTED)?.count ?? 0;
 
+      const closedConditions = [
+        eq(leadInstances.status, LeadStatus.CLOSED),
+        sql`${leadInstances.closedAt} >= date_trunc('month', now())`,
+      ];
+      if (!isAdminOrManager) {
+        closedConditions.push(eq(leadInstances.assignedTo, user.userId));
+      }
       const [closedThisMonth] = await db
         .select({ count: sql<number>`count(*)::int` })
         .from(leadInstances)
-        .where(
-          and(
-            eq(leadInstances.status, LeadStatus.CLOSED),
-            sql`${leadInstances.closedAt} >= date_trunc('month', now())`,
-          ),
-        );
+        .where(and(...closedConditions));
 
       return {
         total,
@@ -405,6 +420,8 @@ export async function leadRoutes(app: FastifyInstance): Promise<void> {
     async (request) => {
       const query = dialQueueQuery.parse(request.query);
       const offset = (query.page - 1) * query.pageSize;
+      const dqUser = (request as unknown as Record<string, { userId: string; role: string }>).user;
+      const dqIsAdminOrManager = dqUser?.role === 'ADMIN' || dqUser?.role === 'MANAGER';
 
       const latestScores = db
         .select({
@@ -418,10 +435,16 @@ export async function leadRoutes(app: FastifyInstance): Promise<void> {
         .from(scoringRecords)
         .as('ls');
 
+      const dqConditions = [eq(leadInstances.status, LeadStatus.DIAL_READY)];
+      if (!dqIsAdminOrManager) {
+        dqConditions.push(eq(leadInstances.assignedTo, dqUser.userId));
+      }
+      const dqWhere = and(...dqConditions);
+
       const [countResult] = await db
         .select({ count: sql<number>`count(*)::int` })
         .from(leadInstances)
-        .where(eq(leadInstances.status, LeadStatus.DIAL_READY));
+        .where(dqWhere);
 
       const rows = await db
         .select({
@@ -456,7 +479,7 @@ export async function leadRoutes(app: FastifyInstance): Promise<void> {
           eq(latestScores.dominionLeadId, leadInstances.dominionLeadId),
           eq(latestScores.rn, 1),
         ))
-        .where(eq(leadInstances.status, LeadStatus.DIAL_READY))
+        .where(dqWhere)
         .orderBy(desc(latestScores.compositeScore))
         .limit(query.pageSize)
         .offset(offset);

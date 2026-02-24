@@ -4,40 +4,30 @@ import { users } from '../../db/schema/index.js';
 import type { User } from '../../db/schema/index.js';
 import { AuthorizationError } from '../../lib/errors.js';
 
-export type Role = 'ADMIN' | 'FIELD' | 'READONLY';
+export type Role = 'ADMIN' | 'MANAGER' | 'AGENT' | 'FIELD' | 'READONLY';
 
-// Permission definitions: what each role can do
 const PERMISSIONS: Record<Role, Set<string>> = {
   ADMIN: new Set([
-    'properties.read',
-    'properties.write',
-    'events.read',
-    'events.write',
-    'scoring.read',
-    'scoring.write',
-    'scoring.config',
-    'promotion.read',
-    'promotion.write',
-    'sentinel.read',
-    'sentinel.write',
-    'audit.read',
-    'users.read',
-    'users.write',
-    'system.settings',
-    'pipeline.run',
+    'properties.read', 'properties.write', 'events.read', 'events.write',
+    'scoring.read', 'scoring.write', 'scoring.config', 'promotion.read', 'promotion.write',
+    'workflow.write', 'sentinel.read', 'sentinel.write', 'audit.read',
+    'users.read', 'users.write', 'system.settings', 'pipeline.run',
+  ]),
+  MANAGER: new Set([
+    'properties.read', 'properties.write', 'events.read', 'scoring.read',
+    'promotion.read', 'workflow.write', 'sentinel.read', 'audit.read',
+    'users.read', 'pipeline.run',
+  ]),
+  AGENT: new Set([
+    'properties.read', 'events.read', 'scoring.read', 'promotion.read',
+    'workflow.write', 'sentinel.read', 'audit.read',
   ]),
   FIELD: new Set([
-    'properties.read',
-    'events.read',
-    'scoring.read',
-    'promotion.read',
-    'sentinel.read',
-    'audit.read',
+    'properties.read', 'events.read', 'scoring.read', 'promotion.read',
+    'sentinel.read', 'audit.read',
   ]),
   READONLY: new Set([
-    'properties.read',
-    'scoring.read',
-    'promotion.read',
+    'properties.read', 'scoring.read', 'promotion.read',
   ]),
 };
 

@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
+import { useAuth } from '@/lib/auth-context';
 import {
   LayoutDashboard,
   LayoutGrid,
@@ -13,9 +14,17 @@ import {
   UserPlus,
   CheckSquare,
   Shield,
+  UsersRound,
 } from 'lucide-react';
 
-const navItems = [
+interface NavItem {
+  href: string;
+  label: string;
+  icon: React.ComponentType<{ className?: string }>;
+  adminOnly?: boolean;
+}
+
+const navItems: NavItem[] = [
   { href: '/', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/leads', label: 'Leads', icon: Users },
   { href: '/pipeline', label: 'Pipeline', icon: LayoutGrid },
@@ -23,6 +32,7 @@ const navItems = [
   { href: '/assign', label: 'Assign', icon: UserPlus },
   { href: '/dial-queue', label: 'Dial Queue', icon: Phone },
   { href: '/scoring', label: 'Scoring', icon: BarChart3 },
+  { href: '/settings/users', label: 'Users', icon: UsersRound, adminOnly: true },
   { href: '/settings', label: 'Settings', icon: Settings },
 ];
 
@@ -33,14 +43,13 @@ interface SidebarProps {
 
 export function Sidebar({ open, onClose }: SidebarProps) {
   const pathname = usePathname();
+  const { isAdmin } = useAuth();
+  const visibleItems = navItems.filter(item => !item.adminOnly || isAdmin);
 
   return (
     <>
       {open && (
-        <div
-          className="fixed inset-0 z-40 bg-black/50 md:hidden"
-          onClick={onClose}
-        />
+        <div className="fixed inset-0 z-40 bg-black/50 md:hidden" onClick={onClose} />
       )}
       <aside
         className={cn(
@@ -54,8 +63,8 @@ export function Sidebar({ open, onClose }: SidebarProps) {
         </div>
 
         <nav className="flex-1 space-y-1 p-3">
-          {navItems.map((item) => {
-            const isActive = pathname === item.href;
+          {visibleItems.map((item) => {
+            const isActive = item.href === '/' ? pathname === '/' : pathname.startsWith(item.href);
             return (
               <Link
                 key={item.href}
@@ -77,7 +86,6 @@ export function Sidebar({ open, onClose }: SidebarProps) {
 
         <div className="border-t border-border p-4">
           <p className="text-xs text-muted-foreground">Dominion Ranger v2.3</p>
-          <p className="text-xs text-muted-foreground">Phase 3 — Deal Management</p>
         </div>
       </aside>
     </>

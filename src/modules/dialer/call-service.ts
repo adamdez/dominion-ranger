@@ -9,7 +9,7 @@ import {
 import { env } from '../../config/env.js';
 import { logger } from '../../config/logger.js';
 import { db } from '../../db/connection.js';
-import { properties, propertyContacts, callLogs } from '../../db/schema/index.js';
+import { properties, propertyContacts, callLogs, users } from '../../db/schema/index.js';
 import { eq, desc, and } from 'drizzle-orm';
 
 const TwiML = twilio.twiml;
@@ -65,10 +65,20 @@ export async function getCallablePhone(dominionLeadId: string): Promise<string |
   return contact?.phone ?? null;
 }
 
-export function generateVoiceTwiml(toPhone: string, statusCallbackUrl: string, recordingCallbackUrl: string): string {
+export async function getUserCallerId(userId: string): Promise<string> {
+  if (userId === 'admin-bootstrap') return TWILIO_PHONE_NUMBER;
+  const [user] = await db
+    .select({ twilioCallerId: users.twilioCallerId })
+    .from(users)
+    .where(eq(users.userId, userId))
+    .limit(1);
+  return user?.twilioCallerId || TWILIO_PHONE_NUMBER;
+}
+
+export function generateVoiceTwiml(toPhone: string, statusCallbackUrl: string, recordingCallbackUrl: string, callerId?: string): string {
   const response = new TwiML.VoiceResponse();
   const dial = response.dial({
-    callerId: TWILIO_PHONE_NUMBER,
+    callerId: callerId || TWILIO_PHONE_NUMBER,
     record: 'record-from-answer-dual',
     recordingStatusCallback: recordingCallbackUrl,
     recordingStatusCallbackEvent: ['completed'],
@@ -97,11 +107,12 @@ export async function initiateCall(params: InitiateCallParams): Promise<{ callSi
 
   const client = getTwilioClient();
   const baseUrl = env.BASE_URL ?? 'https://your-domain.com';
+  const callerId = await getUserCallerId(params.userId);
 
   const call = await client.calls.create({
     url: `${baseUrl}/api/dialer/voice?dominionLeadId=${params.dominionLeadId}`,
     to: params.toPhone,
-    from: TWILIO_PHONE_NUMBER,
+    from: callerId,
     statusCallback: `${baseUrl}/api/dialer/status`,
     statusCallbackEvent: ['initiated', 'ringing', 'answered', 'completed'],
     record: true,
@@ -113,7 +124,7 @@ export async function initiateCall(params: InitiateCallParams): Promise<{ callSi
     leadInstanceId: params.leadInstanceId ?? null,
     userId: params.userId,
     toPhone: params.toPhone,
-    fromPhone: TWILIO_PHONE_NUMBER,
+    fromPhone: callerId,
     status: 'initiated',
     direction: 'OUTBOUND',
   });

@@ -2,9 +2,11 @@ import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import helmet from '@fastify/helmet';
 import rateLimit from '@fastify/rate-limit';
+import cookie from '@fastify/cookie';
 import { env } from '../config/env.js';
 import { logger } from '../config/logger.js';
 import { authMiddleware } from './middleware/auth.js';
+import { authRoutes } from './routes/auth.js';
 import { propertyRoutes } from './routes/properties.js';
 import { rankingRoutes } from './routes/ranking.js';
 import { sentinelRoutes } from './routes/sentinel.js';
@@ -45,6 +47,8 @@ export async function createServer() {
 
   await app.register(helmet);
 
+  await app.register(cookie);
+
   await app.register(rateLimit, {
     max: 200,
     timeWindow: '1 minute',
@@ -58,6 +62,7 @@ export async function createServer() {
     if (request.url.startsWith('/api/dialer/voice') || request.url === '/api/dialer/status' || request.url === '/api/dialer/recording') return;
     if (request.url === '/api/sms/status' || request.url === '/api/sms/inbound') return;
     if (request.url === '/api/health/deep') return;
+    if (request.url === '/api/auth/login' || request.url === '/api/auth/refresh' || request.url === '/api/auth/logout') return;
 
     await authMiddleware(request, reply);
   });
@@ -96,6 +101,7 @@ export async function createServer() {
   });
 
   // ─── Routes ────────────────────────────────────
+  await app.register(authRoutes);
   await app.register(systemRoutes);
   await app.register(propertyRoutes);
   await app.register(rankingRoutes);
