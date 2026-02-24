@@ -26,16 +26,27 @@ import {
   useLeadAudit,
 } from '@/hooks/use-leads';
 import { useSkipTrace } from '@/hooks/use-skip-trace';
-import { usePropertyDetail, usePropertyEvents, usePropertyTasks, usePropertyTags } from '@/hooks/use-property-detail';
+import {
+  usePropertyDetail,
+  usePropertyEvents,
+  usePropertyContacts,
+  useLeadHistory,
+  usePropertyTasks,
+  usePropertyTags,
+} from '@/hooks/use-property-detail';
+import type { PropertyContact, TimelineItem } from '@/hooks/use-property-detail';
+import { ScoreBreakdownTooltip, EVENT_LABELS } from '@/components/scoring/score-breakdown-tooltip';
+import { HoverCard, HoverCardContent, HoverCardTrigger } from '@/components/ui/hover-card';
 import { useDealStageTransition } from '@/hooks/use-pipeline';
 import { useAddTag, useRemoveTag } from '@/hooks/use-tags';
 import type { LeadWithProperty, AuditLogEntry, DistressEvent, Tag } from '@/lib/types';
 import { DEAL_STAGES, VALID_DEAL_TRANSITIONS } from '@/lib/constants';
-import { format } from 'date-fns';
+import { format, formatDistanceToNow } from 'date-fns';
 import {
   UserPlus, Shield, Phone, MessageSquare, Send, FileText,
   CheckCircle, XCircle, AlertTriangle, SearchCheck, Zap,
-  Mail, MapPin, Home, Calendar, TrendingUp,
+  Mail, MapPin, Home, Calendar, TrendingUp, ArrowRight,
+  ClipboardCheck,
 } from 'lucide-react';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel,
@@ -45,6 +56,8 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
+import { Textarea } from '@/components/ui/textarea';
+import { useLeadNotes, useAddNote } from '@/hooks/use-notes';
 
 interface PropertyDetailSheetProps {
   lead: LeadWithProperty | null;
@@ -66,6 +79,8 @@ export function PropertyDetailSheet({ lead, open, onClose }: PropertyDetailSheet
 
   const propertyDetail = usePropertyDetail(lead?.dominionLeadId ?? null);
   const events = usePropertyEvents(lead?.dominionLeadId ?? null);
+  const contacts = usePropertyContacts(lead?.dominionLeadId ?? null);
+  const history = useLeadHistory(lead?.leadInstanceId ?? null);
   const tasks = usePropertyTasks(lead?.dominionLeadId ?? null);
   const tags = usePropertyTags(lead?.leadInstanceId ?? null);
   const auditQuery = useLeadAudit(lead?.dominionLeadId ?? null);
@@ -94,9 +109,13 @@ export function PropertyDetailSheet({ lead, open, onClose }: PropertyDetailSheet
         <Tabs value={tab} onValueChange={setTab} className="flex-1 flex flex-col overflow-hidden">
           <TabsList className="mx-6 w-fit">
             <TabsTrigger value="overview">Overview</TabsTrigger>
-            <TabsTrigger value="contacts">Contacts</TabsTrigger>
-            <TabsTrigger value="events">Events</TabsTrigger>
-            <TabsTrigger value="activity">Activity</TabsTrigger>
+            <TabsTrigger value="signals">
+              Signals{events.data?.length ? ` (${events.data.length})` : ''}
+            </TabsTrigger>
+            <TabsTrigger value="contacts">
+              Contacts{contacts.data?.length ? ` (${contacts.data.length})` : ''}
+            </TabsTrigger>
+            <TabsTrigger value="history">History</TabsTrigger>
             <TabsTrigger value="notes">Notes</TabsTrigger>
           </TabsList>
 
@@ -112,7 +131,21 @@ export function PropertyDetailSheet({ lead, open, onClose }: PropertyDetailSheet
                     <div className="rounded-lg border p-3 space-y-2">
                       <div className="flex items-center justify-between">
                         <span className="text-xs text-muted-foreground">Composite</span>
-                        <ScoreBadge score={lead.compositeScore} size="md" />
+                        <HoverCard openDelay={200} closeDelay={100}>
+                          <HoverCardTrigger asChild>
+                            <span className="cursor-help inline-flex">
+                              <ScoreBadge score={lead.compositeScore} size="md" />
+                            </span>
+                          </HoverCardTrigger>
+                          <HoverCardContent className="w-80" side="left">
+                            <ScoreBreakdownTooltip
+                              compositeScore={lead.compositeScore}
+                              motivationScore={lead.motivationScore ?? null}
+                              dealScore={lead.dealScore ?? null}
+                              dominionLeadId={lead.dominionLeadId}
+                            />
+                          </HoverCardContent>
+                        </HoverCard>
                       </div>
                       {lead.compositeScore !== null && (
                         <div className="h-2 rounded-full bg-muted overflow-hidden">
@@ -205,8 +238,13 @@ export function PropertyDetailSheet({ lead, open, onClose }: PropertyDetailSheet
                       <div className="grid grid-cols-2 gap-x-8 gap-y-1 text-sm">
                         <InfoRow icon={Home} label="Address" value={property.streetAddress} />
                         <InfoRow icon={MapPin} label="City" value={`${property.city ?? '—'}, ${property.state ?? '—'} ${property.zip ?? ''}`} />
+                        <InfoRow icon={FileText} label="APN" value={property.apn} />
                         <InfoRow icon={TrendingUp} label="Equity Est." value={property.equityEstimate ? `$${Number(property.equityEstimate).toLocaleString()}` : null} />
                         <InfoRow icon={Calendar} label="Ownership" value={property.ownershipDurationMonths ? `${Math.round(property.ownershipDurationMonths / 12)} years` : null} />
+                        <InfoRow icon={Home} label="Mortgage" value={property.mortgageStatus ?? null} />
+                        <InfoRow icon={MapPin} label="Absentee" value={property.absenteeOwner ? 'Yes' : 'No'} />
+                        <InfoRow icon={Mail} label="Mailing" value={property.mailingAddress ?? null} />
+                        <InfoRow icon={SearchCheck} label="Skip Traced" value={property.skipTracedAt ? format(new Date(property.skipTracedAt), 'MMM d, yyyy') : 'Not yet'} />
                       </div>
                     </div>
                   </>
@@ -281,7 +319,7 @@ export function PropertyDetailSheet({ lead, open, onClose }: PropertyDetailSheet
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
                     <h4 className="text-sm font-semibold text-muted-foreground">
-                      CONTACTS ({[lead.phone, lead.phone2, lead.phone3].filter(Boolean).length} phones)
+                      CONTACTS
                     </h4>
                     <div className="flex gap-2">
                       <Button
@@ -307,77 +345,95 @@ export function PropertyDetailSheet({ lead, open, onClose }: PropertyDetailSheet
                     </div>
                   </div>
 
-                  <ContactCard
-                    name={lead.ownerName ?? 'Owner'}
-                    relation="Owner"
-                    phone={lead.phone}
-                    phoneType={lead.phoneType}
-                    email={lead.email}
-                    source={lead.skipTraceSource}
-                    tracedAt={lead.skipTracedAt}
-                    isPrimary
-                  />
-                  {lead.phone2 && (
-                    <ContactCard
-                      name="Additional Contact"
-                      relation="Unknown"
-                      phone={lead.phone2}
-                      phoneType={lead.phone2Type}
-                      email={lead.email2}
-                      source={lead.skipTraceSource}
-                      tracedAt={lead.skipTracedAt}
-                    />
-                  )}
-                  {lead.phone3 && (
-                    <ContactCard
-                      name="Additional Contact"
-                      relation="Unknown"
-                      phone={lead.phone3}
-                      phoneType={lead.phone3Type}
-                      source={lead.skipTraceSource}
-                      tracedAt={lead.skipTracedAt}
-                    />
-                  )}
-                  {!lead.phone && !lead.phone2 && !lead.phone3 && (
-                    <div className="rounded-lg border border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/30 p-4 text-center space-y-2">
-                      <AlertTriangle className="h-6 w-6 text-amber-600 dark:text-amber-400 mx-auto" />
-                      <p className="text-sm font-medium">No contact data available</p>
-                      <p className="text-xs text-muted-foreground">Run a skip trace to find phone numbers and emails.</p>
+                  {contacts.isLoading ? (
+                    <div className="space-y-2">
+                      {[1, 2].map(i => <Skeleton key={i} className="h-20 w-full" />)}
                     </div>
+                  ) : (contacts.data ?? []).length > 0 ? (
+                    <div className="space-y-2">
+                      {(contacts.data ?? []).map((c: PropertyContact) => (
+                        <EnhancedContactCard key={c.contactId} contact={c} />
+                      ))}
+                    </div>
+                  ) : (
+                    <>
+                      <ContactCard
+                        name={lead.ownerName ?? 'Owner'}
+                        relation="Owner"
+                        phone={lead.phone}
+                        phoneType={lead.phoneType}
+                        email={lead.email}
+                        source={lead.skipTraceSource}
+                        tracedAt={lead.skipTracedAt}
+                        isPrimary
+                      />
+                      {lead.phone2 && (
+                        <ContactCard
+                          name="Additional Contact"
+                          relation="Unknown"
+                          phone={lead.phone2}
+                          phoneType={lead.phone2Type}
+                          email={lead.email2}
+                          source={lead.skipTraceSource}
+                          tracedAt={lead.skipTracedAt}
+                        />
+                      )}
+                      {lead.phone3 && (
+                        <ContactCard
+                          name="Additional Contact"
+                          relation="Unknown"
+                          phone={lead.phone3}
+                          phoneType={lead.phone3Type}
+                          source={lead.skipTraceSource}
+                          tracedAt={lead.skipTracedAt}
+                        />
+                      )}
+                      {!lead.phone && !lead.phone2 && !lead.phone3 && (
+                        <div className="rounded-lg border border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/30 p-4 text-center space-y-2">
+                          <AlertTriangle className="h-6 w-6 text-amber-600 dark:text-amber-400 mx-auto" />
+                          <p className="text-sm font-medium">No contact data available</p>
+                          <p className="text-xs text-muted-foreground">Run a skip trace to find phone numbers and emails.</p>
+                        </div>
+                      )}
+                    </>
                   )}
                 </div>
               </TabsContent>
 
-              {/* ─── Events Tab ─── */}
-              <TabsContent value="events" className="space-y-4 mt-4">
+              {/* ─── Signals Tab ─── */}
+              <TabsContent value="signals" className="space-y-4 mt-4">
                 <h4 className="text-sm font-semibold text-muted-foreground">
-                  DISTRESS EVENTS ({events.data?.length ?? 0})
+                  DISTRESS SIGNALS ({events.data?.length ?? 0})
                 </h4>
                 {events.isLoading ? (
                   <div className="space-y-2">
                     {[1, 2, 3].map(i => <Skeleton key={i} className="h-16 w-full" />)}
                   </div>
                 ) : (events.data ?? []).length === 0 ? (
-                  <p className="text-sm text-muted-foreground">No distress events recorded.</p>
+                  <p className="text-sm text-muted-foreground text-center py-6">No distress signals recorded</p>
                 ) : (
                   <div className="space-y-2">
                     {(events.data ?? []).map((event: DistressEvent) => (
-                      <EventCard key={event.eventId} event={event} />
+                      <SignalCard key={event.eventId} event={event} />
                     ))}
                   </div>
                 )}
               </TabsContent>
 
-              {/* ─── Activity Tab ─── */}
-              <TabsContent value="activity" className="space-y-4 mt-4">
+              {/* ─── History Tab ─── */}
+              <TabsContent value="history" className="space-y-4 mt-4">
                 <h4 className="text-sm font-semibold text-muted-foreground">HISTORY</h4>
-                {auditQuery.isLoading ? (
+                {history.isLoading ? (
                   <div className="space-y-2">
                     {[1, 2, 3].map(i => <Skeleton key={i} className="h-8 w-full" />)}
                   </div>
-                ) : (auditQuery.data ?? []).length === 0 ? (
-                  <p className="text-sm text-muted-foreground">No history available</p>
-                ) : (
+                ) : (history.data ?? []).length > 0 ? (
+                  <div className="space-y-2">
+                    {(history.data ?? []).map((item: TimelineItem, i: number) => (
+                      <TimelineEntry key={i} item={item} />
+                    ))}
+                  </div>
+                ) : (auditQuery.data ?? []).length > 0 ? (
                   <div className="space-y-2">
                     {(auditQuery.data ?? []).slice(0, 30).map((entry: AuditLogEntry) => (
                       <div key={entry.logId} className="flex items-start gap-2 text-xs">
@@ -391,17 +447,14 @@ export function PropertyDetailSheet({ lead, open, onClose }: PropertyDetailSheet
                       </div>
                     ))}
                   </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground">No history available</p>
                 )}
               </TabsContent>
 
               {/* ─── Notes Tab ─── */}
               <TabsContent value="notes" className="space-y-4 mt-4">
-                <h4 className="text-sm font-semibold text-muted-foreground">NOTES</h4>
-                {lead.notes ? (
-                  <p className="text-sm whitespace-pre-wrap">{lead.notes}</p>
-                ) : (
-                  <p className="text-sm text-muted-foreground">No notes recorded.</p>
-                )}
+                <NotesTab leadInstanceId={lead.leadInstanceId} legacyNotes={lead.notes} />
               </TabsContent>
 
             </div>
@@ -489,34 +542,6 @@ function ContactCard({
   );
 }
 
-function EventCard({ event }: { event: DistressEvent }) {
-  const severityColor =
-    event.severityLevel === 'HIGH' || event.severityLevel === 'CRITICAL'
-      ? 'text-red-600 dark:text-red-400'
-      : event.severityLevel === 'MODERATE'
-      ? 'text-amber-600 dark:text-amber-400'
-      : 'text-green-600 dark:text-green-400';
-
-  const dot =
-    event.severityLevel === 'HIGH' || event.severityLevel === 'CRITICAL'
-      ? 'bg-red-500' : event.severityLevel === 'MODERATE'
-      ? 'bg-amber-500' : 'bg-green-500';
-
-  return (
-    <div className="rounded-lg border p-3 space-y-1">
-      <div className="flex items-center gap-2">
-        <span className={`h-2 w-2 rounded-full ${dot}`} />
-        <span className="text-sm font-medium">{event.eventType.replace(/_/g, ' ')}</span>
-        <span className={`text-xs ${severityColor}`}>({event.severityLevel})</span>
-      </div>
-      <div className="text-xs text-muted-foreground">
-        Source: {event.source} | {event.eventLayer}
-        {event.eventDate && ` | ${format(new Date(event.eventDate), 'MMM d, yyyy')}`}
-      </div>
-    </div>
-  );
-}
-
 function StatusActions({
   lead, onClaim, onCompliance, onTransition, loading,
 }: {
@@ -574,6 +599,151 @@ function InfoRow({ icon: Icon, label, value }: { icon: React.ElementType; label:
       <Icon className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
       <span className="text-muted-foreground text-xs w-20 shrink-0">{label}</span>
       <span className="text-xs font-medium truncate">{value ?? '—'}</span>
+    </div>
+  );
+}
+
+function NotesTab({ leadInstanceId, legacyNotes }: { leadInstanceId: string; legacyNotes: string | null }) {
+  const [noteText, setNoteText] = useState('');
+  const notes = useLeadNotes(leadInstanceId);
+  const addNote = useAddNote();
+
+  const handleAdd = () => {
+    if (!noteText.trim()) return;
+    addNote.mutate(
+      { leadInstanceId, text: noteText.trim() },
+      { onSuccess: () => setNoteText('') },
+    );
+  };
+
+  return (
+    <div className="space-y-4">
+      <h4 className="text-sm font-semibold text-muted-foreground">NOTES</h4>
+      <div className="flex gap-2">
+        <Textarea
+          value={noteText}
+          onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setNoteText(e.target.value)}
+          placeholder="Add a note..."
+          className="min-h-[80px]"
+          onKeyDown={(e: React.KeyboardEvent) => {
+            if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) handleAdd();
+          }}
+        />
+        <Button
+          size="sm"
+          onClick={handleAdd}
+          disabled={!noteText.trim() || addNote.isPending}
+          className="self-end"
+        >
+          Add
+        </Button>
+      </div>
+      {legacyNotes && (
+        <div className="border rounded-lg p-3 bg-muted/30">
+          <p className="text-sm whitespace-pre-wrap">{legacyNotes}</p>
+          <p className="text-xs text-muted-foreground mt-2">Legacy note</p>
+        </div>
+      )}
+      {notes.isLoading ? (
+        <div className="space-y-2">
+          {[1, 2].map(i => <Skeleton key={i} className="h-16 w-full" />)}
+        </div>
+      ) : (notes.data ?? []).length === 0 && !legacyNotes ? (
+        <p className="text-sm text-muted-foreground">No notes yet. Add one above.</p>
+      ) : (
+        <div className="space-y-2">
+          {(notes.data ?? []).map((note: { activityId: string; text: string; createdBy: string | null; createdAt: string }) => (
+            <div key={note.activityId} className="border rounded-lg p-3">
+              <p className="text-sm whitespace-pre-wrap">{note.text}</p>
+              <div className="flex justify-between mt-2 text-xs text-muted-foreground">
+                <span>{note.createdBy ?? 'System'}</span>
+                <span>{format(new Date(note.createdAt), 'MMM d, h:mm a')}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SignalCard({ event }: { event: DistressEvent }) {
+  const config = EVENT_LABELS[event.eventType] ?? { label: event.eventType.replace(/_/g, ' '), severity: 'low' as const };
+  const severityColor = {
+    high: 'text-red-500 bg-red-500/10',
+    medium: 'text-amber-500 bg-amber-500/10',
+    low: 'text-blue-500 bg-blue-500/10',
+  };
+
+  return (
+    <div className="flex items-start justify-between rounded-lg border p-3">
+      <div>
+        <div className="flex items-center gap-2">
+          <Badge variant={event.eventLayer === 'CONFIRMED' ? 'destructive' : 'secondary'} className="text-[10px]">
+            {event.eventLayer}
+          </Badge>
+          <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${severityColor[config.severity]}`}>
+            {config.label}
+          </span>
+        </div>
+        <p className="text-xs text-muted-foreground mt-1">
+          Source: {event.source} {event.eventDate ? ` | ${format(new Date(event.eventDate), 'MMM d, yyyy')}` : ''}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function EnhancedContactCard({ contact }: { contact: PropertyContact }) {
+  return (
+    <div className="rounded-lg border p-3 space-y-2">
+      <div className="flex items-center gap-2">
+        {contact.isPrimary && <span className="text-amber-500">&#9733;</span>}
+        <span className="text-sm font-medium">{contact.fullName ?? 'Unknown'}</span>
+        {contact.contactType && (
+          <Badge variant="outline" className="text-[10px]">{contact.contactType}</Badge>
+        )}
+        {contact.dndCalls && <Badge variant="destructive" className="text-[10px]">DNC</Badge>}
+      </div>
+      {contact.phone && (
+        <div className="flex items-center gap-2 text-sm">
+          <Phone className="h-3.5 w-3.5 text-green-600" />
+          <span className="font-mono">{formatPhone(contact.phone)}</span>
+          {contact.phoneType && <span className="text-xs text-muted-foreground">({contact.phoneType})</span>}
+          {contact.phoneStatus && <span className="text-xs text-muted-foreground">{contact.phoneStatus}</span>}
+        </div>
+      )}
+      {contact.email && (
+        <div className="flex items-center gap-2 text-sm">
+          <Mail className="h-3.5 w-3.5 text-blue-600" />
+          <span>{contact.email}</span>
+        </div>
+      )}
+      {contact.source && (
+        <div className="text-xs text-muted-foreground">Source: {contact.source}</div>
+      )}
+    </div>
+  );
+}
+
+function TimelineEntry({ item }: { item: TimelineItem }) {
+  const iconMap: Record<string, React.ReactNode> = {
+    call: <Phone className="h-3.5 w-3.5 text-blue-500" />,
+    sms: <MessageSquare className="h-3.5 w-3.5 text-green-500" />,
+    disposition: <ClipboardCheck className="h-3.5 w-3.5 text-amber-500" />,
+    status_change: <ArrowRight className="h-3.5 w-3.5 text-purple-500" />,
+  };
+
+  return (
+    <div className="flex items-start gap-3 text-sm">
+      <div className="mt-1">{iconMap[item.type]}</div>
+      <div className="flex-1">
+        <p className="font-medium">{item.summary}</p>
+        {item.notes && <p className="text-xs text-muted-foreground">{item.notes}</p>}
+      </div>
+      <span className="text-xs text-muted-foreground whitespace-nowrap">
+        {formatDistanceToNow(new Date(item.timestamp), { addSuffix: true })}
+      </span>
     </div>
   );
 }

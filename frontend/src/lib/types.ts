@@ -135,6 +135,9 @@ export interface LeadWithProperty {
   dealScore: number | null;
   confidenceScore: number | null;
   eventCount: number;
+  topSignals?: string[];
+  tags?: Array<{ name: string; color: string | null }>;
+  lastActivity?: { type: string; channel: string; occurredAt: unknown } | null;
 }
 
 export interface SkipTraceResponse {

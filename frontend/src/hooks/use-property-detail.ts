@@ -4,6 +4,28 @@ import { useQuery } from '@tanstack/react-query';
 import api from '@/lib/api';
 import type { PropertyDetail, DistressEvent, Task, Tag } from '@/lib/types';
 
+export interface PropertyContact {
+  contactId: string;
+  fullName: string | null;
+  contactType: string;
+  phone: string | null;
+  phoneType: string | null;
+  phoneStatus: string | null;
+  email: string | null;
+  isPrimary: boolean | null;
+  dndCalls: boolean | null;
+  dndSms: boolean | null;
+  source: string | null;
+}
+
+export interface TimelineItem {
+  type: 'call' | 'sms' | 'disposition' | 'status_change';
+  summary: string;
+  notes: string | null;
+  timestamp: string;
+  userId: string | null;
+}
+
 export function usePropertyDetail(dominionLeadId: string | null) {
   return useQuery({
     queryKey: ['property-detail', dominionLeadId],
@@ -34,6 +56,40 @@ export function usePropertyEvents(dominionLeadId: string | null) {
       }
     },
     enabled: !!dominionLeadId,
+  });
+}
+
+export function usePropertyContacts(dominionLeadId: string | null) {
+  return useQuery({
+    queryKey: ['property-contacts', dominionLeadId],
+    queryFn: async (): Promise<PropertyContact[]> => {
+      try {
+        const { data } = await api.get<PropertyContact[]>(
+          `/api/properties/${dominionLeadId}/contacts`,
+        );
+        return data;
+      } catch {
+        return [];
+      }
+    },
+    enabled: !!dominionLeadId,
+  });
+}
+
+export function useLeadHistory(leadInstanceId: string | null) {
+  return useQuery({
+    queryKey: ['lead-history', leadInstanceId],
+    queryFn: async (): Promise<TimelineItem[]> => {
+      try {
+        const { data } = await api.get<TimelineItem[]>(
+          `/api/leads/${leadInstanceId}/history`,
+        );
+        return data;
+      } catch {
+        return [];
+      }
+    },
+    enabled: !!leadInstanceId,
   });
 }
 

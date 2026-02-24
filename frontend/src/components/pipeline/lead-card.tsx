@@ -3,6 +3,8 @@
 import { Phone, AlertTriangle, Clock } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { ScoreBadge } from '@/components/ui/score-badge';
+import { HoverCard, HoverCardContent, HoverCardTrigger } from '@/components/ui/hover-card';
+import { ScoreBreakdownTooltip } from '@/components/scoring/score-breakdown-tooltip';
 import type { PipelineLead } from '@/lib/types';
 import { formatDistanceToNow } from 'date-fns';
 
@@ -29,8 +31,22 @@ export function LeadCard({ lead, onClick }: LeadCardProps) {
         {lead.ownerName ?? 'Unknown Owner'}
       </div>
 
-      <div className="flex items-center gap-2">
-        <ScoreBadge score={lead.compositeScore} />
+      <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+        <HoverCard openDelay={200} closeDelay={100}>
+          <HoverCardTrigger asChild>
+            <span className="cursor-help inline-flex">
+              <ScoreBadge score={lead.compositeScore} />
+            </span>
+          </HoverCardTrigger>
+          <HoverCardContent className="w-80" side="right">
+            <ScoreBreakdownTooltip
+              compositeScore={lead.compositeScore}
+              motivationScore={lead.motivationScore ?? null}
+              dealScore={lead.dealScore ?? null}
+              dominionLeadId={lead.dominionLeadId}
+            />
+          </HoverCardContent>
+        </HoverCard>
         <ScoreBar score={lead.compositeScore} />
       </div>
 
