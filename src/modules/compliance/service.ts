@@ -1,6 +1,10 @@
 import { eq, desc } from 'drizzle-orm';
 import { db } from '../../db/connection.js';
-import { auditLog } from '../../db/schema/index.js';
+import {
+  auditLog,
+  properties,
+  propertyContacts,
+} from '../../db/schema/index.js';
 import type { AuditLogEntry } from '../../db/schema/index.js';
 import { generateId } from '../../lib/index.js';
 import { domainEvents } from '../../events/bus.js';
@@ -51,7 +55,7 @@ export async function getAuditTrail(
     .limit(limit);
 }
 
-// ─── DNC Check (Stub — Phase 2 Integration) ───────
+// ─── DNC Check (Charter Section VIII) ──────────────
 
 export interface DncCheckResult {
   phone: string;
@@ -61,10 +65,14 @@ export interface DncCheckResult {
 }
 
 /**
- * Check if a phone number is on the Do Not Call registry.
+ * Check if a property/lead is on Do Not Call.
  *
- * Phase 1: Stub that always returns false.
- * Phase 2: Integrate with DNC registry API.
+ * Charter Section VIII: DNC scrub before dial eligibility.
+ * No exceptions.
+ *
+ * Checks (in order):
+ * 1. property.dnc_flag — agent-set flag
+ * 2. property_contacts.dnd_calls — skip-trace derived (Tracerfy/BatchData)
  *
  * All checks are logged for compliance.
  */
@@ -72,24 +80,60 @@ export async function checkDnc(
   phone: string,
   dominionLeadId?: string,
 ): Promise<DncCheckResult> {
-  const result: DncCheckResult = {
-    phone,
-    isOnDnc: false,
-    checkedAt: new Date(),
-    source: 'stub_v1',
-  };
+  const checkedAt = new Date();
 
-  // Log the check regardless of result
+  if (!dominionLeadId) {
+    await logAudit({
+      dominionLeadId: undefined,
+      actionType: 'compliance.dnc_check',
+      metadata: { phone, result: false, source: 'no_lead_id' },
+    });
+    return { phone, isOnDnc: false, checkedAt, source: 'no_lead_id' };
+  }
+
+  // 1. Check property-level DNC flag (agent-set)
+  const [property] = await db
+    .select({ dncFlag: properties.dncFlag })
+    .from(properties)
+    .where(eq(properties.dominionLeadId, dominionLeadId))
+    .limit(1);
+
+  if (property?.dncFlag === true) {
+    await logAudit({
+      dominionLeadId,
+      actionType: 'compliance.dnc_check',
+      metadata: { phone, result: true, source: 'property_flag' },
+    });
+    return { phone, isOnDnc: true, checkedAt, source: 'property_flag' };
+  }
+
+  // 2. Check property_contacts — if ANY contact has dnd_calls=true, block
+  const contacts = await db
+    .select({ dndCalls: propertyContacts.dndCalls, phone: propertyContacts.phone })
+    .from(propertyContacts)
+    .where(eq(propertyContacts.dominionLeadId, dominionLeadId));
+
+  for (const contact of contacts) {
+    if (contact.dndCalls === true) {
+      const source = `contact_dnd:${contact.phone ?? 'unknown'}`;
+      await logAudit({
+        dominionLeadId,
+        actionType: 'compliance.dnc_check',
+        metadata: { phone: contact.phone, result: true, source },
+      });
+      return { phone, isOnDnc: true, checkedAt, source };
+    }
+  }
+
   await logAudit({
     dominionLeadId,
     actionType: 'compliance.dnc_check',
-    metadata: { phone, result: result.isOnDnc, source: result.source },
+    metadata: { phone, result: false, source: 'db_check' },
   });
-
-  return result;
+  return { phone, isOnDnc: false, checkedAt, source: 'db_check' };
 }
 
-// ─── Litigator Blacklist (Stub) ────────────────────
+// ─── Litigator Check (Charter Section VIII) ─────────
 
 export interface LitigatorCheckResult {
   ownerName: string;
@@ -99,27 +143,48 @@ export interface LitigatorCheckResult {
 }
 
 /**
- * Check if an owner is a known litigator.
+ * Check if a property/lead is a known litigator.
  *
- * Phase 1: Stub.
- * Phase 2: Integrate with litigator list provider.
+ * Charter Section VIII: Litigant suppression before dial eligibility.
+ * No exceptions.
+ *
+ * Checks:
+ * 1. property.litigant_flag — agent-set flag
  */
 export async function checkLitigator(
   ownerName: string,
   dominionLeadId?: string,
 ): Promise<LitigatorCheckResult> {
-  const result: LitigatorCheckResult = {
-    ownerName,
-    isLitigator: false,
-    checkedAt: new Date(),
-    source: 'stub_v1',
-  };
+  const checkedAt = new Date();
+
+  if (!dominionLeadId) {
+    await logAudit({
+      dominionLeadId: undefined,
+      actionType: 'compliance.litigator_check',
+      metadata: { ownerName, result: false, source: 'no_lead_id' },
+    });
+    return { ownerName, isLitigator: false, checkedAt, source: 'no_lead_id' };
+  }
+
+  const [property] = await db
+    .select({ litigantFlag: properties.litigantFlag })
+    .from(properties)
+    .where(eq(properties.dominionLeadId, dominionLeadId))
+    .limit(1);
+
+  if (property?.litigantFlag === true) {
+    await logAudit({
+      dominionLeadId,
+      actionType: 'compliance.litigator_check',
+      metadata: { ownerName, result: true, source: 'property_flag' },
+    });
+    return { ownerName, isLitigator: true, checkedAt, source: 'property_flag' };
+  }
 
   await logAudit({
     dominionLeadId,
     actionType: 'compliance.litigator_check',
-    metadata: { ownerName, result: result.isLitigator, source: result.source },
+    metadata: { ownerName, result: false, source: 'db_check' },
   });
-
-  return result;
+  return { ownerName, isLitigator: false, checkedAt, source: 'db_check' };
 }

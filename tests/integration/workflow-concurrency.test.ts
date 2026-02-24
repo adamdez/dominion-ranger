@@ -38,6 +38,7 @@ describe.skipIf(!canRun)('Workflow Concurrency', () => {
     await db.execute(sql`DELETE FROM audit_log`);
     await db.execute(sql`DELETE FROM lead_instances`);
     await db.execute(sql`DELETE FROM promoted_leads`);
+    await db.execute(sql`DELETE FROM signal_accumulation`);
     await db.execute(sql`DELETE FROM users`);
     await db.execute(sql`DELETE FROM properties`);
   });

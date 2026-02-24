@@ -19,6 +19,7 @@ import {
   runComplianceGating,
   transitionLead,
 } from '../../modules/workflow/index.js';
+import { logAudit } from '../../modules/compliance/index.js';
 import { logDisposition, getDispositions } from '../../modules/dispositions/index.js';
 import { createFollowUpFromDisposition } from '../../modules/cadence/index.js';
 import { transitionDealStage } from '../../modules/deal-stage/index.js';
@@ -361,6 +362,48 @@ export async function leadRoutes(app: FastifyInstance): Promise<void> {
     },
   );
 
+  // POST /api/leads/:dominionLeadId/compliance-flag — Set DNC/LITIGANT/OPT_OUT (Charter Section VIII)
+  const complianceFlagBody = z.object({
+    flag: z.enum(['DNC', 'LITIGANT', 'OPT_OUT']),
+    value: z.boolean(),
+  });
+  app.post<{ Params: { dominionLeadId: string }; Body: { flag: 'DNC' | 'LITIGANT' | 'OPT_OUT'; value: boolean } }>(
+    '/api/leads/:dominionLeadId/compliance-flag',
+    { preHandler: [requireRole('workflow.write')] },
+    async (request, reply) => {
+      const { dominionLeadId } = request.params;
+      const body = complianceFlagBody.parse(request.body);
+      const user = (request as unknown as Record<string, { userId: string }>).user;
+
+      const setPayload =
+        body.flag === 'DNC' ? { dncFlag: body.value } :
+        body.flag === 'LITIGANT' ? { litigantFlag: body.value } :
+        { optOutFlag: body.value };
+
+      const [updated] = await db
+        .update(properties)
+        .set({
+          ...setPayload,
+          updatedAt: new Date(),
+        })
+        .where(eq(properties.dominionLeadId, dominionLeadId))
+        .returning();
+
+      if (!updated) {
+        return reply.code(404).send({ error: 'Property not found' });
+      }
+
+      await logAudit({
+        dominionLeadId,
+        userId: user.userId,
+        actionType: body.value ? 'compliance.flag_set' : 'compliance.flag_removed',
+        metadata: { flag: body.flag, value: body.value },
+      });
+
+      return { success: true, [body.flag]: body.value };
+    },
+  );
+
   // POST /api/leads/:leadInstanceId/transition — Transition lead status
   app.post<{ Params: { leadInstanceId: string }; Body: { toStatus: string; expectedVersion: number; notes?: string } }>(
     '/api/leads/:leadInstanceId/transition',
@@ -457,7 +500,12 @@ export async function leadRoutes(app: FastifyInstance): Promise<void> {
         .from(scoringRecords)
         .as('ls');
 
-      const dqConditions = [eq(leadInstances.status, LeadStatus.DIAL_READY)];
+      const dqConditions = [
+        eq(leadInstances.status, LeadStatus.DIAL_READY),
+        or(isNull(properties.dncFlag), eq(properties.dncFlag, false)),
+        or(isNull(properties.litigantFlag), eq(properties.litigantFlag, false)),
+        or(isNull(properties.optOutFlag), eq(properties.optOutFlag, false)),
+      ];
       if (!dqIsAdminOrManager) {
         dqConditions.push(eq(leadInstances.assignedTo, dqUser.userId));
       }
@@ -466,6 +514,7 @@ export async function leadRoutes(app: FastifyInstance): Promise<void> {
       const [countResult] = await db
         .select({ count: sql<number>`count(*)::int` })
         .from(leadInstances)
+        .innerJoin(properties, eq(leadInstances.dominionLeadId, properties.dominionLeadId))
         .where(dqWhere);
 
       const rows = await db

@@ -196,13 +196,9 @@ export async function runComplianceGating(leadInstanceId: string): Promise<LeadI
     .from(properties)
     .where(eq(properties.dominionLeadId, current.dominionLeadId));
 
-  const dncResult = property?.phone
-    ? await checkDnc(property.phone, current.dominionLeadId)
-    : { isOnDnc: false, checkedAt: new Date() };
+  const dncResult = await checkDnc(property?.phone ?? '', current.dominionLeadId);
 
-  const litigatorResult = property?.ownerName
-    ? await checkLitigator(property.ownerName, current.dominionLeadId)
-    : { isLitigator: false, checkedAt: new Date() };
+  const litigatorResult = await checkLitigator(property?.ownerName ?? '', current.dominionLeadId);
 
   const complianceCleared = !dncResult.isOnDnc && !litigatorResult.isLitigator;
   const nextStatus: LeadStatusType = complianceCleared ? LeadStatus.DIAL_READY : LeadStatus.DEAD;
