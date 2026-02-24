@@ -27,6 +27,8 @@ export const transitionLeadBody = z.object({
   notes: z.string().optional(),
 });
 
+export const leadsExportQuery = leadsListQuery.omit({ page: true, pageSize: true });
+
 export const dialQueueQuery = z.object({
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(BUSINESS_RULES.pagination.maxPageSize).default(BUSINESS_RULES.pagination.defaultPageSize),

@@ -15,8 +15,10 @@ import { ErrorState } from '@/components/ui/error-state';
 import { LeadCard } from '@/components/pipeline/lead-card';
 import { PropertyDetailSheet } from '@/components/property-detail/property-detail-sheet';
 import { usePipeline, useDealStageTransition } from '@/hooks/use-pipeline';
-import { DEAL_STAGES } from '@/lib/constants';
+import { DEAL_STAGES, getScoreTier } from '@/lib/constants';
 import type { PipelineLead, LeadWithProperty } from '@/lib/types';
+import { ExportCsvButton } from '@/components/ui/export-csv-button';
+import type { CsvColumn } from '@/lib/csv-export';
 
 export default function PipelinePage() {
   const { data: leads, isLoading, error, refetch } = usePipeline();
@@ -100,9 +102,23 @@ export default function PipelinePage() {
     );
   }
 
+  const pipelineExportColumns: CsvColumn<PipelineLead>[] = [
+    { key: 'streetAddress', header: 'Address' },
+    { key: 'ownerName', header: 'Owner' },
+    { key: 'county', header: 'County' },
+    { key: (r) => r.dealStage ?? '', header: 'Stage' },
+    { key: 'compositeScore', header: 'Score' },
+    { key: (r) => getScoreTier(r.compositeScore ?? 0), header: 'Tier' },
+    { key: 'assignedTo', header: 'Assigned To' },
+    { key: (r) => (r.lastActivity?.occurredAt ? new Date(r.lastActivity.occurredAt as string).toISOString().split('T')[0] : ''), header: 'Last Activity Date' },
+  ];
+
   return (
-    <div className="h-[calc(100vh-8rem)]">
-      <ScrollArea className="h-full w-full">
+    <div className="flex flex-col h-[calc(100vh-8rem)]">
+      <div className="flex justify-end shrink-0 pb-2">
+        <ExportCsvButton data={leads} columns={pipelineExportColumns} filename="dominion-pipeline" />
+      </div>
+      <ScrollArea className="flex-1 min-h-0 w-full">
         <DragDropContext onDragEnd={handleDragEnd}>
           <div className="flex gap-3 pb-4 min-w-max px-1">
             {DEAL_STAGES.map(stage => {

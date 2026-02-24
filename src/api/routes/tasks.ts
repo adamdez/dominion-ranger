@@ -1,4 +1,5 @@
 import type { FastifyInstance } from 'fastify';
+import { Readable } from 'stream';
 import { eq, and, sql, lte, gte, desc, asc } from 'drizzle-orm';
 import { db } from '../../db/connection.js';
 import { tasks, TaskStatus } from '../../db/schema/index.js';
@@ -96,6 +97,102 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
         .where(and(...odConditions))
         .orderBy(tasks.dueAt);
       return rows;
+    },
+  );
+
+  // GET /api/tasks/export — CSV export of tasks (streaming)
+  app.get<{ Querystring: { view?: string } }>(
+    '/api/tasks/export',
+    { preHandler: [requireRole('properties.read')] },
+    async (request, reply) => {
+      const user = (request as unknown as Record<string, { userId: string }>).user;
+      const view = (request.query as { view?: string }).view ?? 'today';
+
+      const now = new Date();
+      const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const todayEnd = new Date(todayStart.getTime() + 86400000);
+      const weekEnd = new Date(todayStart.getTime() + 7 * 86400000);
+
+      const conditions = [eq(tasks.assignedTo, user.userId)];
+
+      switch (view) {
+        case 'today':
+          conditions.push(eq(tasks.status, TaskStatus.PENDING));
+          conditions.push(gte(tasks.dueAt, todayStart));
+          conditions.push(lte(tasks.dueAt, todayEnd));
+          break;
+        case 'overdue':
+          conditions.push(eq(tasks.status, TaskStatus.PENDING));
+          conditions.push(lte(tasks.dueAt, now));
+          break;
+        case 'upcoming':
+          conditions.push(eq(tasks.status, TaskStatus.PENDING));
+          conditions.push(gte(tasks.dueAt, todayEnd));
+          conditions.push(lte(tasks.dueAt, weekEnd));
+          break;
+        case 'completed':
+          conditions.push(eq(tasks.status, TaskStatus.COMPLETED));
+          conditions.push(gte(tasks.completedAt, todayStart));
+          break;
+        default:
+          conditions.push(eq(tasks.status, TaskStatus.PENDING));
+      }
+
+      const escapeCsv = (v: unknown): string => {
+        if (v === null || v === undefined) return '""';
+        const s = String(v).replace(/"/g, '""');
+        return `"${s}"`;
+      };
+
+      const header = '"Task Title","Lead ID","Due Date","Priority","Status","Assigned To","Created Date"\n';
+
+      async function* csvStream() {
+        yield header;
+        const batchSize = 1000;
+        let offset = 0;
+        while (true) {
+          const rows = await db
+            .select({
+              title: tasks.title,
+              leadInstanceId: tasks.leadInstanceId,
+              dominionLeadId: tasks.dominionLeadId,
+              dueAt: tasks.dueAt,
+              priority: tasks.priority,
+              status: tasks.status,
+              assignedTo: tasks.assignedTo,
+              createdAt: tasks.createdAt,
+            })
+            .from(tasks)
+            .where(and(...conditions))
+            .orderBy(asc(tasks.dueAt))
+            .limit(batchSize)
+            .offset(offset);
+
+          if (rows.length === 0) break;
+          for (const r of rows) {
+            const leadId = r.leadInstanceId ?? r.dominionLeadId ?? '';
+            const dueDate = r.dueAt ? new Date(r.dueAt).toISOString().split('T')[0] : '';
+            const createdDate = r.createdAt ? new Date(r.createdAt).toISOString().split('T')[0] : '';
+            const row = [
+              escapeCsv(r.title),
+              escapeCsv(leadId),
+              escapeCsv(dueDate),
+              escapeCsv(r.priority),
+              escapeCsv(r.status),
+              escapeCsv(r.assignedTo),
+              escapeCsv(createdDate),
+            ];
+            yield row.join(',') + '\n';
+          }
+          offset += batchSize;
+          if (rows.length < batchSize) break;
+        }
+      }
+
+      const filename = `dominion-tasks-${view}-${new Date().toISOString().split('T')[0]}.csv`;
+      reply.header('Content-Type', 'text/csv; charset=utf-8');
+      reply.header('Content-Disposition', `attachment; filename="${filename}"`);
+      return reply.send(Readable.from(csvStream()));
     },
   );
 

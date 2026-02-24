@@ -160,6 +160,18 @@ export async function scoringRoutes(app: FastifyInstance): Promise<void> {
     },
   );
 
+  // GET /api/scoring/export — CSV export of scored properties (redirects to leads export)
+  app.get<{ Querystring: Record<string, string> }>(
+    '/api/scoring/export',
+    { preHandler: [requireRole('properties.read')] },
+    async (request, reply) => {
+      // Redirect to leads export with scoring defaults; leads route handles the actual export
+      const q = request.query as Record<string, string>;
+      const params = new URLSearchParams({ ...q, sortBy: q.sortBy ?? 'compositeScore', sortOrder: q.sortOrder ?? 'desc' });
+      return reply.redirect(`/api/leads/export?${params.toString()}`, 302);
+    },
+  );
+
   // GET /api/scoring/stats — Scoring overview
   app.get(
     '/api/scoring/stats',

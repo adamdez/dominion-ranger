@@ -28,10 +28,30 @@ import { useLeads } from '@/hooks/use-leads';
 import { useSkipTrace } from '@/hooks/use-skip-trace';
 import { useBulkAssign, useBulkSkipTrace } from '@/hooks/use-bulk-actions';
 import { useSavedFilters, useCreateSavedFilter, useDeleteSavedFilter } from '@/hooks/use-saved-filters';
-import { LEAD_STATUS } from '@/lib/constants';
+import { LEAD_STATUS, getScoreTier } from '@/lib/constants';
 import type { LeadWithProperty } from '@/lib/types';
+import { ExportCsvButton } from '@/components/ui/export-csv-button';
+import type { CsvColumn } from '@/lib/csv-export';
 import { formatDistanceToNow } from 'date-fns';
 import { toast } from 'sonner';
+
+const LEADS_EXPORT_COLUMNS: CsvColumn<LeadWithProperty>[] = [
+  { key: 'streetAddress', header: 'Address' },
+  { key: 'city', header: 'City' },
+  { key: 'county', header: 'County' },
+  { key: 'ownerName', header: 'Owner Name' },
+  { key: 'compositeScore', header: 'Composite Score' },
+  { key: 'motivationScore', header: 'Motivation Score' },
+  { key: 'dealScore', header: 'Deal Score' },
+  { key: (r) => getScoreTier(r.compositeScore ?? 0), header: 'Tier' },
+  { key: 'status', header: 'Status' },
+  { key: (r) => (r as LeadWithProperty & { dealStage?: string }).dealStage ?? '', header: 'Stage' },
+  { key: 'assignedTo', header: 'Assigned To' },
+  { key: 'phone', header: 'Phone' },
+  { key: 'email', header: 'Email' },
+  { key: (r) => (r.skipTracedAt ? 'Traced' : 'Not traced'), header: 'Skip Trace Status' },
+  { key: (r) => (r.createdAt ? new Date(r.createdAt).toISOString().split('T')[0] : ''), header: 'Created Date' },
+];
 
 export default function LeadsPage() {
   const [page, setPage] = useState(1);
@@ -313,6 +333,21 @@ export default function LeadsPage() {
         <span className="ml-auto text-sm text-muted-foreground">
           {data?.pagination.total ?? 0} leads
         </span>
+        <ExportCsvButton
+          data={rows}
+          columns={LEADS_EXPORT_COLUMNS}
+          filename="dominion-leads"
+          totalCount={data?.pagination.total}
+          exportUrl={data && data.pagination.total > rows.length
+            ? `/api/leads/export?${[
+                status && `status=${encodeURIComponent(status)}`,
+                search && `search=${encodeURIComponent(search)}`,
+                `sortBy=${sortBy}`,
+                `sortOrder=${sortOrder}`,
+                view !== 'all' && `view=${view}`,
+              ].filter(Boolean).join('&')}`
+            : undefined}
+        />
       </div>
 
       {/* Table */}

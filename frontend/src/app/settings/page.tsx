@@ -10,8 +10,17 @@ import { Switch } from '@/components/ui/switch';
 import { ErrorState } from '@/components/ui/error-state';
 import { useSystemStats } from '@/hooks/use-system';
 import { useScoringStats, useRunScoring, useRunPromotion } from '@/hooks/use-scoring';
-import { useFeatureFlags, useToggleFeatureFlag, useRecentErrors, useDeepHealth } from '@/hooks/use-settings';
+import { useFeatureFlags, useToggleFeatureFlag, useRecentErrors, useDeepHealth, type ErrorLogEntry } from '@/hooks/use-settings';
+import { ExportCsvButton } from '@/components/ui/export-csv-button';
+import type { CsvColumn } from '@/lib/csv-export';
 import { SCORE_TIERS } from '@/lib/constants';
+
+const ERRORS_EXPORT_COLUMNS: CsvColumn<ErrorLogEntry>[] = [
+  { key: (e) => new Date(e.createdAt).toISOString(), header: 'Timestamp' },
+  { key: 'message', header: 'Error Message' },
+  { key: 'errorType', header: 'Module' },
+  { key: (e) => e.stack ?? '', header: 'Stack Trace' },
+];
 
 export default function SettingsPage() {
   const stats = useSystemStats();
@@ -191,6 +200,13 @@ export default function SettingsPage() {
               <Badge variant="destructive" className="ml-auto text-xs">
                 {errors.data.length}
               </Badge>
+            )}
+            {errors.data && errors.data.length > 0 && (
+              <ExportCsvButton
+                data={errors.data}
+                columns={ERRORS_EXPORT_COLUMNS}
+                filename="dominion-errors"
+              />
             )}
           </CardTitle>
         </CardHeader>

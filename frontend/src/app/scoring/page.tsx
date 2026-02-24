@@ -2,6 +2,9 @@
 
 import { useState } from 'react';
 import { BarChart3, X } from 'lucide-react';
+import { ExportCsvButton } from '@/components/ui/export-csv-button';
+import { getScoreTier } from '@/lib/constants';
+import type { CsvColumn } from '@/lib/csv-export';
 import {
   Table,
   TableBody,
@@ -21,7 +24,21 @@ import { StatCard } from '@/components/ui/stat-card';
 import { useScoringStats } from '@/hooks/use-scoring';
 import { useLeads } from '@/hooks/use-leads';
 import { SCORE_TIERS } from '@/lib/constants';
+import type { LeadWithProperty } from '@/lib/types';
 import { formatDistanceToNow } from 'date-fns';
+
+const SCORING_EXPORT_COLUMNS: CsvColumn<LeadWithProperty>[] = [
+  { key: 'streetAddress', header: 'Address' },
+  { key: 'ownerName', header: 'Owner' },
+  { key: 'county', header: 'County' },
+  { key: 'compositeScore', header: 'Composite Score' },
+  { key: 'motivationScore', header: 'Motivation Score' },
+  { key: 'dealScore', header: 'Deal Score' },
+  { key: 'confidenceScore', header: 'Confidence Score' },
+  { key: (r) => getScoreTier(r.compositeScore ?? 0), header: 'Tier' },
+  { key: (r) => (r.eventCount != null ? String(r.eventCount) : ''), header: 'Event Count' },
+  { key: (r) => (r.updatedAt ? new Date(r.updatedAt).toISOString().split('T')[0] : ''), header: 'Last Scored Date' },
+];
 
 export default function ScoringPage() {
   const [page, setPage] = useState(1);
@@ -113,6 +130,19 @@ export default function ScoringPage() {
         <span className="ml-auto text-sm text-muted-foreground">
           {data?.pagination.total ?? 0} results
         </span>
+        <ExportCsvButton
+          data={data?.data ?? []}
+          columns={SCORING_EXPORT_COLUMNS}
+          filename="dominion-scoring"
+          totalCount={data?.pagination.total}
+          exportUrl={data && data.pagination.total > (data.data?.length ?? 0)
+            ? `/api/scoring/export?${[
+                minScore && `minScore=${minScore}`,
+                'sortBy=compositeScore',
+                'sortOrder=desc',
+              ].filter(Boolean).join('&')}`
+            : undefined}
+        />
       </div>
 
       {/* Leaderboard Table */}

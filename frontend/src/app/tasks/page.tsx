@@ -2,6 +2,8 @@
 
 import { useState } from 'react';
 import { CheckCircle, Clock, AlertCircle, Phone, FileText, Calendar, Trash2 } from 'lucide-react';
+import { ExportCsvButton } from '@/components/ui/export-csv-button';
+import type { CsvColumn } from '@/lib/csv-export';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -34,14 +36,44 @@ export default function TasksPage() {
   const tasks = data?.tasks ?? [];
   const stats = data?.stats ?? { overdue: 0, todayPending: 0, totalPending: 0, completedToday: 0 };
 
+  const taskExportColumns: CsvColumn<Task>[] = [
+    { key: 'title', header: 'Task Title' },
+    { key: (t) => t.leadInstanceId ?? t.dominionLeadId ?? '', header: 'Lead ID' },
+    { key: (t) => (t.dueAt ? new Date(t.dueAt).toISOString().split('T')[0] : ''), header: 'Due Date' },
+    { key: 'priority', header: 'Priority' },
+    { key: 'status', header: 'Status' },
+    { key: 'assignedTo', header: 'Assigned To' },
+    { key: (t) => (t.createdAt ? new Date(t.createdAt).toISOString().split('T')[0] : ''), header: 'Created Date' },
+  ];
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold tracking-tight">Tasks</h1>
-        <Button onClick={() => setCreateOpen(true)} size="sm">
-          <Plus className="mr-1.5 h-3.5 w-3.5" />
-          New Task
-        </Button>
+        <div className="flex items-center gap-2">
+          <ExportCsvButton
+            data={tasks}
+            columns={taskExportColumns}
+            filename="dominion-tasks"
+            totalCount={
+              view === 'today' ? stats.todayPending
+              : view === 'overdue' ? stats.overdue
+              : view === 'completed' ? stats.completedToday
+              : undefined
+            }
+            exportUrl={
+              (view === 'today' && stats.todayPending > tasks.length) ||
+              (view === 'overdue' && stats.overdue > tasks.length) ||
+              (view === 'completed' && stats.completedToday > tasks.length)
+                ? `/api/tasks/export?view=${view}`
+                : undefined
+            }
+          />
+          <Button onClick={() => setCreateOpen(true)} size="sm">
+            <Plus className="mr-1.5 h-3.5 w-3.5" />
+            New Task
+          </Button>
+        </div>
       </div>
 
       {/* Stats cards */}

@@ -1,4 +1,5 @@
 import type { FastifyInstance } from 'fastify';
+import { Readable } from 'stream';
 import { sql, eq, and, or, ilike, desc, asc, inArray, isNull } from 'drizzle-orm';
 import { db } from '../../db/connection.js';
 import {
@@ -24,7 +25,7 @@ import { logDisposition, getDispositions } from '../../modules/dispositions/inde
 import { createFollowUpFromDisposition } from '../../modules/cadence/index.js';
 import { transitionDealStage } from '../../modules/deal-stage/index.js';
 import { requireRole } from '../middleware/auth.js';
-import { leadsListQuery, claimLeadBody, transitionLeadBody, dialQueueQuery } from '../schemas/leads.js';
+import { leadsListQuery, leadsExportQuery, claimLeadBody, transitionLeadBody, dialQueueQuery } from '../schemas/leads.js';
 import { transitionDealStageBody } from '../schemas/deal-stage.js';
 import { paginate } from '../types.js';
 import type { LeadStatusValue, DealStageValue } from '../../db/schema/constants.js';
@@ -261,6 +262,176 @@ export async function leadRoutes(app: FastifyInstance): Promise<void> {
     },
   );
 
+  // GET /api/leads/export — Full CSV export (streaming, respects filters)
+  app.get<{ Querystring: Record<string, string> }>(
+    '/api/leads/export',
+    { preHandler: [requireRole('properties.read')] },
+    async (request, reply) => {
+      const query = leadsExportQuery.parse(request.query);
+      const user = (request as unknown as Record<string, { userId: string; role: string }>).user;
+      const userId = user?.userId ?? 'admin-bootstrap';
+      const isAdminOrManager = user?.role === 'ADMIN' || user?.role === 'MANAGER';
+
+      const conditions = [];
+      if (!isAdminOrManager) {
+        conditions.push(eq(leadInstances.assignedTo, userId));
+      } else if (query.view === 'mine') {
+        conditions.push(eq(leadInstances.assignedTo, userId));
+      } else if (query.view === 'unassigned') {
+        conditions.push(isNull(leadInstances.assignedTo));
+      }
+      if (query.status) {
+        const statuses = query.status.split(',') as LeadStatusValue[];
+        if (statuses.length === 1) {
+          conditions.push(eq(leadInstances.status, statuses[0]));
+        } else {
+          conditions.push(or(...statuses.map(s => eq(leadInstances.status, s)))!);
+        }
+      }
+      if (query.county) conditions.push(eq(properties.county, query.county));
+      if (query.search) {
+        conditions.push(
+          or(
+            ilike(properties.streetAddress, `%${query.search}%`),
+            ilike(properties.ownerName, `%${query.search}%`),
+          )!,
+        );
+      }
+      if (query.dealStage) {
+        const stages = query.dealStage.split(',');
+        if (stages.length === 1) {
+          conditions.push(eq(leadInstances.dealStage, stages[0]));
+        } else {
+          conditions.push(inArray(leadInstances.dealStage, stages));
+        }
+      }
+      if (query.hasPhone === 'true') {
+        conditions.push(sql`${properties.phone} IS NOT NULL AND ${properties.phone} != ''`);
+      } else if (query.hasPhone === 'false') {
+        conditions.push(sql`(${properties.phone} IS NULL OR ${properties.phone} = '')`);
+      }
+      if (query.tags) {
+        const tagNames = query.tags.split(',');
+        conditions.push(
+          sql`${leadInstances.leadInstanceId} IN (
+            SELECT lit.lead_instance_id FROM lead_instance_tags lit
+            INNER JOIN tags t ON t.id = lit.tag_id
+            WHERE t.name = ANY(${tagNames})
+          )`,
+        );
+      }
+
+      const latestScores = db
+        .select({
+          dominionLeadId: scoringRecords.dominionLeadId,
+          compositeScore: scoringRecords.compositeScore,
+          motivationScore: scoringRecords.motivationScore,
+          dealScore: scoringRecords.dealScore,
+          confidenceScore: scoringRecords.confidenceScore,
+          rn: sql<number>`ROW_NUMBER() OVER (PARTITION BY ${scoringRecords.dominionLeadId} ORDER BY ${scoringRecords.createdAt} DESC)`.as('rn'),
+        })
+        .from(scoringRecords)
+        .as('ls');
+
+      if (query.minScore !== undefined) conditions.push(sql`${latestScores.compositeScore} >= ${query.minScore}`);
+      if (query.maxScore !== undefined) conditions.push(sql`${latestScores.compositeScore} <= ${query.maxScore}`);
+
+      const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+      const sortColumn = query.sortBy === 'compositeScore' ? latestScores.compositeScore
+        : query.sortBy === 'ownerName' ? properties.ownerName
+        : query.sortBy === 'streetAddress' ? properties.streetAddress
+        : query.sortBy === 'status' ? leadInstances.status
+        : query.sortBy === 'updatedAt' ? leadInstances.updatedAt
+        : query.sortBy === 'dealStage' ? leadInstances.dealStage
+        : leadInstances.createdAt;
+      const orderFn = query.sortOrder === 'asc' ? asc : desc;
+
+      const escapeCsv = (v: unknown): string => {
+        if (v === null || v === undefined) return '""';
+        const s = String(v).replace(/"/g, '""');
+        return `"${s}"`;
+      };
+
+      const LEAD_EXPORT_COLS = [
+        'streetAddress', 'city', 'state', 'zip', 'county', 'ownerName',
+        'compositeScore', 'motivationScore', 'dealScore', 'confidenceScore',
+        'status', 'dealStage', 'assignedTo', 'phone', 'email',
+        'skipTracedAt', 'createdAt',
+      ] as const;
+
+      const header = LEAD_EXPORT_COLS.map(c => `"${c}"`).join(',');
+
+      async function* csvStream() {
+        yield header + '\n';
+        const batchSize = 2000;
+        let offset = 0;
+        while (true) {
+          const rows = await db
+            .select({
+              streetAddress: properties.streetAddress,
+              city: properties.city,
+              state: properties.state,
+              zip: properties.zip,
+              county: properties.county,
+              ownerName: properties.ownerName,
+              compositeScore: latestScores.compositeScore,
+              motivationScore: latestScores.motivationScore,
+              dealScore: latestScores.dealScore,
+              confidenceScore: latestScores.confidenceScore,
+              status: leadInstances.status,
+              dealStage: leadInstances.dealStage,
+              assignedTo: leadInstances.assignedTo,
+              phone: properties.phone,
+              email: properties.email,
+              skipTracedAt: properties.skipTracedAt,
+              createdAt: leadInstances.createdAt,
+            })
+            .from(leadInstances)
+            .innerJoin(properties, eq(leadInstances.dominionLeadId, properties.dominionLeadId))
+            .leftJoin(latestScores, and(
+              eq(latestScores.dominionLeadId, leadInstances.dominionLeadId),
+              eq(latestScores.rn, 1),
+            ))
+            .where(whereClause)
+            .orderBy(orderFn(sortColumn))
+            .limit(batchSize)
+            .offset(offset);
+
+          if (rows.length === 0) break;
+          for (const r of rows) {
+            const row = [
+              escapeCsv(r.streetAddress),
+              escapeCsv(r.city),
+              escapeCsv(r.state),
+              escapeCsv(r.zip),
+              escapeCsv(r.county),
+              escapeCsv(r.ownerName),
+              escapeCsv(r.compositeScore),
+              escapeCsv(r.motivationScore),
+              escapeCsv(r.dealScore),
+              escapeCsv(r.confidenceScore),
+              escapeCsv(r.status),
+              escapeCsv(r.dealStage),
+              escapeCsv(r.assignedTo),
+              escapeCsv(r.phone),
+              escapeCsv(r.email),
+              escapeCsv(r.skipTracedAt ? 'Traced' : 'Not traced'),
+              escapeCsv(r.createdAt ? new Date(r.createdAt).toISOString().split('T')[0] : ''),
+            ];
+            yield row.join(',') + '\n';
+          }
+          offset += batchSize;
+          if (rows.length < batchSize) break;
+        }
+      }
+
+      const filename = `dominion-leads-${new Date().toISOString().split('T')[0]}.csv`;
+      reply.header('Content-Type', 'text/csv; charset=utf-8');
+      reply.header('Content-Disposition', `attachment; filename="${filename}"`);
+      return reply.send(Readable.from(csvStream()));
+    },
+  );
+
   // GET /api/leads/:leadInstanceId — Single lead with property data
   app.get<{ Params: { leadInstanceId: string } }>(
     '/api/leads/:leadInstanceId',
@@ -475,6 +646,104 @@ export async function leadRoutes(app: FastifyInstance): Promise<void> {
         closedThisMonth: closedThisMonth.count,
         byStatus: statuses,
       };
+    },
+  );
+
+  // GET /api/dial-queue/export — Full CSV export of dial queue (streaming)
+  app.get(
+    '/api/dial-queue/export',
+    { preHandler: [requireRole('workflow.write')] },
+    async (request, reply) => {
+      const dqUser = (request as unknown as Record<string, { userId: string; role: string }>).user;
+      const dqIsAdminOrManager = dqUser?.role === 'ADMIN' || dqUser?.role === 'MANAGER';
+
+      const latestScores = db
+        .select({
+          dominionLeadId: scoringRecords.dominionLeadId,
+          compositeScore: scoringRecords.compositeScore,
+          motivationScore: scoringRecords.motivationScore,
+          dealScore: scoringRecords.dealScore,
+          confidenceScore: scoringRecords.confidenceScore,
+          rn: sql<number>`ROW_NUMBER() OVER (PARTITION BY ${scoringRecords.dominionLeadId} ORDER BY ${scoringRecords.createdAt} DESC)`.as('rn'),
+        })
+        .from(scoringRecords)
+        .as('ls');
+
+      const dqConditions = [
+        eq(leadInstances.status, LeadStatus.DIAL_READY),
+        or(isNull(properties.dncFlag), eq(properties.dncFlag, false)),
+        or(isNull(properties.litigantFlag), eq(properties.litigantFlag, false)),
+        or(isNull(properties.optOutFlag), eq(properties.optOutFlag, false)),
+      ];
+      if (!dqIsAdminOrManager) {
+        dqConditions.push(eq(leadInstances.assignedTo, dqUser.userId));
+      }
+      const dqWhere = and(...dqConditions);
+
+      const escapeCsv = (v: unknown): string => {
+        if (v === null || v === undefined) return '""';
+        const s = String(v).replace(/"/g, '""');
+        return `"${s}"`;
+      };
+
+      const header = '"Address","Owner","Phone","Score","Tier","Assigned To","Last Updated"\n';
+
+      function getTier(score: number | string | null): string {
+        const n = score != null ? Number(score) : null;
+        if (n == null || isNaN(n)) return 'D';
+        if (n >= 80) return 'A';
+        if (n >= 60) return 'B';
+        if (n >= 40) return 'C';
+        return 'D';
+      }
+
+      async function* csvStream() {
+        yield header;
+        const batchSize = 2000;
+        let offset = 0;
+        while (true) {
+          const rows = await db
+            .select({
+              streetAddress: properties.streetAddress,
+              ownerName: properties.ownerName,
+              phone: properties.phone,
+              compositeScore: latestScores.compositeScore,
+              assignedTo: leadInstances.assignedTo,
+              updatedAt: leadInstances.updatedAt,
+            })
+            .from(leadInstances)
+            .innerJoin(properties, eq(leadInstances.dominionLeadId, properties.dominionLeadId))
+            .leftJoin(latestScores, and(
+              eq(latestScores.dominionLeadId, leadInstances.dominionLeadId),
+              eq(latestScores.rn, 1),
+            ))
+            .where(dqWhere)
+            .orderBy(desc(latestScores.compositeScore))
+            .limit(batchSize)
+            .offset(offset);
+
+          if (rows.length === 0) break;
+          for (const r of rows) {
+            const row = [
+              escapeCsv(r.streetAddress),
+              escapeCsv(r.ownerName),
+              escapeCsv(r.phone),
+              escapeCsv(r.compositeScore),
+              escapeCsv(getTier(r.compositeScore)),
+              escapeCsv(r.assignedTo),
+              escapeCsv(r.updatedAt ? new Date(r.updatedAt).toISOString().split('T')[0] : ''),
+            ];
+            yield row.join(',') + '\n';
+          }
+          offset += batchSize;
+          if (rows.length < batchSize) break;
+        }
+      }
+
+      const filename = `dominion-dial-queue-${new Date().toISOString().split('T')[0]}.csv`;
+      reply.header('Content-Type', 'text/csv; charset=utf-8');
+      reply.header('Content-Disposition', `attachment; filename="${filename}"`);
+      return reply.send(Readable.from(csvStream()));
     },
   );
 

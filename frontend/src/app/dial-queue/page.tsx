@@ -11,6 +11,9 @@ import {
   Wifi,
   WifiOff,
 } from 'lucide-react';
+import { ExportCsvButton } from '@/components/ui/export-csv-button';
+import { getScoreTier } from '@/lib/constants';
+import type { CsvColumn } from '@/lib/csv-export';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -28,6 +31,7 @@ import { useSkipTrace } from '@/hooks/use-skip-trace';
 import { useDialerStatus } from '@/hooks/use-dialer';
 import { useTwilioContext } from '@/components/dialer/twilio-provider';
 import { DISPOSITION_TYPES } from '@/lib/constants';
+import type { LeadWithProperty } from '@/lib/types';
 
 export default function DialQueuePage() {
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -152,8 +156,28 @@ export default function DialQueuePage() {
     );
   }
 
+  const dialQueueExportColumns: CsvColumn<LeadWithProperty>[] = [
+    { key: 'streetAddress', header: 'Address' },
+    { key: 'ownerName', header: 'Owner' },
+    { key: 'phone', header: 'Phone' },
+    { key: 'compositeScore', header: 'Score' },
+    { key: (r) => getScoreTier(r.compositeScore ?? 0), header: 'Tier' },
+    { key: 'assignedTo', header: 'Assigned To' },
+    { key: (r) => (r.updatedAt ? new Date(r.updatedAt).toISOString().split('T')[0] : ''), header: 'Last Updated' },
+  ];
+
   return (
-    <div className="grid gap-4 lg:grid-cols-[1fr_340px]">
+    <div className="space-y-4">
+      <div className="flex justify-end">
+        <ExportCsvButton
+          data={leads}
+          columns={dialQueueExportColumns}
+          filename="dominion-dial-queue"
+          totalCount={data?.pagination.total}
+          exportUrl={data && data.pagination.total > leads.length ? '/api/dial-queue/export' : undefined}
+        />
+      </div>
+      <div className="grid gap-4 lg:grid-cols-[1fr_340px]">
       {/* Left: Current Lead */}
       <div className="space-y-4">
         {/* Twilio status indicator */}
@@ -371,6 +395,7 @@ export default function DialQueuePage() {
           </ScrollArea>
         </CardContent>
       </Card>
+    </div>
     </div>
   );
 }
