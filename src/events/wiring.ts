@@ -2,6 +2,41 @@ import { domainEvents } from './bus.js';
 import { logger } from '../config/logger.js';
 import { logAudit } from '../modules/compliance/index.js';
 import { createLeadInstance } from '../modules/workflow/index.js';
+import { scoreProperty } from '../modules/scoring/service.js';
+import { evaluateForPromotion } from '../modules/promotion/service.js';
+
+const pendingScoreQueue = new Set<string>();
+let scoreFlushTimer: ReturnType<typeof setTimeout> | null = null;
+const SCORE_FLUSH_DELAY_MS = 5_000;
+
+async function flushScoreQueue(): Promise<void> {
+  if (pendingScoreQueue.size === 0) return;
+  const batch = Array.from(pendingScoreQueue);
+  pendingScoreQueue.clear();
+
+  for (let i = 0; i < batch.length; i += 5) {
+    const chunk = batch.slice(i, i + 5);
+    await Promise.allSettled(
+      chunk.map(async (id) => {
+        try {
+          const result = await scoreProperty(id);
+          await evaluateForPromotion(id, result);
+        } catch (err) {
+          logger.warn({ err, dominionLeadId: id }, 'Auto-pipeline score/promote error');
+        }
+      }),
+    );
+  }
+}
+
+function enqueueForScoring(dominionLeadId: string): void {
+  pendingScoreQueue.add(dominionLeadId);
+  if (scoreFlushTimer) clearTimeout(scoreFlushTimer);
+  scoreFlushTimer = setTimeout(() => {
+    flushScoreQueue().catch((err) => logger.error({ err }, 'Auto-pipeline flush error'));
+    scoreFlushTimer = null;
+  }, SCORE_FLUSH_DELAY_MS);
+}
 
 /**
  * Wire domain event handlers.
@@ -28,6 +63,7 @@ export function wireEventHandlers(): void {
       actionType: 'distress_event.ingested',
       metadata: { eventId, eventType, eventLayer },
     });
+    enqueueForScoring(dominionLeadId);
   });
 
   // ─── Scoring Completed ─────────────────────────

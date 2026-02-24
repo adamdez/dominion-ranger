@@ -9,6 +9,8 @@ import { DEAL_STAGES } from '@/lib/constants';
 export function usePipeline() {
   return useQuery({
     queryKey: ['pipeline'],
+    refetchInterval: 30_000,
+    refetchIntervalInBackground: false,
     queryFn: async () => {
       // TODO: wire to backend when phase-3/backend-intelligence merges
       // GET /api/leads?limit=500&includeTags=true&includeDealStage=true
@@ -16,8 +18,8 @@ export function usePipeline() {
         const { data } = await api.get<{ data: PipelineLead[] }>('/api/leads', {
           params: { pageSize: 500 },
         });
-        // Until backend returns dealStage/tags, map leads to PipelineLeads
-        return (data.data ?? []).map((lead) => ({
+        const leads = (data as { data?: PipelineLead[] }).data ?? [];
+        return leads.map((lead) => ({
           ...lead,
           dealStage: lead.dealStage ?? mapStatusToDealStage(lead.status),
           tags: lead.tags ?? [],

@@ -7,6 +7,7 @@ import { scoreProperty } from '../modules/scoring/service.js';
 import { evaluateForPromotion } from '../modules/promotion/service.js';
 import { dispatchToSentinel } from '../modules/sentinel/service.js';
 import { logAudit } from '../modules/compliance/service.js';
+import { withRunLogging } from './run-logger.js';
 import { logger } from '../config/logger.js';
 
 export interface PipelineStats {
@@ -37,6 +38,10 @@ export interface PipelineStats {
  * Charter doctrine: Signal -> Score -> Rank -> Promote
  */
 export async function runAdapterPipeline(adapterName: string, options?: Record<string, unknown>): Promise<PipelineStats> {
+  return withRunLogging(adapterName, null, () => runAdapterPipelineInternal(adapterName, options));
+}
+
+async function runAdapterPipelineInternal(adapterName: string, options?: Record<string, unknown>): Promise<PipelineStats> {
   const adapter = getAllIngestionAdapters().find((a) => a.name === adapterName);
   if (!adapter) {
     throw new Error(`Adapter not found: ${adapterName}`);

@@ -2,6 +2,9 @@ import type { IngestionAdapter, NormalizedRecord } from './interface.js';
 import type { DistressEvent } from '../../db/schema/index.js';
 import { logger } from '../../config/logger.js';
 import { env } from '../../config/env.js';
+import { db } from '../../db/connection.js';
+import { marketConfigs } from '../../db/schema/index.js';
+import { eq } from 'drizzle-orm';
 
 type EventType = DistressEvent['eventType'];
 
@@ -17,11 +20,16 @@ type EventType = DistressEvent['eventType'];
 
 const BASE_URL = 'https://app.regrid.com/api/v2';
 
-// Target counties for Phase 1
-const TARGET_COUNTIES: Record<string, { geoid: string; name: string; state: string }> = {
-  'spokane_wa':  { geoid: '53063', name: 'Spokane',  state: 'WA' },
-  'kootenai_id': { geoid: '16055', name: 'Kootenai', state: 'ID' },
-};
+async function getActiveMarkets(): Promise<Array<{ county: string; state: string; geoid: string }>> {
+  const markets = await db.select().from(marketConfigs).where(eq(marketConfigs.active, true));
+  return markets
+    .filter((m) => (m.adapterConfig as Record<string, unknown>)?.regrid_geoid)
+    .map((m) => ({
+      county: m.county,
+      state: m.state,
+      geoid: (m.adapterConfig as Record<string, string>).regrid_geoid,
+    }));
+}
 
 interface RegridFeature {
   type: 'Feature';
@@ -87,17 +95,16 @@ export class RegridAdapter implements IngestionAdapter {
       return;
     }
 
-    const countyKeys = (options?.counties as string[]) ?? Object.keys(TARGET_COUNTIES);
+    const markets = await getActiveMarkets();
+    if (markets.length === 0) {
+      logger.warn('No active markets with regrid_geoid in adapter_config, skipping');
+      return;
+    }
+
     const batchSize = (options?.limit as number) ?? 1000;
 
-    for (const countyKey of countyKeys) {
-      const county = TARGET_COUNTIES[countyKey];
-      if (!county) {
-        logger.warn({ countyKey }, 'Unknown county key, skipping');
-        continue;
-      }
-
-      logger.info({ county: county.name, state: county.state, geoid: county.geoid }, 'Regrid ingestion started for county');
+    for (const county of markets) {
+      logger.info({ county: county.county, state: county.state, geoid: county.geoid }, 'Regrid ingestion started for county');
 
       let offsetId: number | null = 0;
       let totalFetched = 0;
@@ -105,7 +112,7 @@ export class RegridAdapter implements IngestionAdapter {
 
       while (offsetId !== null && totalFetched < maxRecords) {
         try {
-          const url = this.buildQueryUrl(county.geoid, batchSize, offsetId);
+          const url = this.buildQueryUrl(county.geoid, batchSize, offsetId as number);
           logger.debug({ url: url.replace(this.apiKey, '[REDACTED]') }, 'Fetching Regrid page');
 
           const response = await fetch(url, {
@@ -129,17 +136,18 @@ export class RegridAdapter implements IngestionAdapter {
           const features = data.features ?? [];
 
           if (features.length === 0) {
-            logger.info({ county: county.name, totalFetched }, 'No more parcels, county complete');
+            logger.info({ county: county.county, totalFetched }, 'No more parcels, county complete');
             break;
           }
 
+          const countyInfo = { name: county.county, state: county.state, geoid: county.geoid };
           const records = features
-            .map((f) => this.normalizeFeature(f, county))
+            .map((f) => this.normalizeFeature(f, countyInfo))
             .filter((r): r is NormalizedRecord => r !== null);
 
           totalFetched += features.length;
           logger.info({
-            county: county.name,
+            county: county.county,
             batchSize: features.length,
             normalized: records.length,
             totalFetched,
@@ -159,12 +167,12 @@ export class RegridAdapter implements IngestionAdapter {
           await sleep(500);
 
         } catch (err) {
-          logger.error({ err, county: county.name }, 'Regrid fetch error');
+          logger.error({ err, county: county.county }, 'Regrid fetch error');
           break;
         }
       }
 
-      logger.info({ county: county.name, totalFetched }, 'Regrid county ingestion complete');
+      logger.info({ county: county.county, totalFetched }, 'Regrid county ingestion complete');
     }
   }
 

@@ -1,5 +1,8 @@
 import type { FastifyInstance } from 'fastify';
+import { eq, desc } from 'drizzle-orm';
 import { ingestionQueue } from '../../jobs/queues.js';
+import { db } from '../../db/connection.js';
+import { marketConfigs, adapterRunHistory } from '../../db/schema/index.js';
 import { getAllIngestionAdapters, getAllEnrichmentAdapters } from '../../ingestion/adapters/index.js';
 import { requireRole } from '../middleware/auth.js';
 import { ingestionRunBody } from '../schemas/ingestion.js';
@@ -30,6 +33,43 @@ export async function ingestionRoutes(app: FastifyInstance): Promise<void> {
         adapter: adapterName,
         status: 'queued',
       };
+    },
+  );
+
+  // GET /api/ingestion/dashboard — Adapter status, markets, recent runs
+  app.get(
+    '/api/ingestion/dashboard',
+    { preHandler: [requireRole('pipeline.run')] },
+    async () => {
+      const adapters = getAllIngestionAdapters();
+
+      const adapterStatuses = await Promise.all(
+        adapters.map(async (a) => {
+          const [lastRun] = await db
+            .select()
+            .from(adapterRunHistory)
+            .where(eq(adapterRunHistory.adapterName, a.name))
+            .orderBy(desc(adapterRunHistory.startedAt))
+            .limit(1);
+
+          return {
+            name: a.name,
+            description: a.description,
+            healthy: await a.healthCheck(),
+            lastRun: lastRun ?? null,
+          };
+        }),
+      );
+
+      const markets = await db.select().from(marketConfigs);
+
+      const recentRuns = await db
+        .select()
+        .from(adapterRunHistory)
+        .orderBy(desc(adapterRunHistory.startedAt))
+        .limit(20);
+
+      return { adapters: adapterStatuses, markets, recentRuns };
     },
   );
 

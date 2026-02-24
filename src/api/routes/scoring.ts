@@ -1,4 +1,4 @@
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import type { SQL } from 'drizzle-orm';
 import { requireRole } from '../middleware/auth.js';
 import { scoreProperty, getLatestScore, getScoringHistory } from '../../modules/scoring/index.js';
@@ -12,19 +12,10 @@ import { batchScoreBody, scoringParamsSchema, scoringHistoryQuery } from '../sch
 
 export async function scoringRoutes(app: FastifyInstance): Promise<void> {
 
-  // POST /api/scoring/run — Batch score properties directly (no Redis)
-  app.post<{
-    Body: {
-      limit?: number;
-      county?: string;
-      rescore?: boolean;
-    };
-  }>(
-    '/api/scoring/run',
-    {
-      preHandler: [requireRole('pipeline.run')],
-    },
-    async (request, reply) => {
+  const batchScoreHandler = async (
+    request: FastifyRequest<{ Body?: { limit?: number; county?: string; rescore?: boolean } }>,
+    reply: FastifyReply,
+  ) => {
       const body = batchScoreBody.parse(request.body);
       const { limit = BUSINESS_RULES.batch.defaultScoringLimit, county, rescore = false } = body ?? {};
 
@@ -126,7 +117,18 @@ export async function scoringRoutes(app: FastifyInstance): Promise<void> {
           message: err instanceof Error ? err.message : 'Unknown error',
         });
       }
-    },
+  };
+
+  const batchRouteOpts = { preHandler: [requireRole('pipeline.run')] };
+  app.post<{ Body?: { limit?: number; county?: string; rescore?: boolean } }>(
+    '/api/scoring/batch',
+    batchRouteOpts,
+    batchScoreHandler,
+  );
+  app.post<{ Body?: { limit?: number; county?: string; rescore?: boolean } }>(
+    '/api/scoring/run',
+    batchRouteOpts,
+    batchScoreHandler,
   );
 
   // POST /api/scoring/promote — Replay promotion evaluation for all scored properties

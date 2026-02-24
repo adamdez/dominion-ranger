@@ -39,9 +39,23 @@ export const DEAL_STAGES = [
   { key: 'TITLE_ESCROW', label: 'Title / Escrow', color: 'bg-emerald-50 dark:bg-emerald-950' },
   { key: 'CLOSED_WON', label: 'Closed Won', color: 'bg-green-100 dark:bg-green-900' },
   { key: 'CLOSED_LOST', label: 'Closed Lost', color: 'bg-red-50 dark:bg-red-950' },
+  { key: 'DEAD', label: 'Dead', color: 'bg-red-100 dark:bg-red-900' },
 ] as const;
 
 export type DealStageKey = typeof DEAL_STAGES[number]['key'];
+
+export const VALID_DEAL_TRANSITIONS: Record<string, string[]> = {
+  NEW_LEAD: ['SKIP_TRACED', 'DEAD'],
+  SKIP_TRACED: ['CONTACTED', 'DEAD'],
+  CONTACTED: ['INTERESTED', 'DEAD'],
+  INTERESTED: ['OFFER_MADE', 'DEAD'],
+  OFFER_MADE: ['UNDER_CONTRACT', 'DEAD'],
+  UNDER_CONTRACT: ['TITLE_ESCROW', 'CLOSED_LOST'],
+  TITLE_ESCROW: ['CLOSED_WON', 'CLOSED_LOST'],
+  CLOSED_WON: [],
+  CLOSED_LOST: [],
+  DEAD: ['NEW_LEAD'],
+};
 
 export const TASK_TYPES = {
   CALLBACK: { label: 'Callback', color: 'bg-blue-100 text-blue-800' },

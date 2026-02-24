@@ -38,16 +38,22 @@ const { properties, distressEvents } = schema;
 
 // ── Config ──────────────────────────────────────
 const IMPORT_DIR = './data/imports';
-const fileName = process.argv[2];
-if (!fileName) {
-  console.error('Usage: npx tsx src/scripts/reimport-csv.ts <filename.csv>');
-  process.exit(1);
-}
-const filePath = fileName.includes('/') || fileName.includes('\\') ? fileName : join(IMPORT_DIR, fileName);
 
-// Default settings
-const DEFAULT_COUNTY = process.argv[3]?.toUpperCase() || undefined;
-const DEFAULT_STATE = process.argv[4]?.toUpperCase() || undefined;
+export interface ReimportResult {
+  created: number;
+  updated: number;
+  eventsCreated: number;
+  dominionLeadIds: string[];
+}
+
+export async function runReimportCsv(
+  filePath: string,
+  options?: { county?: string; state?: string },
+): Promise<ReimportResult> {
+  const defaultCounty = options?.county?.toUpperCase();
+  const defaultState = options?.state?.toUpperCase();
+  return runImport(filePath, defaultCounty, defaultState);
+}
 
 // ── CSV Parsing ─────────────────────────────────
 function parseCsvLine(line: string): string[] {
@@ -168,11 +174,15 @@ function parseOwnerName(raw: string): { first: string | null; last: string | nul
 }
 
 // ── Main Processing ─────────────────────────────
-async function main() {
+async function runImport(
+  filePath: string,
+  defaultCounty?: string,
+  defaultState?: string,
+): Promise<ReimportResult> {
   console.log(`\n🏗️  Dominion Ranger CSV Reimport`);
   console.log(`   File: ${filePath}`);
-  console.log(`   County: ${DEFAULT_COUNTY || 'from CSV'}`);
-  console.log(`   State: ${DEFAULT_STATE || 'from CSV'}\n`);
+  console.log(`   County: ${defaultCounty || 'from CSV'}`);
+  console.log(`   State: ${defaultState || 'from CSV'}\n`);
 
   const rl = createInterface({
     input: createReadStream(filePath, 'utf-8'),
@@ -187,6 +197,7 @@ async function main() {
   let eventsCreated = 0;
   let errors = 0;
   let skipped = 0;
+  const dominionLeadIds: string[] = [];
 
   const startTime = Date.now();
 
@@ -208,8 +219,8 @@ async function main() {
     const address = get(values, mapping, 'address');
     if (!apn && !address) { skipped++; continue; }
 
-    const county = get(values, mapping, 'county')?.toUpperCase() || DEFAULT_COUNTY || null;
-    const state = get(values, mapping, 'state')?.toUpperCase() || DEFAULT_STATE || null;
+    const county = get(values, mapping, 'county')?.toUpperCase() || defaultCounty || null;
+    const state = get(values, mapping, 'state')?.toUpperCase() || defaultState || null;
     const ownerRaw = get(values, mapping, 'owner') || '';
     const { first: ownerFirst, last: ownerLast } = parseOwnerName(ownerRaw);
 
@@ -291,6 +302,7 @@ async function main() {
         .returning();
 
       const dominionLeadId = result.dominionLeadId;
+      dominionLeadIds.push(dominionLeadId);
       const isNew = dominionLeadId === candidateId;
 
       if (isNew) created++;
@@ -310,7 +322,7 @@ async function main() {
         rawEventPayload: Record<string, unknown>;
         freshnessCategory: 'same_day' | '1_3_days' | '4_7_days' | 'stale';
       }
-      const source = `csv_reimport:${fileName}`;
+      const source = `csv_reimport:${filePath.split(/[/\\]/).pop() ?? 'unknown'}`;
       const newEvents: EventDraft[] = [];
 
       // Use historical date for trigger; classify freshness based on age
@@ -470,11 +482,28 @@ async function main() {
   console.log(`   Errors:  ${errors}`);
   console.log(`   Skipped: ${skipped}\n`);
 
-  await pool.end();
-  process.exit(0);
+  return { created, updated, eventsCreated, dominionLeadIds };
 }
 
-main().catch((err) => {
-  console.error('Fatal error:', err);
-  pool.end().then(() => process.exit(1));
-});
+// CLI entry — only run when executed directly (not when imported)
+const isMainModule = process.argv[1]?.includes('reimport-csv') ?? false;
+if (isMainModule) {
+  const fileName = process.argv[2];
+  if (!fileName) {
+    console.error('Usage: npx tsx src/scripts/reimport-csv.ts <filename.csv>');
+    process.exit(1);
+  }
+  const filePath = fileName.includes('/') || fileName.includes('\\') ? fileName : join(IMPORT_DIR, fileName);
+  const defaultCounty = process.argv[3]?.toUpperCase();
+  const defaultState = process.argv[4]?.toUpperCase();
+
+  runImport(filePath, defaultCounty, defaultState)
+    .then(() => {
+      pool.end();
+      process.exit(0);
+    })
+    .catch((err) => {
+      console.error('Fatal error:', err);
+      pool.end().then(() => process.exit(1));
+    });
+}

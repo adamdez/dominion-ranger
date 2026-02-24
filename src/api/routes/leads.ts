@@ -45,6 +45,13 @@ export async function leadRoutes(app: FastifyInstance): Promise<void> {
       const offset = (query.page - 1) * query.pageSize;
 
       const conditions = [];
+      const user = (request as unknown as Record<string, { userId: string }>).user;
+      const userId = user?.userId ?? 'admin-bootstrap';
+      if (query.view === 'mine') {
+        conditions.push(eq(leadInstances.assignedTo, userId));
+      } else if (query.view === 'unassigned') {
+        conditions.push(sql`${leadInstances.assignedTo} IS NULL`);
+      }
       if (query.status) {
         const statuses = query.status.split(',') as LeadStatusValue[];
         if (statuses.length === 1) {

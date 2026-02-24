@@ -1,6 +1,8 @@
 import { Queue, type ConnectionOptions } from 'bullmq';
 import IORedis from 'ioredis';
 import { env } from '../config/env.js';
+import { logger } from '../config/logger.js';
+import { runAdapterPipeline } from '../ingestion/pipeline.js';
 
 const connection = new IORedis(env.REDIS_URL, { maxRetriesPerRequest: null }) as unknown as ConnectionOptions;
 
@@ -60,18 +62,72 @@ export interface SentinelDispatchJobData {
 
 /**
  * Schedule recurring ingestion runs.
- * Call once at startup — BullMQ handles repeat scheduling.
+ * Uses BullMQ when Redis is available, setInterval fallback when not.
  */
+function scheduleWithSetInterval(): void {
+  logger.warn('Using setInterval fallback for adapter scheduling');
+  setInterval(() => {
+    runAdapterPipeline('regrid').catch((e) => logger.error({ e }, 'Regrid scheduled run failed'));
+  }, 24 * 60 * 60 * 1000);
+  setInterval(() => {
+    runAdapterPipeline('spokane_recorder').catch((e) => logger.error({ e }, 'Spokane recorder failed'));
+    runAdapterPipeline('kootenai_recorder').catch((e) => logger.error({ e }, 'Kootenai recorder failed'));
+  }, 6 * 60 * 60 * 1000);
+  setInterval(() => {
+    runAdapterPipeline('sheriff_sale').catch((e) => logger.error({ e }, 'Sheriff sale failed'));
+  }, 24 * 60 * 60 * 1000);
+}
+
 export async function scheduleIngestionJobs(): Promise<void> {
-  // Run all adapters every 6 hours
-  await ingestionQueue.upsertJobScheduler(
-    'daily-full-ingestion',
-    { every: 6 * 60 * 60 * 1000 },
-    {
-      name: 'full-ingestion',
-      data: { adapterName: '__all__' } satisfies IngestionJobData,
-    },
-  );
+  try {
+    await ingestionQueue.upsertJobScheduler(
+      'daily-full-ingestion',
+      { every: 6 * 60 * 60 * 1000 },
+      {
+        name: 'full-ingestion',
+        data: { adapterName: '__all__' } satisfies IngestionJobData,
+      },
+    );
+
+    await ingestionQueue.upsertJobScheduler(
+      'regrid-daily',
+      { every: 24 * 60 * 60 * 1000 },
+      {
+        name: 'regrid-ingestion',
+        data: { adapterName: 'regrid' } satisfies IngestionJobData,
+      },
+    );
+
+    await ingestionQueue.upsertJobScheduler(
+      'recorder-6h',
+      { every: 6 * 60 * 60 * 1000 },
+      {
+        name: 'recorder-ingestion',
+        data: { adapterName: 'spokane_recorder' } satisfies IngestionJobData,
+      },
+    );
+
+    await ingestionQueue.upsertJobScheduler(
+      'kootenai-recorder-6h',
+      { every: 6 * 60 * 60 * 1000 },
+      {
+        name: 'kootenai-recorder-ingestion',
+        data: { adapterName: 'kootenai_recorder' } satisfies IngestionJobData,
+      },
+    );
+
+    await ingestionQueue.upsertJobScheduler(
+      'sheriff-daily',
+      { every: 24 * 60 * 60 * 1000 },
+      {
+        name: 'sheriff-sale-ingestion',
+        data: { adapterName: 'sheriff_sale' } satisfies IngestionJobData,
+      },
+    );
+  } catch (err) {
+    logger.warn({ err }, 'BullMQ scheduling failed — using setInterval fallback');
+    scheduleWithSetInterval();
+  }
 }
 
 export { connection as redisConnection };

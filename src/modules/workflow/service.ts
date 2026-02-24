@@ -4,6 +4,7 @@ import { leadInstances, properties, LeadStatus } from '../../db/schema/index.js'
 import type { LeadInstance } from '../../db/schema/index.js';
 import { generateId } from '../../lib/index.js';
 import { checkDnc, checkLitigator, logAudit } from '../compliance/index.js';
+import { logActivity } from '../analytics/activity-logger.js';
 import { logger } from '../../config/logger.js';
 import { NotFoundError, ValidationError, ConcurrencyError, ComplianceError } from '../../lib/errors.js';
 
@@ -113,6 +114,14 @@ export async function claimLead(input: {
     metadata: { leadInstanceId: input.leadInstanceId, version: instance.version },
   });
 
+  await logActivity({
+    dominionLeadId: instance.dominionLeadId,
+    leadInstanceId: input.leadInstanceId,
+    userId: input.userId,
+    activityType: 'LEAD_ASSIGNED',
+    channel: 'OUTBOUND_COLD',
+  });
+
   logger.info({ leadInstanceId: input.leadInstanceId, userId: input.userId }, 'Lead claimed');
   return instance;
 }
@@ -213,6 +222,14 @@ export async function runComplianceGating(leadInstanceId: string): Promise<LeadI
       metadata: { leadInstanceId, reason, dncResult, litigatorResult },
     });
   }
+
+  await logActivity({
+    dominionLeadId: updated.dominionLeadId,
+    leadInstanceId,
+    activityType: 'COMPLIANCE_CHECKED',
+    channel: 'OUTBOUND_COLD',
+    meta: { complianceCleared, dncResult, litigatorResult },
+  });
 
   return updated;
 }

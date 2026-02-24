@@ -14,6 +14,7 @@ export const leadsListQuery = z.object({
   tags: z.string().optional(),
   dealStage: z.string().optional(),
   hasPhone: z.enum(['true', 'false']).optional(),
+  view: z.enum(['all', 'mine', 'unassigned']).optional(),
 });
 
 export const claimLeadBody = z.object({

@@ -34,6 +34,7 @@ export default function LeadsPage() {
   const [searchInput, setSearchInput] = useState('');
   const [sortBy, setSortBy] = useState<string>('createdAt');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+  const [viewFilter, setViewFilter] = useState<'all' | 'mine' | 'unassigned'>('all');
   const [selectedLead, setSelectedLead] = useState<LeadWithProperty | null>(null);
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
   const [filterName, setFilterName] = useState('');
@@ -119,6 +120,22 @@ export default function LeadsPage() {
 
   return (
     <div className="space-y-4">
+      {/* View Filter Tabs */}
+      <div className="flex items-center gap-1 p-1 rounded-lg bg-muted w-fit">
+        {(['all', 'mine', 'unassigned'] as const).map((v) => (
+          <button
+            key={v}
+            type="button"
+            onClick={() => { setViewFilter(v); setPage(1); }}
+            className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
+              viewFilter === v ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            {v === 'all' ? 'All Leads' : v === 'mine' ? 'My Leads' : 'Unassigned'}
+          </button>
+        ))}
+      </div>
+
       {/* Saved Filters Bar */}
       <div className="flex items-center gap-2">
         <Select value={activeFilterId ?? 'ALL'} onValueChange={handleApplyFilter}>

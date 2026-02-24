@@ -4,6 +4,9 @@ import { RegridAdapter } from './regrid.js';
 import { ForeclosureRadarAdapter } from './foreclosure-radar.js';
 import { REISkipAdapter } from './reiskip.js';
 import { CsvAdapter } from './csv-import.js';
+import { SpokaneRecorderAdapter } from './spokane-recorder.js';
+import { KootenaiRecorderAdapter } from './kootenai-recorder.js';
+import { SheriffSaleAdapter } from './sheriff-sale.js';
 import { logger } from '../../config/logger.js';
 
 /**
@@ -51,6 +54,9 @@ export function initializeAdapters(): void {
   registerIngestionAdapter(new RegridAdapter());
   registerIngestionAdapter(new ForeclosureRadarAdapter());
   registerIngestionAdapter(new CsvAdapter());
+  registerIngestionAdapter(new SpokaneRecorderAdapter());
+  registerIngestionAdapter(new KootenaiRecorderAdapter());
+  registerIngestionAdapter(new SheriffSaleAdapter());
   registerEnrichmentAdapter(new REISkipAdapter());
 
   logger.info(

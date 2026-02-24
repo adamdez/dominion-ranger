@@ -1,5 +1,5 @@
 import AccessToken from 'twilio/lib/jwt/AccessToken.js';
-import { twiml as TwiML } from 'twilio';
+import twilio from 'twilio';
 import {
   getTwilioClient,
   TWILIO_PHONE_NUMBER,
@@ -9,8 +9,10 @@ import {
 import { env } from '../../config/env.js';
 import { logger } from '../../config/logger.js';
 import { db } from '../../db/connection.js';
-import { properties, callLogs } from '../../db/schema/index.js';
-import { eq, desc } from 'drizzle-orm';
+import { properties, propertyContacts, callLogs } from '../../db/schema/index.js';
+import { eq, desc, and } from 'drizzle-orm';
+
+const TwiML = twilio.twiml;
 
 export function generateClientToken(identity: string): string {
   if (!env.TWILIO_API_KEY || !env.TWILIO_API_SECRET || !env.TWILIO_TWIML_APP_SID) {
@@ -41,8 +43,20 @@ export async function getCallablePhone(dominionLeadId: string): Promise<string |
     .from(properties)
     .where(eq(properties.dominionLeadId, dominionLeadId))
     .limit(1);
+  if (prop?.phone) return prop.phone;
 
-  return prop?.phone ?? null;
+  const [contact] = await db
+    .select({ phone: propertyContacts.phone })
+    .from(propertyContacts)
+    .where(
+      and(
+        eq(propertyContacts.dominionLeadId, dominionLeadId),
+        eq(propertyContacts.dndCalls, false),
+      ),
+    )
+    .orderBy(desc(propertyContacts.isPrimary))
+    .limit(1);
+  return contact?.phone ?? null;
 }
 
 export function generateVoiceTwiml(toPhone: string, statusCallbackUrl: string, recordingCallbackUrl: string): string {

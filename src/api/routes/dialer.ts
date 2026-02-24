@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import { validateRequest } from 'twilio';
+import twilio from 'twilio';
 import { requireRole } from '../middleware/auth.js';
 import { env } from '../../config/env.js';
 import { logger } from '../../config/logger.js';
@@ -36,7 +36,7 @@ function validateTwilioWebhook(
 ): boolean {
   if (env.NODE_ENV === 'development') return true;
   if (!signature || !env.TWILIO_AUTH_TOKEN) return false;
-  return validateRequest(env.TWILIO_AUTH_TOKEN, signature, url, params);
+  return twilio.validateRequest(env.TWILIO_AUTH_TOKEN, signature, url, params);
 }
 
 export async function dialerRoutes(app: FastifyInstance): Promise<void> {

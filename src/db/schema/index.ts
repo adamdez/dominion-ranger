@@ -14,6 +14,9 @@ export type { DistressEvent, NewDistressEvent } from './distress-events';
 export { scoringRecords } from './scoring-records';
 export type { ScoringRecord, NewScoringRecord } from './scoring-records';
 
+export { pendingScoring } from './pending-scoring';
+export type { PendingScoring, NewPendingScoring } from './pending-scoring';
+
 export { signalAccumulation } from './signal-accumulation';
 export type { SignalAccumulation, NewSignalAccumulation } from './signal-accumulation';
 
@@ -58,6 +61,12 @@ export type { CallLog, NewCallLog } from './call-logs';
 
 export { smsLogs } from './sms-logs';
 export type { SmsLog, NewSmsLog } from './sms-logs';
+
+// ─── Market & Adapter Monitoring ───────────────────
+export { marketConfigs } from './market-configs';
+export type { MarketConfig, NewMarketConfig } from './market-configs';
+export { adapterRunHistory } from './adapter-run-history';
+export type { AdapterRunHistory, NewAdapterRunHistory } from './adapter-run-history';
 
 // ─── Phase 3: Intelligence & Pipeline ──────────────
 export * from './property-contacts';
