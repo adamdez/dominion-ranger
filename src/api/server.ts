@@ -27,6 +27,7 @@ import { savedFilterRoutes } from './routes/saved-filters.js';
 import { settingsRoutes } from './routes/settings.js';
 import { compRoutes } from './routes/comps.js';
 import { offerRoutes } from './routes/offers.js';
+import { prospectRoutes } from './routes/prospects.js';
 import { RangerError } from '../lib/errors.js';
 import { ZodError } from 'zod';
 import { logError } from '../modules/error-logging/index.js';
@@ -124,6 +125,7 @@ export async function createServer() {
   await app.register(settingsRoutes);
   await app.register(compRoutes);
   await app.register(offerRoutes);
+  await app.register(prospectRoutes);
 
   return app;
 }
