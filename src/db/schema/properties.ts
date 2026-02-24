@@ -55,6 +55,11 @@ export const properties = pgTable(
     skipTraceSource: varchar('skip_trace_source', { length: 32 }),
     skipTraceRaw: jsonb('skip_trace_raw'),
 
+    // Compliance flags (Charter Section VIII — agent-set, skip-trace derived)
+    dncFlag: boolean('dnc_flag').default(false),
+    litigantFlag: boolean('litigant_flag').default(false),
+    optOutFlag: boolean('opt_out_flag').default(false),
+
     // Property intelligence
     ownershipDurationMonths: integer('ownership_duration_months'),
     absenteeOwner: boolean('absentee_owner').default(false),

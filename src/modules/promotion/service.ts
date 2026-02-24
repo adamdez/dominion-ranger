@@ -32,9 +32,11 @@ interface TierThresholds {
 export async function evaluateForPromotion(
   dominionLeadId: string,
   scoringResult: ScoringResult,
+  options?: { asOf?: Date },
 ): Promise<PromotedLead | null> {
   // Idempotency guard: skip if already promoted for this model version within 24h
-  const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  const now = options?.asOf ?? new Date();
+  const oneDayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
   const [existing] = await db
     .select({ promotionId: promotedLeads.promotionId })
     .from(promotedLeads)
