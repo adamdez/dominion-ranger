@@ -19,6 +19,7 @@ import { useSystemStats } from '@/hooks/use-system';
 import { useLeadStats } from '@/hooks/use-dashboard';
 import { usePipelineStats } from '@/hooks/use-pipeline';
 import { useTaskStats } from '@/hooks/use-tasks';
+import { useOfferStats } from '@/hooks/use-offers';
 import { SCORE_TIERS, DEAL_STAGES } from '@/lib/constants';
 
 type DateRange = '7d' | '30d' | '90d';
@@ -29,6 +30,7 @@ export default function DashboardPage() {
   const leadStats = useLeadStats();
   const pipelineStats = usePipelineStats();
   const taskStats = useTaskStats();
+  const offerStats = useOfferStats();
 
   // Suppress unused-var lint — dateRange reserved for future analytics filtering
   void dateRange;
@@ -83,7 +85,7 @@ export default function DashboardPage() {
       </div>
 
       {/* Task & New Lead Cards — clickable */}
-      <div className="grid gap-4 sm:grid-cols-3">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Link href="/tasks" className="block transition-opacity hover:opacity-90">
           <StatCard
             title="Tasks Due Today"
@@ -107,6 +109,26 @@ export default function DashboardPage() {
             icon={Users}
             loading={leadStats.isLoading}
           />
+        </Link>
+        <Link href="/offers?status=active" className="block transition-opacity hover:opacity-90">
+          <Card className="p-4">
+            {offerStats.isLoading ? (
+              <Skeleton className="h-12 w-full" />
+            ) : (
+              <div className="flex items-center gap-3">
+                <DollarSign className="h-5 w-5 text-emerald-500" />
+                <div>
+                  <p className="text-sm text-muted-foreground">Active Offers</p>
+                  <p className="text-xl font-bold tabular-nums">{offerStats.data?.activeCount ?? 0}</p>
+                  {(offerStats.data?.totalAmountCents ?? 0) > 0 && (
+                    <p className="text-xs text-muted-foreground">
+                      {offerStats.data?.activeCount} offers &middot; ${((offerStats.data?.totalAmountCents ?? 0) / 100).toLocaleString()}
+                    </p>
+                  )}
+                </div>
+              </div>
+            )}
+          </Card>
         </Link>
       </div>
 
