@@ -48,4 +48,30 @@ export async function skipTraceRoutes(app: FastifyInstance): Promise<void> {
       }
     },
   );
+
+  // POST /api/skip-trace/bulk-enqueue
+  app.post(
+    '/api/skip-trace/bulk-enqueue',
+    { preHandler: [requireRole('pipeline.run')] },
+    async (request, reply) => {
+      const body = z.object({
+        dominionLeadIds: z.array(z.string().uuid()).min(1).max(100),
+        tier: z.enum(['STANDARD', 'ADVANCED']).default('STANDARD'),
+      }).parse(request.body);
+
+      let enqueued = 0;
+      const errors: string[] = [];
+      for (const id of body.dominionLeadIds) {
+        try {
+          await skipTraceProperty(id, body.tier);
+          enqueued++;
+        } catch (err: unknown) {
+          const msg = err instanceof Error ? err.message : 'Unknown error';
+          errors.push(`${id}: ${msg}`);
+          logger.warn({ dominionLeadId: id, err: msg }, 'Bulk skip trace: individual failure');
+        }
+      }
+      return reply.send({ enqueued, errors: errors.length > 0 ? errors : undefined });
+    },
+  );
 }

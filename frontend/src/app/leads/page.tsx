@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useCallback } from 'react';
-import { Users, Search, X, Save, Trash2 } from 'lucide-react';
+import { useState, useCallback, useMemo } from 'react';
+import { Users, Search, X, Save, Trash2, UserPlus, Download } from 'lucide-react';
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table';
@@ -18,14 +18,18 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { ScoreBadge } from '@/components/ui/score-badge';
+import { Checkbox } from '@/components/ui/checkbox';
 import { EmptyState } from '@/components/ui/empty-state';
 import { ErrorState } from '@/components/ui/error-state';
 import { PropertyDetailSheet } from '@/components/property-detail/property-detail-sheet';
 import { useLeads } from '@/hooks/use-leads';
+import { useSkipTrace } from '@/hooks/use-skip-trace';
+import { useBulkAssign, useBulkSkipTrace } from '@/hooks/use-bulk-actions';
 import { useSavedFilters, useCreateSavedFilter, useDeleteSavedFilter } from '@/hooks/use-saved-filters';
 import { LEAD_STATUS } from '@/lib/constants';
 import type { LeadWithProperty } from '@/lib/types';
 import { formatDistanceToNow } from 'date-fns';
+import { toast } from 'sonner';
 
 export default function LeadsPage() {
   const [page, setPage] = useState(1);
@@ -39,10 +43,16 @@ export default function LeadsPage() {
   const [filterName, setFilterName] = useState('');
   const [activeFilterId, setActiveFilterId] = useState<string | null>(null);
   const [view, setView] = useState<'all' | 'mine' | 'unassigned'>('all');
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [assignDialogOpen, setAssignDialogOpen] = useState(false);
+  const [assignAgent, setAssignAgent] = useState('');
 
   const savedFilters = useSavedFilters();
   const createFilter = useCreateSavedFilter();
   const deleteFilter = useDeleteSavedFilter();
+  const skipTraceMutation = useSkipTrace();
+  const bulkAssignMutation = useBulkAssign();
+  const bulkSkipTraceMutation = useBulkSkipTrace();
 
   const { data, isLoading, error, refetch } = useLeads({
     page,
@@ -53,6 +63,36 @@ export default function LeadsPage() {
     sortOrder,
     view,
   });
+
+  const rows = data?.data ?? [];
+
+  const selectedRows = useMemo(
+    () => rows.filter((r) => selectedIds.has(r.leadInstanceId)),
+    [rows, selectedIds],
+  );
+
+  const allPageSelected = rows.length > 0 && rows.every((r) => selectedIds.has(r.leadInstanceId));
+
+  const toggleAll = useCallback(() => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (allPageSelected) {
+        for (const r of rows) next.delete(r.leadInstanceId);
+      } else {
+        for (const r of rows) next.add(r.leadInstanceId);
+      }
+      return next;
+    });
+  }, [rows, allPageSelected]);
+
+  const toggleOne = useCallback((id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
 
   const handleSearch = useCallback(() => {
     setSearch(searchInput);
@@ -114,6 +154,67 @@ export default function LeadsPage() {
     setSortOrder((config.sortOrder as 'asc' | 'desc') || 'desc');
     setPage(1);
   }, [savedFilters.data, clearFilters]);
+
+  const triggerSkipTrace = useCallback((dominionLeadId: string) => {
+    skipTraceMutation.mutate({ dominionLeadId, tier: 'STANDARD' });
+  }, [skipTraceMutation]);
+
+  const handleBulkAssign = useCallback(() => {
+    if (!assignAgent.trim() || selectedRows.length === 0) return;
+    bulkAssignMutation.mutate(
+      { leadInstanceIds: selectedRows.map((r) => r.leadInstanceId), assignedTo: assignAgent.trim() },
+      {
+        onSuccess: (result) => {
+          toast.success(`Assigned ${result.updated} leads`);
+          setAssignDialogOpen(false);
+          setAssignAgent('');
+          setSelectedIds(new Set());
+        },
+      },
+    );
+  }, [assignAgent, selectedRows, bulkAssignMutation]);
+
+  const handleBulkSkipTrace = useCallback(() => {
+    const untracedIds = selectedRows
+      .filter((r) => !r.skipTracedAt)
+      .map((r) => r.dominionLeadId);
+    if (untracedIds.length === 0) {
+      toast.info('All selected leads are already traced');
+      return;
+    }
+    bulkSkipTraceMutation.mutate(
+      { dominionLeadIds: untracedIds },
+      {
+        onSuccess: (result) => {
+          toast.success(`Enqueued ${result.enqueued} leads for skip trace`);
+          setSelectedIds(new Set());
+        },
+      },
+    );
+  }, [selectedRows, bulkSkipTraceMutation]);
+
+  const handleExportCsv = useCallback(() => {
+    if (selectedRows.length === 0) return;
+    const header = ['Address', 'Owner', 'County', 'Phone', 'Email', 'Score', 'Status'];
+    const csvRows = selectedRows.map((r) => [
+      r.streetAddress ?? '',
+      r.ownerName ?? '',
+      r.county ?? '',
+      r.phone ?? '',
+      r.email ?? '',
+      r.compositeScore?.toString() ?? '',
+      r.status,
+    ]);
+    const csv = [header, ...csvRows].map((row) => row.map((c) => `"${c.replace(/"/g, '""')}"`).join(',')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `leads-export-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast.success(`Exported ${selectedRows.length} leads`);
+  }, [selectedRows]);
 
   if (error) {
     return <ErrorState message="Failed to load leads" onRetry={() => refetch()} />;
@@ -231,28 +332,43 @@ export default function LeadsPage() {
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead className="w-10">
+                    <Checkbox
+                      checked={allPageSelected}
+                      onCheckedChange={toggleAll}
+                    />
+                  </TableHead>
                   <SortableHeader label="Address" col="streetAddress" current={sortBy} order={sortOrder} onClick={handleSort} />
                   <TableHead>Owner</TableHead>
                   <TableHead>County</TableHead>
                   <SortableHeader label="Score" col="compositeScore" current={sortBy} order={sortOrder} onClick={handleSort} />
                   <SortableHeader label="Status" col="status" current={sortBy} order={sortOrder} onClick={handleSort} />
                   <TableHead>Stage</TableHead>
+                  <TableHead>Skip Trace</TableHead>
                   <TableHead>Assigned</TableHead>
                   <SortableHeader label="Updated" col="updatedAt" current={sortBy} order={sortOrder} onClick={handleSort} />
+                  <TableHead className="w-16" />
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {data?.data.map((lead) => (
+                {rows.map((lead) => (
                   <TableRow
                     key={lead.leadInstanceId}
                     className="cursor-pointer hover:bg-muted/50"
                     onClick={() => setSelectedLead(lead)}
+                    data-state={selectedIds.has(lead.leadInstanceId) ? 'selected' : undefined}
                   >
-                    <TableCell className="font-medium max-w-[200px] truncate">
-                      {lead.streetAddress ?? '—'}
+                    <TableCell onClick={(e) => e.stopPropagation()}>
+                      <Checkbox
+                        checked={selectedIds.has(lead.leadInstanceId)}
+                        onCheckedChange={() => toggleOne(lead.leadInstanceId)}
+                      />
                     </TableCell>
-                    <TableCell className="max-w-[150px] truncate">{lead.ownerName ?? '—'}</TableCell>
-                    <TableCell>{lead.county ?? '—'}</TableCell>
+                    <TableCell className="font-medium max-w-[200px] truncate">
+                      {lead.streetAddress ?? '\u2014'}
+                    </TableCell>
+                    <TableCell className="max-w-[150px] truncate">{lead.ownerName ?? '\u2014'}</TableCell>
+                    <TableCell>{lead.county ?? '\u2014'}</TableCell>
                     <TableCell>
                       <ScoreBadge score={lead.compositeScore} />
                     </TableCell>
@@ -262,9 +378,26 @@ export default function LeadsPage() {
                     <TableCell>
                       <DealStageBadge status={lead.status} />
                     </TableCell>
-                    <TableCell className="text-sm">{lead.assignedTo ?? '—'}</TableCell>
+                    <TableCell>
+                      <SkipTraceBadge skipTracedAt={lead.skipTracedAt} tier={lead.skipTraceTier} />
+                    </TableCell>
+                    <TableCell className="text-sm">{lead.assignedTo ?? '\u2014'}</TableCell>
                     <TableCell className="text-sm text-muted-foreground">
                       {formatDistanceToNow(new Date(lead.updatedAt), { addSuffix: true })}
+                    </TableCell>
+                    <TableCell onClick={(e) => e.stopPropagation()}>
+                      {!lead.skipTracedAt && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-7 px-2 text-xs"
+                          disabled={skipTraceMutation.isPending}
+                          onClick={() => triggerSkipTrace(lead.dominionLeadId)}
+                        >
+                          <Search className="h-3 w-3 mr-1" />
+                          Trace
+                        </Button>
+                      )}
                     </TableCell>
                   </TableRow>
                 ))}
@@ -288,6 +421,30 @@ export default function LeadsPage() {
             </div>
           )}
         </>
+      )}
+
+      {/* Bulk Actions Toolbar */}
+      {selectedIds.size > 0 && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-card border rounded-lg shadow-lg px-4 py-3 flex items-center gap-3 z-50">
+          <span className="text-sm font-medium">{selectedIds.size} selected</span>
+          <Button size="sm" variant="outline" onClick={() => setAssignDialogOpen(true)}>
+            <UserPlus className="h-3.5 w-3.5 mr-1" /> Assign
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={handleBulkSkipTrace}
+            disabled={bulkSkipTraceMutation.isPending}
+          >
+            <Search className="h-3.5 w-3.5 mr-1" /> Skip Trace
+          </Button>
+          <Button size="sm" variant="outline" onClick={handleExportCsv}>
+            <Download className="h-3.5 w-3.5 mr-1" /> Export CSV
+          </Button>
+          <Button size="sm" variant="ghost" onClick={() => setSelectedIds(new Set())}>
+            <X className="h-3.5 w-3.5" />
+          </Button>
+        </div>
       )}
 
       <PropertyDetailSheet
@@ -328,6 +485,50 @@ export default function LeadsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Bulk Assign Dialog */}
+      <Dialog open={assignDialogOpen} onOpenChange={setAssignDialogOpen}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Assign {selectedRows.length} Leads</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-2">
+              <Label htmlFor="assign-agent">Agent ID</Label>
+              <Input
+                id="assign-agent"
+                value={assignAgent}
+                onChange={e => setAssignAgent(e.target.value)}
+                placeholder="e.g. agent-001"
+                onKeyDown={e => e.key === 'Enter' && handleBulkAssign()}
+                autoFocus
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAssignDialogOpen(false)}>Cancel</Button>
+            <Button onClick={handleBulkAssign} disabled={!assignAgent.trim() || bulkAssignMutation.isPending}>
+              {bulkAssignMutation.isPending ? 'Assigning...' : 'Assign'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+function SkipTraceBadge({ skipTracedAt, tier }: { skipTracedAt: string | null; tier: string | null }) {
+  if (!skipTracedAt) {
+    return <Badge variant="outline" className="text-[10px] text-muted-foreground">Not traced</Badge>;
+  }
+  return (
+    <div className="flex items-center gap-1">
+      <Badge variant="secondary" className="text-[10px]">
+        {tier === 'tier1' || tier === 'STANDARD' ? 'T1' : tier === 'tier2' || tier === 'ADVANCED' ? 'T2' : 'ST'}
+      </Badge>
+      <span className="text-[10px] text-muted-foreground">
+        {new Date(skipTracedAt).toLocaleDateString()}
+      </span>
     </div>
   );
 }
@@ -370,7 +571,7 @@ function SortableHeader({
     >
       {label}
       {isActive && (
-        <span className="ml-1">{order === 'asc' ? '↑' : '↓'}</span>
+        <span className="ml-1">{order === 'asc' ? '\u2191' : '\u2193'}</span>
       )}
     </TableHead>
   );

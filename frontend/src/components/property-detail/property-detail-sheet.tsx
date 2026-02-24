@@ -45,6 +45,8 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
+import { Textarea } from '@/components/ui/textarea';
+import { useLeadNotes, useAddNote } from '@/hooks/use-notes';
 
 interface PropertyDetailSheetProps {
   lead: LeadWithProperty | null;
@@ -396,12 +398,7 @@ export function PropertyDetailSheet({ lead, open, onClose }: PropertyDetailSheet
 
               {/* ─── Notes Tab ─── */}
               <TabsContent value="notes" className="space-y-4 mt-4">
-                <h4 className="text-sm font-semibold text-muted-foreground">NOTES</h4>
-                {lead.notes ? (
-                  <p className="text-sm whitespace-pre-wrap">{lead.notes}</p>
-                ) : (
-                  <p className="text-sm text-muted-foreground">No notes recorded.</p>
-                )}
+                <NotesTab leadInstanceId={lead.leadInstanceId} legacyNotes={lead.notes} />
               </TabsContent>
 
             </div>
@@ -574,6 +571,70 @@ function InfoRow({ icon: Icon, label, value }: { icon: React.ElementType; label:
       <Icon className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
       <span className="text-muted-foreground text-xs w-20 shrink-0">{label}</span>
       <span className="text-xs font-medium truncate">{value ?? '—'}</span>
+    </div>
+  );
+}
+
+function NotesTab({ leadInstanceId, legacyNotes }: { leadInstanceId: string; legacyNotes: string | null }) {
+  const [noteText, setNoteText] = useState('');
+  const notes = useLeadNotes(leadInstanceId);
+  const addNote = useAddNote();
+
+  const handleAdd = () => {
+    if (!noteText.trim()) return;
+    addNote.mutate(
+      { leadInstanceId, text: noteText.trim() },
+      { onSuccess: () => setNoteText('') },
+    );
+  };
+
+  return (
+    <div className="space-y-4">
+      <h4 className="text-sm font-semibold text-muted-foreground">NOTES</h4>
+      <div className="flex gap-2">
+        <Textarea
+          value={noteText}
+          onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setNoteText(e.target.value)}
+          placeholder="Add a note..."
+          className="min-h-[80px]"
+          onKeyDown={(e: React.KeyboardEvent) => {
+            if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) handleAdd();
+          }}
+        />
+        <Button
+          size="sm"
+          onClick={handleAdd}
+          disabled={!noteText.trim() || addNote.isPending}
+          className="self-end"
+        >
+          Add
+        </Button>
+      </div>
+      {legacyNotes && (
+        <div className="border rounded-lg p-3 bg-muted/30">
+          <p className="text-sm whitespace-pre-wrap">{legacyNotes}</p>
+          <p className="text-xs text-muted-foreground mt-2">Legacy note</p>
+        </div>
+      )}
+      {notes.isLoading ? (
+        <div className="space-y-2">
+          {[1, 2].map(i => <Skeleton key={i} className="h-16 w-full" />)}
+        </div>
+      ) : (notes.data ?? []).length === 0 && !legacyNotes ? (
+        <p className="text-sm text-muted-foreground">No notes yet. Add one above.</p>
+      ) : (
+        <div className="space-y-2">
+          {(notes.data ?? []).map((note: { activityId: string; text: string; createdBy: string | null; createdAt: string }) => (
+            <div key={note.activityId} className="border rounded-lg p-3">
+              <p className="text-sm whitespace-pre-wrap">{note.text}</p>
+              <div className="flex justify-between mt-2 text-xs text-muted-foreground">
+                <span>{note.createdBy ?? 'System'}</span>
+                <span>{format(new Date(note.createdAt), 'MMM d, h:mm a')}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

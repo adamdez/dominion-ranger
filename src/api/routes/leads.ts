@@ -532,4 +532,96 @@ export async function leadRoutes(app: FastifyInstance): Promise<void> {
       return transitionDealStage(leadInstanceId, stage as DealStageValue, user.userId);
     },
   );
+
+  // PATCH /api/leads/bulk-assign
+  app.patch(
+    '/api/leads/bulk-assign',
+    { preHandler: [requireRole('workflow.write')] },
+    async (request) => {
+      const body = z.object({
+        leadInstanceIds: z.array(z.string().uuid()).min(1).max(500),
+        assignedTo: z.string().min(1),
+      }).parse(request.body);
+
+      let updated = 0;
+      for (const id of body.leadInstanceIds) {
+        try {
+          await db.update(leadInstances)
+            .set({ assignedTo: body.assignedTo, updatedAt: new Date() })
+            .where(eq(leadInstances.leadInstanceId, id));
+          updated++;
+        } catch {
+          // Individual failures don't block others
+        }
+      }
+      return { updated };
+    },
+  );
+
+  // GET /api/leads/:leadInstanceId/notes
+  app.get<{ Params: { leadInstanceId: string } }>(
+    '/api/leads/:leadInstanceId/notes',
+    { preHandler: [requireRole('properties.read')] },
+    async (request) => {
+      const { leadInstanceId } = request.params;
+      const rows = await db
+        .select({
+          activityId: activityLog.activityId,
+          meta: activityLog.meta,
+          userId: activityLog.userId,
+          occurredAt: activityLog.occurredAt,
+        })
+        .from(activityLog)
+        .where(and(
+          eq(activityLog.leadInstanceId, leadInstanceId),
+          eq(activityLog.activityType, 'NOTE_ADDED'),
+        ))
+        .orderBy(desc(activityLog.occurredAt))
+        .limit(100);
+
+      return rows.map((r) => ({
+        activityId: r.activityId,
+        text: (r.meta as Record<string, unknown>)?.text ?? '',
+        createdBy: r.userId,
+        createdAt: r.occurredAt,
+      }));
+    },
+  );
+
+  // POST /api/leads/:leadInstanceId/notes
+  app.post<{ Params: { leadInstanceId: string } }>(
+    '/api/leads/:leadInstanceId/notes',
+    { preHandler: [requireRole('workflow.write')] },
+    async (request) => {
+      const { leadInstanceId } = request.params;
+      const body = z.object({ text: z.string().min(1).max(5000) }).parse(request.body);
+      const user = (request as unknown as Record<string, { userId: string }>).user;
+
+      const [lead] = await db
+        .select({ dominionLeadId: leadInstances.dominionLeadId })
+        .from(leadInstances)
+        .where(eq(leadInstances.leadInstanceId, leadInstanceId))
+        .limit(1);
+
+      if (!lead) {
+        return { error: 'NOT_FOUND', message: 'Lead instance not found' };
+      }
+
+      const [row] = await db.insert(activityLog).values({
+        dominionLeadId: lead.dominionLeadId,
+        leadInstanceId,
+        userId: user?.userId ?? 'system',
+        activityType: 'NOTE_ADDED',
+        channel: 'MANUAL_SMS',
+        meta: { text: body.text },
+      }).returning();
+
+      return {
+        activityId: row.activityId,
+        text: body.text,
+        createdBy: row.userId,
+        createdAt: row.occurredAt,
+      };
+    },
+  );
 }
