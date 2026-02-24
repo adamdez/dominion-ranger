@@ -302,7 +302,14 @@ export default function PipelinePage() {
     <div className="space-y-4">
       {/* Top bar: title + view toggle */}
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold tracking-tight">Pipeline</h1>
+        <div className="flex items-center gap-2">
+          <h1 className="text-2xl font-bold tracking-tight">Pipeline</h1>
+          {tableData?.pagination && (
+            <span className="text-sm text-muted-foreground">
+              ({tableData.pagination.total} promoted leads)
+            </span>
+          )}
+        </div>
         <div className="flex items-center gap-1 p-1 rounded-lg bg-muted w-fit">
           <Button
             variant={view === 'table' ? 'default' : 'ghost'}
