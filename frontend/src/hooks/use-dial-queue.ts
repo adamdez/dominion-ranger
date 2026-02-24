@@ -37,10 +37,11 @@ export function useLogDisposition() {
       leadInstanceId: string;
       disposition: string;
       notes?: string;
+      callbackDate?: string;
     }) => {
       const { data } = await api.post<DispositionResponse>(
         `/api/leads/${params.leadInstanceId}/dispositions`,
-        { disposition: params.disposition, notes: params.notes }
+        { disposition: params.disposition, notes: params.notes, callbackDate: params.callbackDate }
       );
       return data;
     },

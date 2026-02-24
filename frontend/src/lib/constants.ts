@@ -13,13 +13,14 @@ export const LEAD_STATUS = {
 
 export const DISPOSITION_TYPES = {
   NO_ANSWER: { label: 'No Answer', action: 'stay' },
-  LEFT_VOICEMAIL: { label: 'Left Voicemail', action: 'stay' },
+  LEFT_VOICEMAIL: { label: 'Voicemail Left', action: 'stay' },
   CALLBACK_REQUESTED: { label: 'Callback Requested', action: 'stay' },
   NOT_INTERESTED: { label: 'Not Interested', action: 'dead' },
   WRONG_NUMBER: { label: 'Wrong Number', action: 'dead' },
   DO_NOT_CALL: { label: 'Do Not Call', action: 'dnc' },
   INTERESTED: { label: 'Interested', action: 'contacted' },
   APPOINTMENT_SET: { label: 'Appointment Set', action: 'contacted' },
+  DISCONNECTED: { label: 'Disconnected', action: 'dead' },
 } as const;
 
 export const SCORE_TIERS = {

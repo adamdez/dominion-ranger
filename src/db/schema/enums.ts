@@ -104,6 +104,7 @@ export const dispositionTypeEnum = pgEnum('disposition_type', [
   'DO_NOT_CALL',
   'INTERESTED',
   'APPOINTMENT_SET',
+  'DISCONNECTED',
 ]);
 
 // ─── RBAC ──────────────────────────────────────────

@@ -125,24 +125,32 @@ export async function seedScoringModel(): Promise<void> {
 }
 
 export async function seedSystemSettings(): Promise<void> {
-  const existing = await db.select().from(systemSettings).limit(1);
-  if (existing.length > 0) {
-    logger.info('System settings already exist, skipping seed');
-    return;
+  try {
+    const existing = await db.select().from(systemSettings).limit(1);
+    if (existing.length > 0) {
+      logger.info('System settings already exist, skipping seed');
+      return;
+    }
+
+    // Sentinel webhook URL — empty by default, set when Sentinel is ready
+    // Charter: "If sentinel_webhook_url exists → POST. If not → store event only."
+    await db.insert(systemSettings).values([
+      {
+        key: 'sentinel_webhook_url',
+        value: { url: null },
+      },
+      {
+        key: 'ingestion_schedule',
+        value: { interval_hours: 6, enabled: true },
+      },
+    ]);
+
+    logger.info('System settings seeded');
+  } catch (err: any) {
+    if (err.message?.includes('does not exist')) {
+      console.warn('system_settings table not found, skipping seed');
+      return;
+    }
+    throw err;
   }
-
-  // Sentinel webhook URL — empty by default, set when Sentinel is ready
-  // Charter: "If sentinel_webhook_url exists → POST. If not → store event only."
-  await db.insert(systemSettings).values([
-    {
-      key: 'sentinel_webhook_url',
-      value: { url: null },
-    },
-    {
-      key: 'ingestion_schedule',
-      value: { interval_hours: 6, enabled: true },
-    },
-  ]);
-
-  logger.info('System settings seeded');
 }

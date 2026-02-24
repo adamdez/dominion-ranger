@@ -35,4 +35,3 @@ runSeeds().catch((err) => {
   logger.fatal({ err }, 'Seed failed');
   process.exit(1);
 });
-```

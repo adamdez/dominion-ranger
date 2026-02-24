@@ -30,6 +30,7 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
       }
       if (query.status) conditions.push(eq(tasks.status, query.status));
       if (query.leadInstanceId) conditions.push(eq(tasks.leadInstanceId, query.leadInstanceId));
+      if (query.dominionLeadId) conditions.push(eq(tasks.dominionLeadId, query.dominionLeadId));
       if (query.dueBefore) conditions.push(lte(tasks.dueAt, new Date(query.dueBefore)));
       if (query.dueAfter) conditions.push(gte(tasks.dueAt, new Date(query.dueAfter)));
 
