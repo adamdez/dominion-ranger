@@ -1,6 +1,7 @@
 export {
   generateClientToken,
   getCallablePhone,
+  getUserCallerId,
   generateVoiceTwiml,
   initiateCall,
   updateCallStatus,

@@ -1,53 +1,53 @@
 import type { FastifyRequest, FastifyReply } from 'fastify';
-import { hasPermission, getUserById } from '../../modules/rbac/service.js';
+import { verifyToken } from '../../modules/auth/auth-service.js';
+import { hasPermission } from '../../modules/rbac/service.js';
 import type { Role } from '../../modules/rbac/service.js';
 import { env } from '../../config/env.js';
 
 interface RequestUser {
   userId: string;
+  email: string;
+  name: string;
   role: Role;
 }
 
-/**
- * Attach user context to request.
- *
- * Phase 1: Simple token-based auth via X-API-Key header.
- * Phase 2: JWT with proper session management.
- */
 export async function authMiddleware(request: FastifyRequest, reply: FastifyReply): Promise<void> {
-  // In development, allow bootstrap token for admin access
-  const apiKey = request.headers['x-api-key'] as string | undefined;
+  const authHeader = request.headers.authorization;
+  if (authHeader?.startsWith('Bearer ')) {
+    try {
+      const token = authHeader.slice(7);
+      const payload = verifyToken(token);
+      (request as unknown as Record<string, unknown>).user = {
+        userId: payload.userId,
+        email: payload.email,
+        name: payload.name,
+        role: payload.role as Role,
+      } satisfies RequestUser;
+      return;
+    } catch {
+      // JWT invalid — fall through to API key check
+    }
+  }
 
+  const apiKey = request.headers['x-api-key'] as string | undefined;
   if (!apiKey) {
-    reply.code(401).send({ error: 'Missing X-API-Key header' });
+    reply.code(401).send({ error: 'Missing authentication' });
     return;
   }
 
-  // Bootstrap admin token check
   if (env.ADMIN_BOOTSTRAP_TOKEN && apiKey === env.ADMIN_BOOTSTRAP_TOKEN) {
     (request as unknown as Record<string, unknown>).user = {
       userId: 'admin-bootstrap',
+      email: 'admin@system',
+      name: 'Admin',
       role: 'ADMIN' as Role,
     } satisfies RequestUser;
     return;
   }
 
-  // Look up user by API key (userId = apiKey for Phase 1 simplicity)
-  const user = await getUserById(apiKey);
-  if (!user || !user.active) {
-    reply.code(401).send({ error: 'Invalid or inactive API key' });
-    return;
-  }
-
-  (request as unknown as Record<string, unknown>).user = {
-    userId: user.userId,
-    role: user.role as Role,
-  } satisfies RequestUser;
+  reply.code(401).send({ error: 'Invalid authentication' });
 }
 
-/**
- * Create a permission guard for a specific permission.
- */
 export function requireRole(permission: string) {
   return async function (request: FastifyRequest, reply: FastifyReply): Promise<void> {
     const user = (request as unknown as Record<string, unknown>).user as RequestUser | undefined;

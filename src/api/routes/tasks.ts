@@ -19,9 +19,15 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
     async (request) => {
       const query = tasksListQuery.parse(request.query);
       const offset = (query.page - 1) * query.pageSize;
+      const taskUser = (request as unknown as Record<string, { userId: string; role: string }>).user;
+      const taskIsAdminOrManager = taskUser?.role === 'ADMIN' || taskUser?.role === 'MANAGER';
 
       const conditions = [];
-      if (query.assignedTo) conditions.push(eq(tasks.assignedTo, query.assignedTo));
+      if (!taskIsAdminOrManager) {
+        conditions.push(eq(tasks.assignedTo, taskUser.userId));
+      } else if (query.assignedTo) {
+        conditions.push(eq(tasks.assignedTo, query.assignedTo));
+      }
       if (query.status) conditions.push(eq(tasks.status, query.status));
       if (query.leadInstanceId) conditions.push(eq(tasks.leadInstanceId, query.leadInstanceId));
       if (query.dueBefore) conditions.push(lte(tasks.dueAt, new Date(query.dueBefore)));
@@ -50,17 +56,21 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
   app.get(
     '/api/tasks/due-today',
     { preHandler: [requireRole('properties.read')] },
-    async () => {
+    async (request) => {
+      const dtUser = (request as unknown as Record<string, { userId: string; role: string }>).user;
+      const dtIsAdminOrManager = dtUser?.role === 'ADMIN' || dtUser?.role === 'MANAGER';
+      const dtConditions = [
+        eq(tasks.status, TaskStatus.PENDING),
+        gte(tasks.dueAt, sql`date_trunc('day', now())`),
+        lte(tasks.dueAt, sql`date_trunc('day', now()) + interval '1 day'`),
+      ];
+      if (!dtIsAdminOrManager) {
+        dtConditions.push(eq(tasks.assignedTo, dtUser.userId));
+      }
       const rows = await db
         .select()
         .from(tasks)
-        .where(
-          and(
-            eq(tasks.status, TaskStatus.PENDING),
-            gte(tasks.dueAt, sql`date_trunc('day', now())`),
-            lte(tasks.dueAt, sql`date_trunc('day', now()) + interval '1 day'`),
-          ),
-        )
+        .where(and(...dtConditions))
         .orderBy(tasks.dueAt);
       return rows;
     },
@@ -70,16 +80,20 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
   app.get(
     '/api/tasks/overdue',
     { preHandler: [requireRole('properties.read')] },
-    async () => {
+    async (request) => {
+      const odUser = (request as unknown as Record<string, { userId: string; role: string }>).user;
+      const odIsAdminOrManager = odUser?.role === 'ADMIN' || odUser?.role === 'MANAGER';
+      const odConditions = [
+        eq(tasks.status, TaskStatus.PENDING),
+        lte(tasks.dueAt, sql`now()`),
+      ];
+      if (!odIsAdminOrManager) {
+        odConditions.push(eq(tasks.assignedTo, odUser.userId));
+      }
       const rows = await db
         .select()
         .from(tasks)
-        .where(
-          and(
-            eq(tasks.status, TaskStatus.PENDING),
-            lte(tasks.dueAt, sql`now()`),
-          ),
-        )
+        .where(and(...odConditions))
         .orderBy(tasks.dueAt);
       return rows;
     },

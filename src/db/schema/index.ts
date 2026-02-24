@@ -50,6 +50,9 @@ export type { AuditLogEntry, NewAuditLogEntry } from './audit-log';
 export { users } from './users';
 export type { User, NewUser } from './users';
 
+export { sessions } from './sessions';
+export type { Session, NewSession } from './sessions';
+
 // ─── Analytics & Attribution ────────────────────────
 export * from './activity-log-v2';
 export * from './deals';

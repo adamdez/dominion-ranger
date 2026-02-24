@@ -10,6 +10,8 @@ import {
   leadInstanceTags,
   activityLog,
   dispositions,
+  callLogs,
+  smsLogs,
   LeadStatus,
 } from '../../db/schema/index.js';
 import {
@@ -47,9 +49,12 @@ export async function leadRoutes(app: FastifyInstance): Promise<void> {
       const offset = (query.page - 1) * query.pageSize;
 
       const conditions = [];
-      const user = (request as unknown as Record<string, { userId: string }>).user;
+      const user = (request as unknown as Record<string, { userId: string; role: string }>).user;
       const userId = user?.userId ?? 'admin-bootstrap';
-      if (query.view === 'mine') {
+      const isAdminOrManager = user?.role === 'ADMIN' || user?.role === 'MANAGER';
+      if (!isAdminOrManager) {
+        conditions.push(eq(leadInstances.assignedTo, userId));
+      } else if (query.view === 'mine') {
         conditions.push(eq(leadInstances.assignedTo, userId));
       } else if (query.view === 'unassigned') {
         conditions.push(isNull(leadInstances.assignedTo));
@@ -181,14 +186,14 @@ export async function leadRoutes(app: FastifyInstance): Promise<void> {
         .limit(query.pageSize)
         .offset(offset);
 
-      // Batch-fetch tags and last activity for each lead in the result set
       if (rows.length === 0) {
         return paginate(rows, countResult.count, query.page, query.pageSize);
       }
 
       const leadIds = rows.map(r => r.leadInstanceId);
+      const dominionIds = rows.map(r => r.dominionLeadId);
 
-      const [tagRows, activityRows] = await Promise.all([
+      const [tagRows, activityRows, signalRows] = await Promise.all([
         db
           .select({
             leadInstanceId: leadInstanceTags.leadInstanceId,
@@ -205,6 +210,16 @@ export async function leadRoutes(app: FastifyInstance): Promise<void> {
           FROM activity_log
           WHERE lead_instance_id = ANY(${leadIds})
           ORDER BY lead_instance_id, occurred_at DESC
+        `),
+
+        db.execute(sql`
+          SELECT dominion_lead_id, array_agg(DISTINCT event_type ORDER BY event_type) as top_signals
+          FROM (
+            SELECT dominion_lead_id, event_type
+            FROM distress_events
+            WHERE dominion_lead_id = ANY(${dominionIds})
+          ) sub
+          GROUP BY dominion_lead_id
         `),
       ]);
 
@@ -225,10 +240,20 @@ export async function leadRoutes(app: FastifyInstance): Promise<void> {
         });
       }
 
+      const signalsByProperty = new Map<string, string[]>();
+      const signalResults = signalRows.rows as Array<Record<string, unknown>>;
+      for (const row of signalResults) {
+        signalsByProperty.set(
+          row.dominion_lead_id as string,
+          (row.top_signals as string[]) ?? [],
+        );
+      }
+
       const enrichedRows = rows.map(r => ({
         ...r,
         tags: tagsByLead.get(r.leadInstanceId) ?? [],
         lastActivity: activityByLead.get(r.leadInstanceId) ?? null,
+        topSignals: signalsByProperty.get(r.dominionLeadId) ?? [],
       }));
 
       return paginate(enrichedRows, countResult.count, query.page, query.pageSize);
@@ -361,13 +386,23 @@ export async function leadRoutes(app: FastifyInstance): Promise<void> {
   app.get(
     '/api/leads/stats',
     { preHandler: [requireRole('properties.read')] },
-    async () => {
+    async (request) => {
+      const user = (request as unknown as Record<string, { userId: string; role: string }>).user;
+      const isAdminOrManager = user?.role === 'ADMIN' || user?.role === 'MANAGER';
+
+      const statsConditions = [];
+      if (!isAdminOrManager) {
+        statsConditions.push(eq(leadInstances.assignedTo, user.userId));
+      }
+      const statsWhere = statsConditions.length > 0 ? and(...statsConditions) : undefined;
+
       const statuses = await db
         .select({
           status: leadInstances.status,
           count: sql<number>`count(*)::int`,
         })
         .from(leadInstances)
+        .where(statsWhere)
         .groupBy(leadInstances.status);
 
       const total = statuses.reduce((sum, s) => sum + s.count, 0);
@@ -377,15 +412,17 @@ export async function leadRoutes(app: FastifyInstance): Promise<void> {
       const dialReady = statuses.find(s => s.status === LeadStatus.DIAL_READY)?.count ?? 0;
       const promoted = statuses.find(s => s.status === LeadStatus.PROMOTED)?.count ?? 0;
 
+      const closedConditions = [
+        eq(leadInstances.status, LeadStatus.CLOSED),
+        sql`${leadInstances.closedAt} >= date_trunc('month', now())`,
+      ];
+      if (!isAdminOrManager) {
+        closedConditions.push(eq(leadInstances.assignedTo, user.userId));
+      }
       const [closedThisMonth] = await db
         .select({ count: sql<number>`count(*)::int` })
         .from(leadInstances)
-        .where(
-          and(
-            eq(leadInstances.status, LeadStatus.CLOSED),
-            sql`${leadInstances.closedAt} >= date_trunc('month', now())`,
-          ),
-        );
+        .where(and(...closedConditions));
 
       return {
         total,
@@ -405,6 +442,8 @@ export async function leadRoutes(app: FastifyInstance): Promise<void> {
     async (request) => {
       const query = dialQueueQuery.parse(request.query);
       const offset = (query.page - 1) * query.pageSize;
+      const dqUser = (request as unknown as Record<string, { userId: string; role: string }>).user;
+      const dqIsAdminOrManager = dqUser?.role === 'ADMIN' || dqUser?.role === 'MANAGER';
 
       const latestScores = db
         .select({
@@ -418,10 +457,16 @@ export async function leadRoutes(app: FastifyInstance): Promise<void> {
         .from(scoringRecords)
         .as('ls');
 
+      const dqConditions = [eq(leadInstances.status, LeadStatus.DIAL_READY)];
+      if (!dqIsAdminOrManager) {
+        dqConditions.push(eq(leadInstances.assignedTo, dqUser.userId));
+      }
+      const dqWhere = and(...dqConditions);
+
       const [countResult] = await db
         .select({ count: sql<number>`count(*)::int` })
         .from(leadInstances)
-        .where(eq(leadInstances.status, LeadStatus.DIAL_READY));
+        .where(dqWhere);
 
       const rows = await db
         .select({
@@ -456,7 +501,7 @@ export async function leadRoutes(app: FastifyInstance): Promise<void> {
           eq(latestScores.dominionLeadId, leadInstances.dominionLeadId),
           eq(latestScores.rn, 1),
         ))
-        .where(eq(leadInstances.status, LeadStatus.DIAL_READY))
+        .where(dqWhere)
         .orderBy(desc(latestScores.compositeScore))
         .limit(query.pageSize)
         .offset(offset);
@@ -530,6 +575,226 @@ export async function leadRoutes(app: FastifyInstance): Promise<void> {
       const { stage } = transitionDealStageBody.parse(request.body);
       const user = (request as unknown as Record<string, { userId: string }>).user;
       return transitionDealStage(leadInstanceId, stage as DealStageValue, user.userId);
+    },
+  );
+
+  // PATCH /api/leads/bulk-assign
+  app.patch(
+    '/api/leads/bulk-assign',
+    { preHandler: [requireRole('workflow.write')] },
+    async (request) => {
+      const body = z.object({
+        leadInstanceIds: z.array(z.string().uuid()).min(1).max(500),
+        assignedTo: z.string().min(1),
+      }).parse(request.body);
+
+      let updated = 0;
+      for (const id of body.leadInstanceIds) {
+        try {
+          await db.update(leadInstances)
+            .set({ assignedTo: body.assignedTo, updatedAt: new Date() })
+            .where(eq(leadInstances.leadInstanceId, id));
+          updated++;
+        } catch {
+          // Individual failures don't block others
+        }
+      }
+      return { updated };
+    },
+  );
+
+  // GET /api/leads/:leadInstanceId/notes
+  app.get<{ Params: { leadInstanceId: string } }>(
+    '/api/leads/:leadInstanceId/notes',
+    { preHandler: [requireRole('properties.read')] },
+    async (request) => {
+      const { leadInstanceId } = request.params;
+      const rows = await db
+        .select({
+          activityId: activityLog.activityId,
+          meta: activityLog.meta,
+          userId: activityLog.userId,
+          occurredAt: activityLog.occurredAt,
+        })
+        .from(activityLog)
+        .where(and(
+          eq(activityLog.leadInstanceId, leadInstanceId),
+          eq(activityLog.activityType, 'NOTE_ADDED'),
+        ))
+        .orderBy(desc(activityLog.occurredAt))
+        .limit(100);
+
+      return rows.map((r) => ({
+        activityId: r.activityId,
+        text: (r.meta as Record<string, unknown>)?.text ?? '',
+        createdBy: r.userId,
+        createdAt: r.occurredAt,
+      }));
+    },
+  );
+
+  // POST /api/leads/:leadInstanceId/notes
+  app.post<{ Params: { leadInstanceId: string } }>(
+    '/api/leads/:leadInstanceId/notes',
+    { preHandler: [requireRole('workflow.write')] },
+    async (request) => {
+      const { leadInstanceId } = request.params;
+      const body = z.object({ text: z.string().min(1).max(5000) }).parse(request.body);
+      const user = (request as unknown as Record<string, { userId: string }>).user;
+
+      const [lead] = await db
+        .select({ dominionLeadId: leadInstances.dominionLeadId })
+        .from(leadInstances)
+        .where(eq(leadInstances.leadInstanceId, leadInstanceId))
+        .limit(1);
+
+      if (!lead) {
+        return { error: 'NOT_FOUND', message: 'Lead instance not found' };
+      }
+
+      const [row] = await db.insert(activityLog).values({
+        dominionLeadId: lead.dominionLeadId,
+        leadInstanceId,
+        userId: user?.userId ?? 'system',
+        activityType: 'NOTE_ADDED',
+        channel: 'MANUAL_SMS',
+        meta: { text: body.text },
+      }).returning();
+
+      return {
+        activityId: row.activityId,
+        text: body.text,
+        createdBy: row.userId,
+        createdAt: row.occurredAt,
+      };
+    },
+  );
+
+  // GET /api/leads/:leadInstanceId/history — Unified timeline of calls, SMS, dispositions, activity
+  app.get<{ Params: { leadInstanceId: string } }>(
+    '/api/leads/:leadInstanceId/history',
+    { preHandler: [requireRole('properties.read')] },
+    async (request) => {
+      const { leadInstanceId } = request.params;
+
+      const [lead] = await db
+        .select({ dominionLeadId: leadInstances.dominionLeadId })
+        .from(leadInstances)
+        .where(eq(leadInstances.leadInstanceId, leadInstanceId))
+        .limit(1);
+
+      if (!lead) return [];
+      const dlid = lead.dominionLeadId;
+
+      const [calls, messages, dispos, activities] = await Promise.all([
+        db
+          .select({
+            id: callLogs.id,
+            direction: callLogs.direction,
+            toPhone: callLogs.toPhone,
+            status: callLogs.status,
+            durationSeconds: callLogs.durationSeconds,
+            startedAt: callLogs.startedAt,
+            userId: callLogs.userId,
+          })
+          .from(callLogs)
+          .where(eq(callLogs.dominionLeadId, dlid))
+          .orderBy(desc(callLogs.startedAt))
+          .limit(50),
+        db
+          .select({
+            id: smsLogs.id,
+            direction: smsLogs.direction,
+            toPhone: smsLogs.toPhone,
+            body: smsLogs.body,
+            status: smsLogs.status,
+            createdAt: smsLogs.createdAt,
+            userId: smsLogs.userId,
+          })
+          .from(smsLogs)
+          .where(eq(smsLogs.dominionLeadId, dlid))
+          .orderBy(desc(smsLogs.createdAt))
+          .limit(50),
+        db
+          .select({
+            id: dispositions.id,
+            disposition: dispositions.disposition,
+            notes: dispositions.notes,
+            createdBy: dispositions.createdBy,
+            createdAt: dispositions.createdAt,
+          })
+          .from(dispositions)
+          .where(eq(dispositions.leadInstanceId, leadInstanceId))
+          .orderBy(desc(dispositions.createdAt))
+          .limit(50),
+        db
+          .select({
+            activityId: activityLog.activityId,
+            activityType: activityLog.activityType,
+            channel: activityLog.channel,
+            outcome: activityLog.outcome,
+            occurredAt: activityLog.occurredAt,
+            userId: activityLog.userId,
+            meta: activityLog.meta,
+          })
+          .from(activityLog)
+          .where(eq(activityLog.dominionLeadId, dlid))
+          .orderBy(desc(activityLog.occurredAt))
+          .limit(50),
+      ]);
+
+      type TimelineItem = {
+        type: 'call' | 'sms' | 'disposition' | 'status_change';
+        summary: string;
+        notes: string | null;
+        timestamp: string;
+        userId: string | null;
+      };
+
+      const timeline: TimelineItem[] = [];
+
+      for (const c of calls) {
+        timeline.push({
+          type: 'call',
+          summary: `${c.direction === 'OUTBOUND' ? 'Outbound' : 'Inbound'} call to ${c.toPhone ?? 'unknown'} — ${c.status}${c.durationSeconds ? ` (${c.durationSeconds}s)` : ''}`,
+          notes: null,
+          timestamp: c.startedAt?.toISOString() ?? new Date().toISOString(),
+          userId: c.userId,
+        });
+      }
+
+      for (const m of messages) {
+        timeline.push({
+          type: 'sms',
+          summary: `${m.direction === 'OUTBOUND' ? 'Sent' : 'Received'} SMS to ${m.toPhone ?? 'unknown'} — ${m.status}`,
+          notes: m.body,
+          timestamp: m.createdAt?.toISOString() ?? new Date().toISOString(),
+          userId: m.userId,
+        });
+      }
+
+      for (const d of dispos) {
+        timeline.push({
+          type: 'disposition',
+          summary: `Disposition: ${d.disposition}`,
+          notes: d.notes,
+          timestamp: d.createdAt?.toISOString() ?? new Date().toISOString(),
+          userId: d.createdBy,
+        });
+      }
+
+      for (const a of activities) {
+        timeline.push({
+          type: 'status_change',
+          summary: `${a.activityType} via ${a.channel}${a.outcome ? ` → ${a.outcome}` : ''}`,
+          notes: (a.meta as Record<string, unknown>)?.text as string ?? null,
+          timestamp: a.occurredAt?.toISOString() ?? new Date().toISOString(),
+          userId: a.userId,
+        });
+      }
+
+      timeline.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+      return timeline.slice(0, 100);
     },
   );
 }

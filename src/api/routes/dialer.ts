@@ -8,6 +8,7 @@ import { logActivity } from '../../modules/analytics/activity-logger.js';
 import {
   generateClientToken,
   getCallablePhone,
+  getUserCallerId,
   generateVoiceTwiml,
   initiateCall,
   updateCallStatus,
@@ -129,11 +130,15 @@ export async function dialerRoutes(app: FastifyInstance): Promise<void> {
         return reply.code(403).send('Invalid signature');
       }
 
-      const toPhone = (request.body as Record<string, string>).To ?? '';
+      const body = request.body as Record<string, string>;
+      const toPhone = body.To ?? '';
       const statusUrl = `${baseUrl}/api/dialer/status`;
       const recordingUrl = `${baseUrl}/api/dialer/recording`;
 
-      const twimlXml = generateVoiceTwiml(toPhone, statusUrl, recordingUrl);
+      const callerIdentity = body.From?.replace('client:', '') ?? '';
+      const callerId = callerIdentity ? await getUserCallerId(callerIdentity) : undefined;
+
+      const twimlXml = generateVoiceTwiml(toPhone, statusUrl, recordingUrl, callerId);
       reply.type('text/xml').send(twimlXml);
     },
   );

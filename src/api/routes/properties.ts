@@ -1,4 +1,7 @@
 import type { FastifyInstance } from 'fastify';
+import { eq, desc } from 'drizzle-orm';
+import { db } from '../../db/connection.js';
+import { scoringRecords, propertyContacts, properties } from '../../db/schema/index.js';
 import { getPropertyById, getPropertyCount } from '../../modules/properties/index.js';
 import { getEventsByProperty } from '../../modules/distress-events/index.js';
 import { getLatestScore, getScoringHistory } from '../../modules/scoring/index.js';
@@ -82,6 +85,118 @@ export async function propertyRoutes(app: FastifyInstance): Promise<void> {
     async () => {
       const count = await getPropertyCount();
       return { count };
+    },
+  );
+
+  // GET /api/properties/:id/score-breakdown — Scoring breakdown with top signal contributions
+  app.get<{ Params: { id: string } }>(
+    '/api/properties/:id/score-breakdown',
+    { preHandler: [requireRole('properties.read')] },
+    async (request) => {
+      const { id } = propertyParamsSchema.parse(request.params);
+
+      const [record] = await db
+        .select({
+          compositeScore: scoringRecords.compositeScore,
+          motivationScore: scoringRecords.motivationScore,
+          dealScore: scoringRecords.dealScore,
+          confidenceScore: scoringRecords.confidenceScore,
+          signalContributions: scoringRecords.signalContributions,
+          modelVersion: scoringRecords.scoreModelVersion,
+          scoredAt: scoringRecords.createdAt,
+        })
+        .from(scoringRecords)
+        .where(eq(scoringRecords.dominionLeadId, id))
+        .orderBy(desc(scoringRecords.createdAt))
+        .limit(1);
+
+      if (!record) return { topSignals: [], scores: null };
+
+      const contributions = (record.signalContributions as Array<Record<string, unknown>>) ?? [];
+      const topSignals = contributions
+        .sort((a, b) => (Number(b.finalContribution) || 0) - (Number(a.finalContribution) || 0))
+        .slice(0, 8)
+        .map(c => ({
+          eventType: c.eventType,
+          eventLayer: c.eventLayer,
+          contribution: Number(c.finalContribution) || 0,
+          daysSinceTrigger: c.daysSinceTrigger,
+        }));
+
+      return {
+        topSignals,
+        scores: {
+          composite: Number(record.compositeScore),
+          motivation: Number(record.motivationScore),
+          deal: Number(record.dealScore),
+          confidence: Number(record.confidenceScore),
+          modelVersion: record.modelVersion,
+          scoredAt: record.scoredAt,
+        },
+      };
+    },
+  );
+
+  // GET /api/properties/:id/contacts — Property contacts from skip trace + property record
+  app.get<{ Params: { id: string } }>(
+    '/api/properties/:id/contacts',
+    { preHandler: [requireRole('properties.read')] },
+    async (request) => {
+      const { id } = propertyParamsSchema.parse(request.params);
+
+      const [contacts, [prop]] = await Promise.all([
+        db
+          .select()
+          .from(propertyContacts)
+          .where(eq(propertyContacts.dominionLeadId, id))
+          .orderBy(desc(propertyContacts.isPrimary)),
+        db
+          .select({
+            phone: properties.phone,
+            phone2: properties.phone2,
+            phone3: properties.phone3,
+            email: properties.email,
+            email2: properties.email2,
+            ownerName: properties.ownerName,
+          })
+          .from(properties)
+          .where(eq(properties.dominionLeadId, id))
+          .limit(1),
+      ]);
+
+      const result = [
+        ...contacts.map(c => ({
+          contactId: c.id,
+          fullName: c.contactName,
+          contactType: c.contactType,
+          phone: c.phone,
+          phoneType: c.phoneType,
+          phoneStatus: c.phoneStatus,
+          email: c.email,
+          isPrimary: c.isPrimary,
+          dndCalls: c.dndCalls,
+          dndSms: c.dndSms,
+          source: c.source,
+        })),
+      ];
+
+      if (prop?.phone && !result.some(c => c.phone === prop.phone)) {
+        result.unshift({
+          contactId: 'property-primary',
+          fullName: prop.ownerName,
+          contactType: 'OWNER',
+          phone: prop.phone,
+          phoneType: null,
+          phoneStatus: null,
+          email: prop.email,
+          isPrimary: true,
+          dndCalls: false,
+          dndSms: false,
+          source: 'property_record',
+        });
+      }
+
+      return result;
     },
   );
 }
