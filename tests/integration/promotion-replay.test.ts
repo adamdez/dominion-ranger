@@ -149,6 +149,10 @@ describe.skipIf(!canRun)('Promotion Replay Determinism', () => {
 
     expect(originalPromotions.size).toBeGreaterThan(0);
 
+    // Clear promoted_leads so the idempotency guard in evaluateForPromotion
+    // doesn't block the replay from re-creating identical records.
+    await db.execute(sql`DELETE FROM promoted_leads`);
+
     // --- Replay pass: replay promotion from stored scores ---
     const replayPromotions: Map<string, string> = new Map();
 
