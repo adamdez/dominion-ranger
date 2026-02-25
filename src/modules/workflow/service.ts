@@ -1,4 +1,4 @@
-import { eq, and, sql, ne } from 'drizzle-orm';
+import { eq, and, sql, ne, isNull } from 'drizzle-orm';
 import { db } from '../../db/connection.js';
 import { leadInstances, properties, LeadStatus } from '../../db/schema/index.js';
 import type { LeadInstance } from '../../db/schema/index.js';
@@ -89,6 +89,7 @@ export async function claimLead(input: {
     .set({
       assignedTo: input.userId,
       status: LeadStatus.ASSIGNED,
+      funnelStage: 'lead',
       version: sql`${leadInstances.version} + 1`,
       claimedAt: new Date(),
       updatedAt: new Date(),
@@ -97,7 +98,7 @@ export async function claimLead(input: {
       and(
         eq(leadInstances.leadInstanceId, input.leadInstanceId),
         eq(leadInstances.version, input.expectedVersion),
-        eq(leadInstances.status, LeadStatus.PROMOTED),
+        isNull(leadInstances.assignedTo),
       ),
     )
     .returning();
