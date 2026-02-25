@@ -390,6 +390,7 @@ export default function ProspectsPage() {
                     County <SortIcon field="county" />
                   </button>
                 </TableHead>
+                <TableHead className="text-xs font-medium w-16">Type</TableHead>
                 <TableHead>
                   <button
                     className="flex items-center text-xs font-medium"
@@ -533,6 +534,9 @@ function ProspectRow({
       </TableCell>
       <TableCell className="text-sm text-muted-foreground">
         {row.county ?? '—'}
+      </TableCell>
+      <TableCell className="text-xs text-muted-foreground">
+        {row.propertyType ?? '—'}
       </TableCell>
       <TableCell>
         <ScoreHoverCard score={row.compositeScore} dominionLeadId={row.dominionLeadId}>

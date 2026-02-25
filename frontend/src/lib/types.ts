@@ -234,6 +234,7 @@ export interface Prospect {
   equityEstimate: string | null;
   absenteeOwner: boolean;
   mortgageStatus: string;
+  propertyType: string | null;
   compositeScore: number | null;
   motivationScore: number | null;
   dealScore: number | null;
@@ -298,9 +299,11 @@ export interface DistressEvent {
 
 export interface PropertyDetail {
   dominionLeadId: string;
+  propertyId: string;
   apn: string | null;
   county: string | null;
   state: string | null;
+  standardizedAddress: string | null;
   streetAddress: string | null;
   city: string | null;
   zip: string | null;
@@ -316,6 +319,27 @@ export interface PropertyDetail {
   email: string | null;
   email2: string | null;
   mailingAddress: string | null;
+  mailAddress: string | null;
+  mailCity: string | null;
+  mailState: string | null;
+  mailZip: string | null;
+  mailVacant: boolean | null;
+  purchaseDate: string | null;
+  purchaseAmountCents: number | null;
+  purchaseSeller: string | null;
+  taxPerYearCents: number | null;
+  estTaxPercent: string | null;
+  taxDelinquentCents: number | null;
+  estEquityPercent: string | null;
+  estOpenLoansCents: number | null;
+  cltvPercent: string | null;
+  estOpenLoansCount: number | null;
+  firstLoanPurpose: string | null;
+  firstLoanType: string | null;
+  firstLoanDate: string | null;
+  firstLoanAmountCents: number | null;
+  hudRent: number | null;
+  propertyType: string | null;
   absenteeOwner: boolean;
   equityEstimate: string | null;
   mortgageStatus: string;
@@ -328,6 +352,16 @@ export interface PropertyDetail {
   legalDescription: string | null;
   acreage: string | number | null;
   regridEnrichedAt: string | null;
+  enrichedAt: string | null;
+  bedrooms: number | null;
+  bathrooms: string | null;
+  sqft: number | null;
+  yearBuilt: number | null;
+  lotSqft: number | null;
+  lastSaleDate: string | null;
+  lastSalePriceCents: number | null;
+  assessedValueCents: number | null;
+  marketValueCents: number | null;
   createdAt: string;
   updatedAt: string;
 }

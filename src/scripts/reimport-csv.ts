@@ -359,9 +359,7 @@ async function runImport(
       const firstLoanDateParsed = firstRecDateStr ? new Date(firstRecDateStr) : null;
       const firstLoanDateValid = firstLoanDateParsed && !isNaN(firstLoanDateParsed.getTime()) ? firstLoanDateParsed : null;
 
-      const [result] = await db
-        .insert(properties)
-        .values({
+      const insertValues: typeof properties.$inferInsert = {
           dominionLeadId: candidateId,
           propertyId: candidatePropertyId,
           apn: apn || null,
@@ -401,7 +399,10 @@ async function runImport(
           yearBuilt: yearBuiltVal != null ? Math.round(yearBuiltVal) : null,
           lotSqft: lotSqftVal != null ? Math.round(lotSqftVal) : null,
           propertyType: get(values, mapping, 'propertyType') || null,
-        })
+      };
+      const [result] = await db
+        .insert(properties)
+        .values(insertValues)
         .onConflictDoUpdate({
           target: [properties.apn, properties.county],
           set: {

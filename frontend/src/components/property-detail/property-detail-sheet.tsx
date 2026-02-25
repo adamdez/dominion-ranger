@@ -341,27 +341,138 @@ export function PropertyDetailSheet({ lead, open, onClose }: PropertyDetailSheet
                   </div>
                 </div>
 
-                {/* Property Info */}
+                {/* Property Details */}
                 {property && (
                   <>
                     <Separator />
                     <div className="space-y-3">
-                      <h4 className="text-sm font-semibold text-muted-foreground">PROPERTY INFO</h4>
-                      <div className="grid grid-cols-2 gap-x-8 gap-y-1 text-sm">
-                        <InfoRow icon={Home} label="Address" value={property.streetAddress} />
-                        <InfoRow icon={MapPin} label="City" value={`${property.city ?? '—'}, ${property.state ?? '—'} ${property.zip ?? ''}`} />
-                        <InfoRow icon={FileText} label="APN" value={property.apn} />
-                        <InfoRow icon={TrendingUp} label="Equity Est." value={property.equityEstimate ? `$${Number(property.equityEstimate).toLocaleString()}` : null} />
-                        <InfoRow icon={Calendar} label="Ownership" value={property.ownershipDurationMonths ? `${Math.round(property.ownershipDurationMonths / 12)} years` : null} />
-                        <InfoRow icon={Home} label="Mortgage" value={property.mortgageStatus ?? null} />
-                        <InfoRow icon={MapPin} label="Absentee" value={property.absenteeOwner ? 'Yes' : 'No'} />
-                        <InfoRow icon={Mail} label="Mailing" value={property.mailingAddress ?? null} />
-                        <InfoRow icon={FileText} label="Zoning" value={property.zoning ?? null} />
-                        <InfoRow icon={Home} label="Land Use" value={property.landUse ?? null} />
-                        <InfoRow icon={MapPin} label="Acreage" value={property.acreage != null ? String(property.acreage) : null} />
-                        <InfoRow icon={FileText} label="Legal Desc." value={property.legalDescription ?? null} />
-                        <InfoRow icon={SearchCheck} label="Skip Traced" value={property.skipTracedAt ? format(new Date(property.skipTracedAt), 'MMM d, yyyy') : 'Not yet'} />
-                        <InfoRow icon={SearchCheck} label="Regrid Enriched" value={property.regridEnrichedAt ? format(new Date(property.regridEnrichedAt), 'MMM d, yyyy') : 'Not yet'} />
+                      <h4 className="text-sm font-semibold text-muted-foreground">PROPERTY DETAILS</h4>
+                      <div className="rounded-lg border p-3">
+                        <div className="grid grid-cols-2 gap-x-8 gap-y-1 text-sm">
+                          <InfoRow icon={Home} label="Address" value={property.streetAddress} />
+                          <InfoRow icon={MapPin} label="Location" value={`${property.city ?? '—'}, ${property.state ?? '—'} ${property.zip ?? ''}`} />
+                          <InfoRow icon={FileText} label="APN" value={property.apn} />
+                          <InfoRow icon={Home} label="Type" value={property.propertyType ?? null} />
+                          <InfoRow icon={Home} label="Sq Ft" value={property.sqft ? property.sqft.toLocaleString() : null} />
+                          <InfoRow icon={Home} label="Beds / Baths" value={
+                            property.bedrooms != null || property.bathrooms != null
+                              ? `${property.bedrooms ?? '—'} / ${property.bathrooms ?? '—'}`
+                              : null
+                          } />
+                          <InfoRow icon={Calendar} label="Year Built" value={property.yearBuilt ? String(property.yearBuilt) : null} />
+                          <InfoRow icon={Home} label="Lot SqFt" value={property.lotSqft ? property.lotSqft.toLocaleString() : null} />
+                          <InfoRow icon={MapPin} label="Absentee" value={property.absenteeOwner ? 'Yes' : 'No'} />
+                          <InfoRow icon={Calendar} label="Ownership" value={property.ownershipDurationMonths ? `${Math.round(property.ownershipDurationMonths / 12)} years` : null} />
+                          <InfoRow icon={Home} label="Mortgage" value={property.mortgageStatus ?? null} />
+                          <InfoRow icon={Home} label="HUD Rent" value={property.hudRent ? `$${property.hudRent.toLocaleString()}` : null} />
+                        </div>
+                      </div>
+                    </div>
+                  </>
+                )}
+
+                {/* Mailing Address */}
+                {property && property.mailAddress && (
+                  <>
+                    <Separator />
+                    <div className="space-y-3">
+                      <h4 className="text-sm font-semibold text-muted-foreground">MAILING ADDRESS</h4>
+                      <div className="rounded-lg border p-3 space-y-2">
+                        {property.mailAddress !== property.streetAddress && (
+                          <Badge variant="outline" className="border-amber-500/30 bg-amber-500/10 text-amber-500 text-[10px]">
+                            Mailing address differs from property
+                          </Badge>
+                        )}
+                        <div className="grid grid-cols-2 gap-x-8 gap-y-1 text-sm">
+                          <InfoRow icon={Mail} label="Address" value={property.mailAddress} />
+                          <InfoRow icon={MapPin} label="City" value={property.mailCity} />
+                          <InfoRow icon={MapPin} label="State" value={property.mailState} />
+                          <InfoRow icon={MapPin} label="ZIP" value={property.mailZip} />
+                        </div>
+                        {property.mailVacant && (
+                          <Badge variant="destructive" className="text-[10px]">Mail Vacant</Badge>
+                        )}
+                      </div>
+                    </div>
+                  </>
+                )}
+
+                {/* Financial Snapshot */}
+                {property && (
+                  <>
+                    <Separator />
+                    <div className="space-y-3">
+                      <h4 className="text-sm font-semibold text-muted-foreground">FINANCIAL SNAPSHOT</h4>
+                      <div className="rounded-lg border p-3">
+                        <div className="grid grid-cols-2 gap-x-8 gap-y-1 text-sm">
+                          <InfoRow icon={TrendingUp} label="Est. Value" value={property.equityEstimate ? `$${Number(property.equityEstimate).toLocaleString()}` : (property.marketValueCents ? `$${(property.marketValueCents / 100).toLocaleString()}` : null)} />
+                          <InfoRow icon={TrendingUp} label="Est. Equity %" value={property.estEquityPercent ? `${property.estEquityPercent}%` : null} />
+                          <InfoRow icon={DollarSign} label="Assessed Value" value={property.assessedValueCents ? `$${(property.assessedValueCents / 100).toLocaleString()}` : null} />
+                          <InfoRow icon={DollarSign} label="Market Value" value={property.marketValueCents ? `$${(property.marketValueCents / 100).toLocaleString()}` : null} />
+                        </div>
+
+                        <Separator className="my-2" />
+                        <p className="text-[10px] font-semibold text-muted-foreground mb-1">TAX & PURCHASE</p>
+                        <div className="grid grid-cols-2 gap-x-8 gap-y-1 text-sm">
+                          <InfoRow icon={DollarSign} label="Tax/Year" value={property.taxPerYearCents ? `$${(property.taxPerYearCents / 100).toLocaleString()}` : null} />
+                          <div className="flex items-center gap-2 py-1">
+                            <DollarSign className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                            <span className="text-muted-foreground text-xs w-20 shrink-0">Tax Delinq.</span>
+                            <span className={`text-xs font-medium truncate ${property.taxDelinquentCents && property.taxDelinquentCents > 0 ? 'text-red-500' : ''}`}>
+                              {property.taxDelinquentCents ? `$${(property.taxDelinquentCents / 100).toLocaleString()}` : '—'}
+                            </span>
+                          </div>
+                          <InfoRow icon={Calendar} label="Purchase Date" value={property.purchaseDate ?? null} />
+                          <InfoRow icon={DollarSign} label="Purchase Amt" value={property.purchaseAmountCents ? `$${(property.purchaseAmountCents / 100).toLocaleString()}` : null} />
+                          <InfoRow icon={FileText} label="Seller" value={property.purchaseSeller} />
+                        </div>
+
+                        <Separator className="my-2" />
+                        <p className="text-[10px] font-semibold text-muted-foreground mb-1">MORTGAGE</p>
+                        <div className="grid grid-cols-2 gap-x-8 gap-y-1 text-sm">
+                          <InfoRow icon={DollarSign} label="Open Loans $" value={property.estOpenLoansCents ? `$${(property.estOpenLoansCents / 100).toLocaleString()}` : null} />
+                          <InfoRow icon={TrendingUp} label="CLTV %" value={property.cltvPercent ? `${property.cltvPercent}%` : null} />
+                          <InfoRow icon={FileText} label="Loan Count" value={property.estOpenLoansCount != null ? String(property.estOpenLoansCount) : null} />
+                        </div>
+
+                        {(property.firstLoanPurpose || property.firstLoanType || property.firstLoanDate || property.firstLoanAmountCents) && (
+                          <>
+                            <Separator className="my-2" />
+                            <p className="text-[10px] font-semibold text-muted-foreground mb-1">1ST LOAN</p>
+                            <div className="grid grid-cols-2 gap-x-8 gap-y-1 text-sm">
+                              <InfoRow icon={FileText} label="Purpose" value={property.firstLoanPurpose} />
+                              <InfoRow icon={FileText} label="Type" value={property.firstLoanType} />
+                              <InfoRow icon={Calendar} label="Date" value={property.firstLoanDate} />
+                              <InfoRow icon={DollarSign} label="Amount" value={property.firstLoanAmountCents ? `$${(property.firstLoanAmountCents / 100).toLocaleString()}` : null} />
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  </>
+                )}
+
+                {/* Enrichment Status */}
+                {property && (
+                  <>
+                    <Separator />
+                    <div className="space-y-3">
+                      <h4 className="text-sm font-semibold text-muted-foreground">ENRICHMENT STATUS</h4>
+                      <div className="rounded-lg border p-3">
+                        <div className="grid grid-cols-2 gap-x-8 gap-y-1 text-sm">
+                          <InfoRow icon={SearchCheck} label="BatchData" value={property.enrichedAt ? format(new Date(property.enrichedAt), 'MMM d, yyyy') : 'Not enriched'} />
+                          <InfoRow icon={SearchCheck} label="Regrid" value={property.regridEnrichedAt ? format(new Date(property.regridEnrichedAt), 'MMM d, yyyy') : 'Not enriched'} />
+                          <InfoRow icon={SearchCheck} label="Skip Traced" value={property.skipTracedAt ? format(new Date(property.skipTracedAt), 'MMM d, yyyy') : 'Not yet'} />
+                          <InfoRow icon={FileText} label="Zoning" value={property.zoning ?? null} />
+                          <InfoRow icon={Home} label="Land Use" value={property.landUse ?? null} />
+                          <InfoRow icon={MapPin} label="Acreage" value={property.acreage != null ? String(property.acreage) : null} />
+                          <InfoRow icon={FileText} label="Legal Desc." value={property.legalDescription ?? null} />
+                          <InfoRow icon={DollarSign} label="Last Sale" value={
+                            property.lastSaleDate && property.lastSalePriceCents
+                              ? `${property.lastSaleDate} — $${(property.lastSalePriceCents / 100).toLocaleString()}`
+                              : property.lastSaleDate ?? null
+                          } />
+                        </div>
                       </div>
                     </div>
                   </>

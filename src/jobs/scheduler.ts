@@ -6,7 +6,7 @@ import { incrementalScore } from './incremental-scoring.js';
 import { autoPromote } from './auto-promotion.js';
 import { fullRescore } from './full-rescore.js';
 
-const activeTasks: cron.ScheduledTask[] = [];
+const activeTasks: ReturnType<typeof cron.schedule>[] = [];
 const runningJobs = new Set<string>();
 
 async function guardedRun(jobName: string, fn: () => Promise<unknown>): Promise<void> {

@@ -138,6 +138,7 @@ export async function prospectRoutes(app: FastifyInstance): Promise<void> {
           equityEstimate: properties.equityEstimate,
           absenteeOwner: properties.absenteeOwner,
           mortgageStatus: properties.mortgageStatus,
+          propertyType: properties.propertyType,
           compositeScore: latestScores.compositeScore,
           motivationScore: latestScores.motivationScore,
           dealScore: latestScores.dealScore,
