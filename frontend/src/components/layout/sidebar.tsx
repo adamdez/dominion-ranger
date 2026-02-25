@@ -19,6 +19,7 @@ import {
   BarChart3,
   Settings,
   UsersRound,
+  Megaphone,
 } from 'lucide-react';
 
 interface NavItem {
@@ -47,6 +48,7 @@ const navGroups: NavGroup[] = [
     label: 'FUNNEL',
     items: [
       { href: '/prospects', label: 'Prospects', icon: Home, funnelStage: 'prospect' },
+      { href: '/facebook-craigslist', label: 'Facebook/Craigslist', icon: Megaphone },
       { href: '/leads', label: 'Leads', icon: Users, funnelStage: 'lead' },
       { href: '/paid-leads', label: 'Paid Leads', icon: DollarSign, funnelStage: 'paid_lead' },
       { href: '/negotiation', label: 'Negotiation', icon: Handshake, funnelStage: 'negotiation' },
@@ -113,7 +115,7 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
       )}
       <aside
         className={cn(
-          'fixed left-0 top-0 z-50 flex h-full w-[220px] flex-col border-r border-border bg-card transition-transform duration-200 md:translate-x-0',
+          'fixed left-0 top-0 z-50 flex h-full w-[180px] flex-col border-r border-border bg-card transition-transform duration-200 md:translate-x-0',
           open ? 'translate-x-0' : '-translate-x-full'
         )}
       >
@@ -140,7 +142,7 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
                       href={item.href}
                       onClick={onClose}
                       className={cn(
-                        'flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors',
+                        'flex items-center gap-3 rounded-md px-3 py-2 text-xs font-medium transition-colors',
                         active
                           ? 'border-l-2 border-emerald-500 bg-emerald-500/10 text-foreground'
                           : 'border-l-2 border-transparent text-muted-foreground hover:bg-accent hover:text-accent-foreground',

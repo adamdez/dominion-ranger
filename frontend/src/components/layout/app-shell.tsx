@@ -53,7 +53,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     <FunnelDragProvider>
       <div className="min-h-screen bg-background">
         <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
-        <div className="md:pl-[220px]">
+        <div className="md:pl-[180px]">
           <Header onMenuClick={() => setSidebarOpen(true)} />
           <div className="hidden md:flex items-center px-4 md:px-6 py-2 border-b border-border">
             <VerseOfTheDay />

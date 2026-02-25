@@ -140,7 +140,7 @@ export function PropertyDetailSheet({ lead, open, onClose }: PropertyDetailSheet
 
   return (
     <Sheet open={open} onOpenChange={(v) => !v && onClose()}>
-      <SheetContent className="w-[75vw] max-w-[75vw] overflow-hidden flex flex-col p-0">
+      <SheetContent className="w-[88vw] max-w-[88vw] overflow-hidden flex flex-col p-0">
         <SheetHeader className="px-6 pt-6 pb-3 space-y-1">
           <SheetTitle className="text-lg">
             {lead.streetAddress ?? 'Unknown Address'}
