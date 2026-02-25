@@ -120,9 +120,32 @@ export async function batchDataSkipTrace(
     }
 
     const data = (await response.json()) as Record<string, unknown>;
-    const results = ((data.results ?? data.data ?? []) as Record<string, unknown>[]);
+    logger.info({ raw: JSON.stringify(data, null, 2).slice(0, 500) }, 'BatchData skip trace raw response');
 
-    if (results.length === 0) {
+    // Handle API error responses
+    const status = data?.status as { code?: number; message?: string } | undefined;
+    if ((status && status.code !== 200) || !data?.results) {
+      logger.info({ status: data?.status }, 'BatchData skip trace: no results or error');
+      return {
+        success: false,
+        persons: [],
+        rawResponse: data,
+        error: status?.message ?? 'No results or API error',
+      };
+    }
+
+    // Handle various response shapes: results may be object with persons[], or array, or null
+    const rawResults = data.results as Record<string, unknown> | unknown[] | null | undefined;
+    const personsArray: Array<Record<string, unknown>> = Array.isArray(rawResults)
+      ? rawResults as Array<Record<string, unknown>>
+      : Array.isArray((rawResults as Record<string, unknown>)?.persons)
+        ? ((rawResults as Record<string, unknown>).persons as Array<Record<string, unknown>>)
+        : (rawResults as Record<string, unknown>)?.person
+          ? [(rawResults as Record<string, unknown>).person as Record<string, unknown>]
+          : [];
+
+    if (personsArray.length === 0) {
+      logger.info({ ownerName: `${request.firstName} ${request.lastName}` }, 'BatchData skip trace: no persons found');
       return {
         success: false,
         persons: [],
@@ -133,19 +156,20 @@ export async function batchDataSkipTrace(
 
     const persons: BatchDataPerson[] = [];
 
-    for (const result of results) {
+    for (const result of personsArray) {
       const identity = (result.identity ?? result.person ?? result) as Record<string, unknown>;
+      const nameObj = (identity.name ?? identity) as Record<string, string>;
       const rawPhones = (
-        result.phones ?? result.phone_numbers ?? identity.phones ?? []
-      ) as Array<Record<string, unknown>>;
+        (result.phones ?? result.phone_numbers ?? identity.phones ?? []) as Array<Record<string, unknown>>
+      ) ?? [];
       const rawEmails = (
-        result.emails ?? result.email_addresses ?? identity.emails ?? []
-      ) as Array<Record<string, unknown>>;
+        (result.emails ?? result.email_addresses ?? identity.emails ?? []) as Array<Record<string, unknown>>
+      ) ?? [];
 
-      const phones: BatchDataPhone[] = rawPhones
+      const phones: BatchDataPhone[] = (Array.isArray(rawPhones) ? rawPhones : [])
         .map((p) => {
           const cleaned = cleanPhone(
-            (p.phone_number ?? p.phone ?? p.number ?? '') as string,
+            ((p?.phone_number ?? p?.phone ?? p?.number ?? '') as string),
           );
           if (!cleaned) return null;
           return {
@@ -156,19 +180,18 @@ export async function batchDataSkipTrace(
         })
         .filter((p): p is BatchDataPhone => p !== null);
 
-      const emails: BatchDataEmail[] = rawEmails
+      const emails: BatchDataEmail[] = (Array.isArray(rawEmails) ? rawEmails : [])
         .map((e) => {
-          const email = ((e.email_address ?? e.email ?? '') as string)
+          const email = ((e?.email_address ?? e?.email ?? '') as string)
             .trim()
             .toLowerCase();
           return email && email.includes('@') ? { email } : null;
         })
         .filter((e): e is BatchDataEmail => e !== null);
 
-      const nameData = (identity.name ?? identity) as Record<string, string>;
       persons.push({
-        firstName: nameData.first ?? nameData.first_name ?? null,
-        lastName: nameData.last ?? nameData.last_name ?? null,
+        firstName: nameObj?.first ?? (nameObj as Record<string, string>)?.first_name ?? null,
+        lastName: nameObj?.last ?? (nameObj as Record<string, string>)?.last_name ?? null,
         phones,
         emails,
         relationship: (identity.relationship ?? null) as string | null,
@@ -176,7 +199,11 @@ export async function batchDataSkipTrace(
 
       // Also parse associated people if present
       const associated = (
-        result.associated_people ?? result.associates ?? []
+        Array.isArray(result.associated_people)
+          ? result.associated_people
+          : Array.isArray(result.associates)
+            ? result.associates
+            : []
       ) as Array<Record<string, unknown>>;
       for (const assoc of associated) {
         const assocName = (assoc.name ?? assoc) as Record<string, string>;
@@ -307,7 +334,10 @@ export async function batchDataBulkSkipTrace(
 
     // For bulk, the API returns one result per request in order
     const data = (await response.json()) as Record<string, unknown>;
-    const apiResults = (data.results ?? data.data ?? []) as Record<string, unknown>[];
+    const rawApiResults = data.results ?? data.data;
+    const apiResults: Array<Record<string, unknown>> = Array.isArray(rawApiResults)
+      ? (rawApiResults as Array<Record<string, unknown>>)
+      : [];
     const resultMap = new Map<string, BatchDataSkipTraceResult>();
 
     for (let i = 0; i < requests.length; i++) {

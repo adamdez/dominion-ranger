@@ -231,7 +231,7 @@ export function PropertyDetailSheet({ lead, open, onClose }: PropertyDetailSheet
             <TabsTrigger value="comps">Comps</TabsTrigger>
           </TabsList>
 
-          <ScrollArea className="flex-1">
+          <ScrollArea className="flex-1 min-h-0 h-[calc(100vh-180px)]">
             <div className="px-6 pb-6">
 
               {/* ─── Overview Tab ─── */}

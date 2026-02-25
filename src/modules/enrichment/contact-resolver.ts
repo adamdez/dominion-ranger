@@ -169,6 +169,7 @@ export async function resolveContacts(
       const msg = err instanceof Error ? err.message : 'Unknown error';
       result.errors.push(`BatchData skip trace failed: ${msg}`);
       logger.error({ err, dominionLeadId }, 'BatchData skip trace error in contact resolver');
+      // Don't throw — return whatever contacts we already have; UI shows "Skip trace failed"
     }
   }
 
