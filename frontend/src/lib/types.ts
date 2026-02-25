@@ -176,6 +176,49 @@ export interface RankedLead {
   urgencyLevel: string;
 }
 
+// ─── Funnel ──────────────────────────────────────────
+
+export type FunnelStage = 'prospect' | 'lead' | 'paid_lead' | 'negotiation' | 'disposition' | 'declined';
+
+export interface FunnelLead {
+  leadInstanceId: string;
+  dominionLeadId: string;
+  status: string;
+  funnelStage: FunnelStage;
+  assignedTo: string | null;
+  complianceCleared: boolean;
+  version: number;
+  declinedCount: number;
+  declinedAt: string | null;
+  previousFunnelStage: string | null;
+  notes: string | null;
+  createdAt: string;
+  updatedAt: string;
+  streetAddress: string | null;
+  city: string | null;
+  county: string | null;
+  ownerName: string | null;
+  phone: string | null;
+  phone2: string | null;
+  phone3: string | null;
+  phoneType: string | null;
+  email: string | null;
+  equityEstimate: string | null;
+  compositeScore: number | null;
+  motivationScore: number | null;
+  dealScore: number | null;
+  confidenceScore: number | null;
+}
+
+export interface FunnelStats {
+  prospects: number;
+  leads: number;
+  paidLeads: number;
+  negotiation: number;
+  disposition: number;
+  declined: number;
+}
+
 // ─── Prospects ───────────────────────────────────────
 
 export interface Prospect {
