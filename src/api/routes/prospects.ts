@@ -210,7 +210,7 @@ export async function prospectRoutes(app: FastifyInstance): Promise<void> {
           }
 
           const [existing] = await db
-            .select({ id: leadInstances.leadInstanceId })
+            .select({ leadInstanceId: leadInstances.leadInstanceId })
             .from(leadInstances)
             .where(
               and(
@@ -222,7 +222,7 @@ export async function prospectRoutes(app: FastifyInstance): Promise<void> {
 
           if (existing) {
             skipped++;
-            promotedInstances.push({ dominionLeadId: prop.dominionLeadId, leadInstanceId: existing.id });
+            promotedInstances.push({ dominionLeadId: prop.dominionLeadId, leadInstanceId: existing.leadInstanceId });
             continue;
           }
 
@@ -233,7 +233,7 @@ export async function prospectRoutes(app: FastifyInstance): Promise<void> {
 
           promotedInstances.push({
             dominionLeadId: prop.dominionLeadId,
-            leadInstanceId: instance.leadInstanceId ?? instance.lead_instance_id,
+            leadInstanceId: instance.leadInstanceId,
           });
 
           await logActivity({

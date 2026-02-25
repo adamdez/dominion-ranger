@@ -114,6 +114,7 @@ export function PropertyDetailSheet({ lead, open, onClose }: PropertyDetailSheet
   const isLoading = claimMutation.isPending || transitionMutation.isPending || complianceMutation.isPending;
 
   async function handleEnrich() {
+    if (!lead) return;
     setEnriching(true);
     try {
       const res = await fetch(`${API_URL}/api/properties/${lead.dominionLeadId}/enrich`, {
