@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import {
   Sheet,
   SheetContent,
@@ -89,6 +90,7 @@ export function PropertyDetailSheet({ lead, open, onClose }: PropertyDetailSheet
   const [funnelOfferAmount, setFunnelOfferAmount] = useState('');
   const [enriching, setEnriching] = useState(false);
   const { accessToken } = useAuth();
+  const queryClient = useQueryClient();
 
   const claimMutation = useClaimLead();
   const transitionMutation = useTransitionLead();
@@ -121,8 +123,14 @@ export function PropertyDetailSheet({ lead, open, onClose }: PropertyDetailSheet
         method: 'POST',
         headers: { Authorization: `Bearer ${accessToken}` },
       });
-      if (res.ok) toast.success('Property data enrichment queued');
-      else toast.error('Enrichment failed');
+      const data = res.ok ? await res.json().catch(() => null) : null;
+      if (res.ok) {
+        toast.success('Property data enrichment completed');
+        queryClient.invalidateQueries({ queryKey: ['property-detail', lead.dominionLeadId] });
+      } else {
+        const msg = (data as { message?: string })?.message ?? 'Enrichment failed';
+        toast.error(msg);
+      }
     } catch {
       toast.error('Enrichment failed');
     } finally {
@@ -335,7 +343,12 @@ export function PropertyDetailSheet({ lead, open, onClose }: PropertyDetailSheet
                         <InfoRow icon={Home} label="Mortgage" value={property.mortgageStatus ?? null} />
                         <InfoRow icon={MapPin} label="Absentee" value={property.absenteeOwner ? 'Yes' : 'No'} />
                         <InfoRow icon={Mail} label="Mailing" value={property.mailingAddress ?? null} />
+                        <InfoRow icon={FileText} label="Zoning" value={property.zoning ?? null} />
+                        <InfoRow icon={Home} label="Land Use" value={property.landUse ?? null} />
+                        <InfoRow icon={MapPin} label="Acreage" value={property.acreage != null ? String(property.acreage) : null} />
+                        <InfoRow icon={FileText} label="Legal Desc." value={property.legalDescription ?? null} />
                         <InfoRow icon={SearchCheck} label="Skip Traced" value={property.skipTracedAt ? format(new Date(property.skipTracedAt), 'MMM d, yyyy') : 'Not yet'} />
+                        <InfoRow icon={SearchCheck} label="Regrid Enriched" value={property.regridEnrichedAt ? format(new Date(property.regridEnrichedAt), 'MMM d, yyyy') : 'Not yet'} />
                       </div>
                     </div>
                   </>

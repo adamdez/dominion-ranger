@@ -18,6 +18,10 @@ import { requireRole } from '../middleware/auth.js';
 import { BUSINESS_RULES } from '../../config/business-rules.js';
 import { propertyParamsSchema, propertyScoreHistoryQuery } from '../schemas/properties.js';
 import { z } from 'zod';
+import { fetchRegridParcel } from '../../modules/enrichment/regrid-service.js';
+import { generateCompReport } from '../../modules/comps/index.js';
+import { isFeatureEnabled } from '../../modules/feature-flags/index.js';
+import { logger } from '../../config/logger.js';
 
 export async function propertyRoutes(app: FastifyInstance): Promise<void> {
 
@@ -221,7 +225,7 @@ export async function propertyRoutes(app: FastifyInstance): Promise<void> {
   );
 
   // POST /api/properties/:dominionLeadId/enrich
-  // Stub for now — returns success, logs to activity_log
+  // Calls Regrid (parcel data) and BatchData (comps) in parallel when API keys are set
   app.post<{ Params: { dominionLeadId: string } }>(
     '/api/properties/:dominionLeadId/enrich',
     { preHandler: [requireRole('properties.read')] },
@@ -230,13 +234,78 @@ export async function propertyRoutes(app: FastifyInstance): Promise<void> {
       const user = (request as unknown as Record<string, { userId?: string }>).user;
 
       const [property] = await db
-        .select({ dominionLeadId: properties.dominionLeadId })
+        .select()
         .from(properties)
         .where(eq(properties.dominionLeadId, params.dominionLeadId))
         .limit(1);
 
       if (!property) {
         return reply.code(404).send({ success: false, message: 'Property not found' });
+      }
+
+      const hasRegrid = !!process.env.REGRID_API_KEY;
+      const hasBatchData = !!process.env.BATCHDATA_API_KEY && await isFeatureEnabled('comp_engine');
+
+      if (!hasRegrid && !hasBatchData) {
+        return reply.code(503).send({
+          success: false,
+          message: 'No enrichment providers configured. Set REGRID_API_KEY and/or BATCHDATA_API_KEY.',
+        });
+      }
+
+      const address = property.streetAddress ?? property.standardizedAddress ?? '';
+      const fullAddress = [address, property.city, property.state, property.zip].filter(Boolean).join(', ');
+
+      const promises: Promise<unknown>[] = [];
+
+      if (hasRegrid) {
+        promises.push(
+          fetchRegridParcel({
+            apn: property.apn,
+            county: property.county,
+            state: property.state,
+            address: fullAddress || undefined,
+          }),
+        );
+      }
+
+      if (hasBatchData) {
+        promises.push(
+          generateCompReport({
+            dominionLeadId: params.dominionLeadId,
+            address,
+            city: property.city ?? undefined,
+            state: property.state ?? undefined,
+            zip: property.zip ?? undefined,
+            generatedBy: user?.userId ?? 'user',
+          }),
+        );
+      }
+
+      const results = await Promise.all(promises);
+
+      let regridResult: Awaited<ReturnType<typeof fetchRegridParcel>> = null;
+      let compReport: Awaited<ReturnType<typeof generateCompReport>> | null = null;
+
+      if (hasRegrid) {
+        regridResult = results[0] as Awaited<ReturnType<typeof fetchRegridParcel>>;
+        if (regridResult) {
+          await db
+            .update(properties)
+            .set({
+              zoning: regridResult.zoning ?? undefined,
+              landUse: regridResult.landUse ?? undefined,
+              legalDescription: regridResult.legalDescription ?? undefined,
+              acreage: regridResult.acreage != null ? String(regridResult.acreage) : undefined,
+              regridData: regridResult.raw,
+              regridEnrichedAt: new Date(),
+            })
+            .where(eq(properties.dominionLeadId, params.dominionLeadId));
+        }
+      }
+
+      if (hasBatchData) {
+        compReport = results[hasRegrid ? 1 : 0] as Awaited<ReturnType<typeof generateCompReport>>;
       }
 
       const [latestLeadInstance] = await db
@@ -253,16 +322,33 @@ export async function propertyRoutes(app: FastifyInstance): Promise<void> {
         activityType: 'STATUS_CHANGED',
         channel: 'MANUAL_EMAIL',
         meta: {
-          action: 'property_enrichment_queued',
-          providers: ['batchdata', 'regrid'],
+          action: 'property_enrichment_completed',
+          providers: [
+            ...(hasRegrid ? ['regrid'] : []),
+            ...(hasBatchData ? ['batchdata'] : []),
+          ],
+          regrid: regridResult ? { zoning: regridResult.zoning, landUse: regridResult.landUse } : null,
+          compReportId: compReport?.id ?? null,
           source: 'property_detail_overview',
         },
       });
 
+      const providers = [
+        ...(hasRegrid ? ['regrid'] : []),
+        ...(hasBatchData ? ['batchdata'] : []),
+      ];
+
+      logger.info(
+        { dominionLeadId: params.dominionLeadId, providers, regrid: !!regridResult, comp: !!compReport },
+        'Property enrichment completed',
+      );
+
       return {
         success: true,
-        message: 'Property data enrichment queued',
-        providers: ['batchdata', 'regrid'],
+        message: 'Property data enrichment completed',
+        providers,
+        regrid: regridResult ? { zoning: regridResult.zoning, landUse: regridResult.landUse, acreage: regridResult.acreage } : null,
+        compReport: compReport ? { id: compReport.id } : null,
       };
     },
   );

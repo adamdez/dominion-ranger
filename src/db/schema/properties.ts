@@ -66,6 +66,14 @@ export const properties = pgTable(
     equityEstimate: numeric('equity_estimate', { precision: 12, scale: 2 }),
     mortgageStatus: mortgageStatusEnum('mortgage_status').default('UNKNOWN'),
 
+    // Regrid parcel enrichment
+    zoning: text('zoning'),
+    landUse: text('land_use'),
+    legalDescription: text('legal_description'),
+    acreage: numeric('acreage', { precision: 10, scale: 4 }),
+    regridData: jsonb('regrid_data'),
+    regridEnrichedAt: timestamp('regrid_enriched_at', { withTimezone: true }),
+
     // Metadata
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),

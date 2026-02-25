@@ -30,10 +30,13 @@ export function usePropertyDetail(dominionLeadId: string | null) {
   return useQuery({
     queryKey: ['property-detail', dominionLeadId],
     queryFn: async (): Promise<PropertyDetail | null> => {
-      // TODO: wire to GET /api/properties/:id/detail when phase-3/backend-intelligence merges
       try {
-        const { data } = await api.get<PropertyDetail>(`/api/properties/${dominionLeadId}/detail`);
-        return data;
+        const { data } = await api.get<{ property: PropertyDetail } | PropertyDetail>(
+          `/api/properties/${dominionLeadId}/detail`,
+        );
+        return (data && typeof data === 'object' && 'property' in data)
+          ? (data.property as PropertyDetail)
+          : (data as PropertyDetail);
       } catch {
         return null;
       }

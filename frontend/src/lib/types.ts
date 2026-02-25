@@ -323,6 +323,11 @@ export interface PropertyDetail {
   skipTraceTier: string | null;
   skipTracedAt: string | null;
   skipTraceSource: string | null;
+  zoning: string | null;
+  landUse: string | null;
+  legalDescription: string | null;
+  acreage: string | number | null;
+  regridEnrichedAt: string | null;
   createdAt: string;
   updatedAt: string;
 }
