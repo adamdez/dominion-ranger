@@ -10,6 +10,8 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { EmptyState } from '@/components/ui/empty-state';
 import { PropertyDetailSheet } from '@/components/property-detail/property-detail-sheet';
 import { useFunnelLeads } from '@/hooks/use-funnel';
+import { FunnelViewToggle, type FunnelView } from '@/components/funnel/funnel-view-toggle';
+import { useAuth } from '@/lib/auth-context';
 import type { FunnelLead, LeadWithProperty } from '@/lib/types';
 import { formatDistanceToNow } from 'date-fns';
 import { toast } from 'sonner';
@@ -30,12 +32,15 @@ function toLeadWithProperty(lead: FunnelLead): LeadWithProperty {
 }
 
 export default function DispositionPage() {
+  const { user } = useAuth();
+  const isAgent = user?.role === 'AGENT';
   const [page, setPage] = useState(1);
   const [searchInput, setSearchInput] = useState('');
   const [search, setSearch] = useState('');
+  const [view, setView] = useState<FunnelView>(isAgent ? 'mine' : 'all');
   const [detail, setDetail] = useState<LeadWithProperty | null>(null);
 
-  const { data, isLoading } = useFunnelLeads('disposition', { page, pageSize: 50, search: search || undefined });
+  const { data, isLoading } = useFunnelLeads('disposition', { page, pageSize: 50, search: search || undefined, view });
 
   const rows = data?.data ?? [];
   const pagination = data?.pagination;
@@ -50,6 +55,7 @@ export default function DispositionPage() {
           <h1 className="text-lg font-semibold">Disposition</h1>
           {pagination && <span className="text-sm text-muted-foreground">({pagination.total})</span>}
         </div>
+        <FunnelViewToggle value={view} onChange={(v) => { setView(v); setPage(1); }} />
       </div>
 
       <div className="flex items-center gap-3 border-b border-border px-6 py-3">

@@ -5,36 +5,43 @@ import Link from 'next/link';
 import {
   Building2, Users, Phone, CheckCircle, Handshake, Package, XCircle,
   PhoneCall, SearchCheck, Clock, DollarSign, AlertCircle, Home, Target,
+  UserCheck,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { StatCard } from '@/components/ui/stat-card';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { ErrorState } from '@/components/ui/error-state';
+import { Badge } from '@/components/ui/badge';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import { TasksWidget } from '@/components/tasks/tasks-widget';
+import { useAuth } from '@/lib/auth-context';
 import { useSystemStats } from '@/hooks/use-system';
 import { useLeadStats } from '@/hooks/use-dashboard';
 import { usePipelineStats } from '@/hooks/use-pipeline';
 import { useTaskStats } from '@/hooks/use-tasks';
 import { useOfferStats } from '@/hooks/use-offers';
 import { useFunnelStats } from '@/hooks/use-funnel';
+import { useMyStats, useAgentPerformance } from '@/hooks/use-agent-dashboard';
 import { SCORE_TIERS, DEAL_STAGES } from '@/lib/constants';
 
 type DateRange = '7d' | '30d' | '90d';
 
 export default function DashboardPage() {
   const [dateRange, setDateRange] = useState<DateRange>('30d');
+  const { user, isAdmin, isManager } = useAuth();
+  const isAgent = user?.role === 'AGENT';
   const stats = useSystemStats();
   const leadStats = useLeadStats();
   const pipelineStats = usePipelineStats();
   const taskStats = useTaskStats();
   const offerStats = useOfferStats();
   const funnelStats = useFunnelStats();
+  const myStats = useMyStats();
+  const agentPerformance = useAgentPerformance();
 
-  // Suppress unused-var lint — dateRange reserved for future analytics filtering
   void dateRange;
 
   if (stats.error) {
@@ -43,9 +50,10 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-6">
-      {/* Header with date range */}
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
+        <h1 className="text-2xl font-bold tracking-tight">
+          {isAgent ? `Welcome back, ${user?.name?.split(' ')[0] ?? 'Agent'}` : 'Dashboard'}
+        </h1>
         <Select value={dateRange} onValueChange={(v) => setDateRange(v as DateRange)}>
           <SelectTrigger className="w-32">
             <SelectValue />
@@ -58,8 +66,67 @@ export default function DashboardPage() {
         </Select>
       </div>
 
-      {/* Funnel Stat Cards */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-6">
+      {/* Agent Personal Stats */}
+      {isAgent && (
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <Link href="/leads" className="block transition-opacity hover:opacity-90">
+            <StatCard
+              title="My Leads"
+              value={myStats.data?.myLeads}
+              icon={Users}
+              loading={myStats.isLoading}
+            />
+          </Link>
+          <Link href="/dial-queue" className="block transition-opacity hover:opacity-90">
+            <StatCard
+              title="My Dials Today"
+              value={myStats.data?.dialsToday}
+              icon={Phone}
+              loading={myStats.isLoading}
+            />
+          </Link>
+          <StatCard
+            title="My Calls This Week"
+            value={myStats.data?.dialsThisWeek}
+            icon={PhoneCall}
+            loading={myStats.isLoading}
+          />
+          <Link href="/offers" className="block transition-opacity hover:opacity-90">
+            <StatCard
+              title="My Active Offers"
+              value={myStats.data?.myActiveOffers}
+              icon={DollarSign}
+              loading={myStats.isLoading}
+            />
+          </Link>
+        </div>
+      )}
+
+      {/* Agent: Task Stats */}
+      {isAgent && (
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-2">
+          <Link href="/tasks" className="block transition-opacity hover:opacity-90">
+            <StatCard
+              title="My Tasks Due Today"
+              value={taskStats.data?.todayPending ?? 0}
+              icon={Clock}
+              loading={taskStats.isLoading}
+            />
+          </Link>
+          <Link href="/tasks" className="block transition-opacity hover:opacity-90">
+            <StatCard
+              title="My Overdue Tasks"
+              value={taskStats.data?.overdue ?? 0}
+              icon={AlertCircle}
+              loading={taskStats.isLoading}
+            />
+          </Link>
+        </div>
+      )}
+
+      {/* Admin/Manager: Funnel Stat Cards */}
+      {!isAgent && (
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-6">
         <Link href="/prospects" className="block transition-opacity hover:opacity-90">
           <StatCard
             title="Prospects"
@@ -107,8 +174,10 @@ export default function DashboardPage() {
           loading={leadStats.isLoading}
         />
       </div>
+      )}
 
-      {/* Task & New Lead Cards — clickable */}
+      {/* Task & New Lead Cards — clickable (admin/manager only) */}
+      {!isAgent && (
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Link href="/tasks" className="block transition-opacity hover:opacity-90">
           <StatCard
@@ -155,6 +224,7 @@ export default function DashboardPage() {
           </Card>
         </Link>
       </div>
+      )
 
       {/* Pipeline Value + Pending Actions + Tasks */}
       <div className="grid gap-4 lg:grid-cols-3">
@@ -301,8 +371,64 @@ export default function DashboardPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* Agent Performance (admin/manager only) */}
+      {(isAdmin || isManager) && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2">
+              <UserCheck className="h-4 w-4" />
+              Agent Performance
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {agentPerformance.isLoading ? (
+              <div className="space-y-2">
+                {[1, 2, 3].map(i => <Skeleton key={i} className="h-10 w-full" />)}
+              </div>
+            ) : !agentPerformance.data?.length ? (
+              <p className="text-sm text-muted-foreground">No agents to display</p>
+            ) : (
+              <div className="space-y-2">
+                {agentPerformance.data.map(agent => (
+                  <div key={agent.userId} className="flex items-center justify-between rounded-lg border px-4 py-3">
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
+                        {getInitials(agent.name)}
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium">{agent.name || 'Unnamed'}</p>
+                        <Badge variant="outline" className="text-[10px]">{agent.role}</Badge>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-6 text-sm">
+                      <div className="text-right">
+                        <p className="font-semibold tabular-nums">{agent.leadCount}</p>
+                        <p className="text-[10px] text-muted-foreground">Leads</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="font-semibold tabular-nums">{agent.dialsThisWeek}</p>
+                        <p className="text-[10px] text-muted-foreground">Dials/Week</p>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Agent: Tasks Widget */}
+      {isAgent && <TasksWidget />}
     </div>
   );
+}
+
+function getInitials(name: string): string {
+  const parts = (name || '').trim().split(/\s+/);
+  if (parts.length >= 2) return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+  return (name || '?').slice(0, 2).toUpperCase();
 }
 
 function ActionRow({ icon: Icon, label, count, color }: {

@@ -3,18 +3,29 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
-import { Plus, Pencil, UserCheck, UserX } from 'lucide-react';
+import { Plus, Pencil, UserCheck, UserX, Send, Copy, CheckCircle } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
   DialogFooter,
 } from '@/components/ui/dialog';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { useAuth } from '@/lib/auth-context';
+import { toast } from 'sonner';
 import api from '@/lib/api';
 
 interface UserRow {
@@ -38,8 +49,20 @@ interface UserFormData {
   twilioCallerId: string;
 }
 
+interface InviteFormData {
+  firstName: string;
+  lastName: string;
+  email: string;
+  role: 'AGENT' | 'MANAGER';
+  phone: string;
+}
+
 const emptyForm: UserFormData = {
   name: '', email: '', password: '', role: 'AGENT', phone: '', twilioCallerId: '',
+};
+
+const emptyInviteForm: InviteFormData = {
+  firstName: '', lastName: '', email: '', role: 'AGENT', phone: '',
 };
 
 export default function UsersPage() {
@@ -50,6 +73,12 @@ export default function UsersPage() {
   const [editingUser, setEditingUser] = useState<UserRow | null>(null);
   const [form, setForm] = useState<UserFormData>(emptyForm);
   const [error, setError] = useState('');
+
+  const [inviteDialogOpen, setInviteDialogOpen] = useState(false);
+  const [inviteForm, setInviteForm] = useState<InviteFormData>(emptyInviteForm);
+  const [inviteError, setInviteError] = useState('');
+  const [inviteLink, setInviteLink] = useState('');
+  const [copied, setCopied] = useState(false);
 
   const { data, isLoading } = useQuery({
     queryKey: ['auth-users'],
@@ -69,6 +98,17 @@ export default function UsersPage() {
     onError: (e: { response?: { data?: { error?: string } } }) => setError(e.response?.data?.error || 'Failed'),
   });
 
+  const inviteMut = useMutation({
+    mutationFn: (d: InviteFormData) => api.post('/api/invite', d),
+    onSuccess: (res) => {
+      queryClient.invalidateQueries({ queryKey: ['auth-users'] });
+      const baseUrl = window.location.origin;
+      setInviteLink(`${baseUrl}${res.data.inviteUrl}`);
+      toast.success('Invite created');
+    },
+    onError: (e: { response?: { data?: { error?: string } } }) => setInviteError(e.response?.data?.error || 'Failed to create invite'),
+  });
+
   const users: UserRow[] = data?.users ?? [];
 
   if (!isAdmin) {
@@ -82,6 +122,26 @@ export default function UsersPage() {
     setEditingUser(u);
     setForm({ name: u.name ?? '', email: u.email, password: '', role: u.role as UserFormData['role'], phone: u.phone ?? '', twilioCallerId: u.twilioCallerId ?? '' });
     setError(''); setDialogOpen(true);
+  }
+
+  function openInvite() {
+    setInviteForm(emptyInviteForm);
+    setInviteError('');
+    setInviteLink('');
+    setCopied(false);
+    setInviteDialogOpen(true);
+  }
+
+  function handleInviteSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    inviteMut.mutate(inviteForm);
+  }
+
+  function copyInviteLink() {
+    navigator.clipboard.writeText(inviteLink);
+    setCopied(true);
+    toast.success('Invite link copied to clipboard');
+    setTimeout(() => setCopied(false), 2000);
   }
 
   function handleSubmit(e: React.FormEvent) {
@@ -101,7 +161,12 @@ export default function UsersPage() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h2 className="text-xl font-semibold">User Management</h2>
-        <Button onClick={openCreate} size="sm"><Plus className="mr-1 h-4 w-4" /> Add User</Button>
+        <div className="flex items-center gap-2">
+          <Button onClick={openInvite} size="sm" variant="outline">
+            <Send className="mr-1 h-4 w-4" /> Invite Agent
+          </Button>
+          <Button onClick={openCreate} size="sm"><Plus className="mr-1 h-4 w-4" /> Add User</Button>
+        </div>
       </div>
 
       <Card>
@@ -183,6 +248,77 @@ export default function UsersPage() {
               <Button type="submit" disabled={createMut.isPending || updateMut.isPending}>{editingUser ? 'Save' : 'Create User'}</Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Invite Agent Dialog */}
+      <Dialog open={inviteDialogOpen} onOpenChange={setInviteDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Invite Agent</DialogTitle>
+            <DialogDescription>
+              Create an invite link for a new team member. They will set their own password.
+            </DialogDescription>
+          </DialogHeader>
+          {inviteLink ? (
+            <div className="space-y-4 py-2">
+              <div className="flex items-center gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3">
+                <CheckCircle className="h-5 w-5 shrink-0 text-emerald-500" />
+                <p className="text-sm">Invite created! Share this link with the agent:</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <Input value={inviteLink} readOnly className="text-xs" />
+                <Button size="sm" variant="outline" onClick={copyInviteLink}>
+                  {copied ? <CheckCircle className="h-4 w-4 text-emerald-500" /> : <Copy className="h-4 w-4" />}
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground">This link expires in 7 days.</p>
+              <DialogFooter>
+                <Button onClick={() => setInviteDialogOpen(false)}>Done</Button>
+              </DialogFooter>
+            </div>
+          ) : (
+            <form onSubmit={handleInviteSubmit} className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label>First Name</Label>
+                  <Input value={inviteForm.firstName} onChange={e => setInviteForm(f => ({ ...f, firstName: e.target.value }))} required />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Last Name</Label>
+                  <Input value={inviteForm.lastName} onChange={e => setInviteForm(f => ({ ...f, lastName: e.target.value }))} required />
+                </div>
+              </div>
+              <div className="space-y-1.5">
+                <Label>Email</Label>
+                <Input type="email" value={inviteForm.email} onChange={e => setInviteForm(f => ({ ...f, email: e.target.value }))} required />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Role</Label>
+                <Select value={inviteForm.role} onValueChange={(v) => setInviteForm(f => ({ ...f, role: v as 'AGENT' | 'MANAGER' }))}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="AGENT">Agent</SelectItem>
+                    <SelectItem value="MANAGER">Manager</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label>Phone (optional)</Label>
+                <Input type="tel" value={inviteForm.phone} onChange={e => setInviteForm(f => ({ ...f, phone: e.target.value }))} placeholder="+15551234567" />
+              </div>
+              {inviteError && <p className="text-sm text-destructive">{inviteError}</p>}
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={() => setInviteDialogOpen(false)}>Cancel</Button>
+                <Button type="submit" disabled={inviteMut.isPending}>
+                  <Send className="mr-1 h-4 w-4" />
+                  {inviteMut.isPending ? 'Creating...' : 'Create Invite'}
+                </Button>
+              </DialogFooter>
+            </form>
+          )}
         </DialogContent>
       </Dialog>
     </div>

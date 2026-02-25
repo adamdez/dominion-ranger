@@ -42,6 +42,7 @@ const funnelLeadsQuery = z.object({
   page: z.coerce.number().int().positive().default(1),
   pageSize: z.coerce.number().int().min(1).max(100).default(50),
   search: z.string().optional(),
+  view: z.enum(['mine', 'unassigned', 'all']).optional(),
 });
 
 const funnelStatsSchema = z.object({}).optional();
@@ -246,7 +247,19 @@ export async function funnelRoutes(app: FastifyInstance): Promise<void> {
 
       const conditions = [eq(leadInstances.funnelStage, stage)];
       if (!isAdminOrManager) {
+        if (query.view === 'unassigned') {
+          const { isNull } = await import('drizzle-orm');
+          conditions.push(isNull(leadInstances.assignedTo));
+        } else if (query.view === 'all') {
+          // No agent filter — read-only view of all leads
+        } else {
+          conditions.push(eq(leadInstances.assignedTo, user.userId));
+        }
+      } else if (query.view === 'mine') {
         conditions.push(eq(leadInstances.assignedTo, user.userId));
+      } else if (query.view === 'unassigned') {
+        const { isNull } = await import('drizzle-orm');
+        conditions.push(isNull(leadInstances.assignedTo));
       }
       if (query.search) {
         const { ilike, or } = await import('drizzle-orm');

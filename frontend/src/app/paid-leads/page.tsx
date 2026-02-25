@@ -11,7 +11,9 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { ScoreBadge } from '@/components/ui/score-badge';
 import { EmptyState } from '@/components/ui/empty-state';
 import { PropertyDetailSheet } from '@/components/property-detail/property-detail-sheet';
-import { useFunnelLeads, useFunnelAdvance, useFunnelDecline } from '@/hooks/use-funnel';
+import { useFunnelLeads, useFunnelAdvance, useFunnelDecline, useClaimLead } from '@/hooks/use-funnel';
+import { FunnelViewToggle, type FunnelView } from '@/components/funnel/funnel-view-toggle';
+import { useAuth } from '@/lib/auth-context';
 import { useProspects, usePromoteProperties } from '@/hooks/use-prospects';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
@@ -38,16 +40,19 @@ function toLeadWithProperty(lead: FunnelLead): LeadWithProperty {
 }
 
 export default function PaidLeadsPage() {
+  const { user } = useAuth();
+  const isAgent = user?.role === 'AGENT';
   const [page, setPage] = useState(1);
   const [searchInput, setSearchInput] = useState('');
   const [search, setSearch] = useState('');
+  const [view, setView] = useState<FunnelView>(isAgent ? 'mine' : 'all');
   const [detail, setDetail] = useState<LeadWithProperty | null>(null);
   const [offerDialog, setOfferDialog] = useState<FunnelLead | null>(null);
   const [offerAmount, setOfferAmount] = useState('');
   const [addDialog, setAddDialog] = useState(false);
   const [addSearch, setAddSearch] = useState('');
 
-  const { data, isLoading } = useFunnelLeads('paid_lead', { page, pageSize: 50, search: search || undefined });
+  const { data, isLoading } = useFunnelLeads('paid_lead', { page, pageSize: 50, search: search || undefined, view });
   const advance = useFunnelAdvance();
   const decline = useFunnelDecline();
   const promote = usePromoteProperties();
@@ -101,9 +106,12 @@ export default function PaidLeadsPage() {
           <h1 className="text-lg font-semibold">Paid Leads</h1>
           {pagination && <span className="text-sm text-muted-foreground">({pagination.total})</span>}
         </div>
-        <Button size="sm" onClick={() => setAddDialog(true)}>
-          <Plus className="mr-1.5 h-3.5 w-3.5" />Add Paid Lead
-        </Button>
+        <div className="flex items-center gap-2">
+          <FunnelViewToggle value={view} onChange={(v) => { setView(v); setPage(1); }} />
+          <Button size="sm" onClick={() => setAddDialog(true)}>
+            <Plus className="mr-1.5 h-3.5 w-3.5" />Add Paid Lead
+          </Button>
+        </div>
       </div>
 
       <div className="flex items-center gap-3 border-b border-border px-6 py-3">

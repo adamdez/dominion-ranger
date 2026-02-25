@@ -16,13 +16,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     setApiAccessToken(accessToken);
   }, [accessToken]);
 
+  const isPublicRoute = pathname === '/login' || pathname.startsWith('/invite');
+
   useEffect(() => {
-    if (!isLoading && !user && pathname !== '/login') {
+    if (!isLoading && !user && !isPublicRoute) {
       router.push('/login');
     }
-  }, [user, isLoading, router, pathname]);
+  }, [user, isLoading, router, pathname, isPublicRoute]);
 
-  if (pathname === '/login') {
+  if (isPublicRoute) {
     return <>{children}</>;
   }
 

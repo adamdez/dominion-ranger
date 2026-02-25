@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useCallback } from 'react';
-import { Users, Search, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Users, Search, ChevronLeft, ChevronRight, UserPlus } from 'lucide-react';
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table';
@@ -11,8 +11,11 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { ScoreBadge } from '@/components/ui/score-badge';
 import { EmptyState } from '@/components/ui/empty-state';
 import { FunnelStageBadge } from '@/components/funnel/funnel-stage-badge';
+import { FunnelViewToggle, type FunnelView } from '@/components/funnel/funnel-view-toggle';
 import { PropertyDetailSheet } from '@/components/property-detail/property-detail-sheet';
-import { useFunnelLeads, useFunnelAdvance, useFunnelDecline } from '@/hooks/use-funnel';
+import { useFunnelLeads, useFunnelAdvance, useFunnelDecline, useClaimLead } from '@/hooks/use-funnel';
+import { AssignDropdown } from '@/components/funnel/assign-dropdown';
+import { useAuth } from '@/lib/auth-context';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from '@/components/ui/dialog';
@@ -37,16 +40,20 @@ function toLeadWithProperty(lead: FunnelLead): LeadWithProperty {
 }
 
 export default function LeadsPage() {
+  const { user, isAdmin, isManager } = useAuth();
+  const isAgent = user?.role === 'AGENT';
   const [page, setPage] = useState(1);
   const [searchInput, setSearchInput] = useState('');
   const [search, setSearch] = useState('');
+  const [view, setView] = useState<FunnelView>(isAgent ? 'mine' : 'all');
   const [detail, setDetail] = useState<LeadWithProperty | null>(null);
   const [offerDialog, setOfferDialog] = useState<FunnelLead | null>(null);
   const [offerAmount, setOfferAmount] = useState('');
 
-  const { data, isLoading } = useFunnelLeads('lead', { page, pageSize: 50, search: search || undefined });
+  const { data, isLoading } = useFunnelLeads('lead', { page, pageSize: 50, search: search || undefined, view });
   const advance = useFunnelAdvance();
   const decline = useFunnelDecline();
+  const claim = useClaimLead();
 
   const rows = data?.data ?? [];
   const pagination = data?.pagination;
@@ -71,6 +78,7 @@ export default function LeadsPage() {
           <h1 className="text-lg font-semibold">Leads</h1>
           {pagination && <span className="text-sm text-muted-foreground">({pagination.total})</span>}
         </div>
+        <FunnelViewToggle value={view} onChange={(v) => { setView(v); setPage(1); }} />
       </div>
 
       <div className="flex items-center gap-3 border-b border-border px-6 py-3">
@@ -110,21 +118,42 @@ export default function LeadsPage() {
                   </TableCell>
                   <TableCell className="text-sm">{row.ownerName ?? '—'}</TableCell>
                   <TableCell><ScoreBadge score={row.compositeScore} /></TableCell>
-                  <TableCell className="text-sm text-muted-foreground">{row.assignedTo ?? '—'}</TableCell>
+                  <TableCell className="text-sm text-muted-foreground">
+                    <div className="flex items-center gap-1">
+                      <span className="truncate">{row.assignedTo ?? 'Unassigned'}</span>
+                      {(isAdmin || isManager) && (
+                        <AssignDropdown
+                          leadInstanceIds={[row.leadInstanceId]}
+                          currentAssignee={row.assignedTo}
+                        />
+                      )}
+                    </div>
+                  </TableCell>
                   <TableCell className="text-xs text-muted-foreground">
                     {formatDistanceToNow(new Date(row.updatedAt), { addSuffix: true })}
                   </TableCell>
                   <TableCell onClick={(e) => e.stopPropagation()}>
                     <div className="flex gap-1">
-                      <Button size="sm" variant="outline" className="h-7 text-xs"
-                        onClick={() => { setOfferDialog(row); setOfferAmount(''); }}>
-                        To Negotiation
-                      </Button>
-                      <Button size="sm" variant="ghost" className="h-7 text-xs text-red-400"
-                        onClick={() => decline.mutate({ leadInstanceId: row.leadInstanceId },
-                          { onSuccess: () => toast.success('Declined') })}>
-                        Decline
-                      </Button>
+                      {view === 'unassigned' && !row.assignedTo && (
+                        <Button size="sm" variant="default" className="h-7 text-xs"
+                          disabled={claim.isPending}
+                          onClick={() => claim.mutate({ leadInstanceId: row.leadInstanceId, expectedVersion: row.version })}>
+                          <UserPlus className="mr-1 h-3 w-3" />Claim
+                        </Button>
+                      )}
+                      {(view !== 'all' || row.assignedTo === user?.userId || isAdmin || isManager) && (
+                        <>
+                          <Button size="sm" variant="outline" className="h-7 text-xs"
+                            onClick={() => { setOfferDialog(row); setOfferAmount(''); }}>
+                            To Negotiation
+                          </Button>
+                          <Button size="sm" variant="ghost" className="h-7 text-xs text-red-400"
+                            onClick={() => decline.mutate({ leadInstanceId: row.leadInstanceId },
+                              { onSuccess: () => toast.success('Declined') })}>
+                            Decline
+                          </Button>
+                        </>
+                      )}
                     </div>
                   </TableCell>
                 </TableRow>
