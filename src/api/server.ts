@@ -32,6 +32,7 @@ import { funnelRoutes } from './routes/funnel.js';
 import { inviteRoutes } from './routes/invite.js';
 import { notificationRoutes } from './routes/notifications.js';
 import { userProfileRoutes } from './routes/user-profile.js';
+import { dashboardRoutes } from './routes/dashboard.js';
 import { RangerError } from '../lib/errors.js';
 import { ZodError } from 'zod';
 import { logError } from '../modules/error-logging/index.js';
@@ -135,6 +136,7 @@ export async function createServer() {
   await app.register(inviteRoutes);
   await app.register(notificationRoutes);
   await app.register(userProfileRoutes);
+  await app.register(dashboardRoutes);
 
   return app;
 }
