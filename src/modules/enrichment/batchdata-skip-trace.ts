@@ -10,6 +10,7 @@
  */
 
 import { logger } from '../../config/logger.js';
+import { env } from '../../config/env.js';
 
 const BATCHDATA_BASE = 'https://api.batchdata.com/api/v1';
 
@@ -118,7 +119,7 @@ function cleanPhone(raw: string | undefined | null): string | null {
 export async function batchDataSkipTrace(
   request: BatchDataSkipTraceRequest,
 ): Promise<BatchDataSkipTraceResult> {
-  const apiKey = process.env.BATCHDATA_API_KEY;
+  const apiKey = env.BATCHDATA_API_KEY;
   if (!apiKey) {
     return {
       success: false,
@@ -332,7 +333,7 @@ export async function batchDataSkipTrace(
 export async function batchDataBulkSkipTrace(
   requests: BatchDataSkipTraceRequest[],
 ): Promise<Map<string, BatchDataSkipTraceResult>> {
-  const apiKey = process.env.BATCHDATA_API_KEY;
+  const apiKey = env.BATCHDATA_API_KEY;
   if (!apiKey) {
     const results = new Map<string, BatchDataSkipTraceResult>();
     for (const req of requests) {

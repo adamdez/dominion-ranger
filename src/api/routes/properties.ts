@@ -22,6 +22,7 @@ import { fetchRegridParcel } from '../../modules/enrichment/regrid-service.js';
 import { generateCompReport } from '../../modules/comps/index.js';
 import { isFeatureEnabled } from '../../modules/feature-flags/index.js';
 import { logger } from '../../config/logger.js';
+import { env } from '../../config/env.js';
 
 export async function propertyRoutes(app: FastifyInstance): Promise<void> {
 
@@ -244,7 +245,7 @@ export async function propertyRoutes(app: FastifyInstance): Promise<void> {
       }
 
       const hasRegrid = !!process.env.REGRID_API_KEY;
-      const hasBatchData = !!process.env.BATCHDATA_API_KEY && await isFeatureEnabled('comp_engine');
+      const hasBatchData = !!env.BATCHDATA_API_KEY && await isFeatureEnabled('comp_engine');
 
       if (!hasRegrid && !hasBatchData) {
         return reply.code(503).send({

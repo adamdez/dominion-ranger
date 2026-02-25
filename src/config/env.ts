@@ -22,6 +22,7 @@ const envSchema = z.object({
   FORECLOSURE_RADAR_API_KEY: z.string().optional(),
   REISKIP_API_KEY: z.string().optional(),
   TRACERFY_API_KEY: z.string().optional(),
+  BATCHDATA_API_KEY: z.string().optional(),
 
   // Auth
   JWT_SECRET: z.string().min(32).default('dominion-ranger-dev-jwt-secret-32chars!'),

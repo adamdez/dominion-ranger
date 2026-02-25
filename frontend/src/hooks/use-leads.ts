@@ -81,6 +81,8 @@ export function useClaimLead() {
       toast.success('Lead claimed successfully');
       queryClient.invalidateQueries({ queryKey: ['leads'] });
       queryClient.invalidateQueries({ queryKey: ['lead'] });
+      queryClient.invalidateQueries({ queryKey: ['funnel'] });
+      queryClient.invalidateQueries({ queryKey: ['prospects'] });
     },
     onError: (error: { response?: { status: number } }) => {
       if (error.response?.status === 409) {

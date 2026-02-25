@@ -1,4 +1,5 @@
 import { logger } from '../../config/logger.js';
+import { env } from '../../config/env.js';
 
 /**
  * BatchData API base URL.
@@ -55,7 +56,7 @@ export interface BatchDataCompResponse {
 export async function fetchComps(
   request: BatchDataCompRequest,
 ): Promise<BatchDataCompResponse> {
-  const apiKey = process.env.BATCHDATA_API_KEY;
+  const apiKey = env.BATCHDATA_API_KEY;
   if (!apiKey) {
     throw new Error('BATCHDATA_API_KEY not configured');
   }

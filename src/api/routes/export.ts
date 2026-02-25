@@ -146,13 +146,16 @@ export async function exportRoutes(app: FastifyInstance): Promise<void> {
         search: z.string().optional(),
         sort: z.enum(['composite_score', 'updated_at', 'created_at']).default('composite_score'),
         order: z.enum(['asc', 'desc']).default('desc'),
+        assignedToMe: z.enum(['true', 'false']).optional(),
       }).parse(request.query);
 
       const user = (request as unknown as Record<string, { userId: string; role: string }>).user;
       const isAdminOrManager = user?.role === 'ADMIN' || user?.role === 'MANAGER';
 
       const conditions = [eq(leadInstances.funnelStage, stage)];
-      if (!isAdminOrManager) {
+      if (query.assignedToMe === 'true') {
+        conditions.push(eq(leadInstances.assignedTo, user.userId));
+      } else if (!isAdminOrManager) {
         conditions.push(eq(leadInstances.assignedTo, user.userId));
       }
       if (query.search) {

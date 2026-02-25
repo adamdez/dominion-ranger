@@ -273,6 +273,15 @@ export async function skipTraceProperty(
     await db.update(properties).set(updates).where(eq(properties.dominionLeadId, dominionLeadId));
 
     // Insert into property_contacts for multi-contact support
+    // First, fetch existing contacts to avoid duplicates (Charter: idempotent operations)
+    const existingContacts = await db
+      .select({ phone: propertyContacts.phone, email: propertyContacts.email })
+      .from(propertyContacts)
+      .where(eq(propertyContacts.dominionLeadId, dominionLeadId));
+
+    const existingPhones = new Set(existingContacts.map(c => c.phone).filter(Boolean));
+    const existingEmails = new Set(existingContacts.map(c => c.email?.toLowerCase()).filter(Boolean));
+
     const contactRows: Array<{
       dominionLeadId: string;
       contactName: string | null;
@@ -290,7 +299,7 @@ export async function skipTraceProperty(
       { phone: result.phone, type: result.phoneType, primary: true },
       { phone: result.phone2, type: result.phone2Type, primary: false },
       { phone: result.phone3, type: result.phone3Type, primary: false },
-    ].filter(p => p.phone);
+    ].filter(p => p.phone && !existingPhones.has(p.phone));
 
     for (const p of phones) {
       contactRows.push({
@@ -301,13 +310,14 @@ export async function skipTraceProperty(
         phoneType: p.type ?? null,
         email: null,
         source: result.source,
-        isPrimary: p.primary,
+        isPrimary: p.primary && existingPhones.size === 0,
         isOwnerMatch: true,
         rawData: result.rawResponse,
       });
     }
 
-    const emails = [result.email, result.email2].filter(Boolean);
+    const emails = [result.email, result.email2]
+      .filter((e): e is string => !!e && !existingEmails.has(e.toLowerCase()));
     if (emails.length > 0 && phones.length === 0) {
       contactRows.push({
         dominionLeadId,
@@ -317,7 +327,7 @@ export async function skipTraceProperty(
         phoneType: null,
         email: emails[0] ?? null,
         source: result.source,
-        isPrimary: true,
+        isPrimary: existingPhones.size === 0 && existingEmails.size === 0,
         isOwnerMatch: true,
         rawData: result.rawResponse,
       });

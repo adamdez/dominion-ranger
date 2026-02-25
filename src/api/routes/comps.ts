@@ -15,6 +15,7 @@ import { db } from '../../db/connection.js';
 import { properties } from '../../db/schema/index.js';
 import { eq } from 'drizzle-orm';
 import { logger } from '../../config/logger.js';
+import { env } from '../../config/env.js';
 
 const generateBody = z.object({
   dominionLeadId: z.string().uuid(),
@@ -38,7 +39,7 @@ export async function compRoutes(app: FastifyInstance): Promise<void> {
         });
       }
 
-      if (!process.env.BATCHDATA_API_KEY) {
+      if (!env.BATCHDATA_API_KEY) {
         return reply.code(503).send({
           error: 'NOT_CONFIGURED',
           message: 'BatchData API key not configured. Set BATCHDATA_API_KEY in .env',
@@ -124,7 +125,7 @@ export async function compRoutes(app: FastifyInstance): Promise<void> {
         });
       }
 
-      if (!process.env.BATCHDATA_API_KEY) {
+      if (!env.BATCHDATA_API_KEY) {
         return reply.code(503).send({
           error: 'NOT_CONFIGURED',
           message: 'BatchData API key not configured. Set BATCHDATA_API_KEY in .env',
