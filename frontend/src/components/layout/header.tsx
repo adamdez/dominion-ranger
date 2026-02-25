@@ -1,7 +1,7 @@
 'use client';
 
 import { usePathname, useRouter } from 'next/navigation';
-import { Menu, LogOut, User, ChevronDown } from 'lucide-react';
+import { Menu, LogOut, User, Settings, ChevronDown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import {
@@ -23,6 +23,14 @@ const pageTitles: Record<string, string> = {
   '/scoring': 'Scoring Leaderboard',
   '/settings': 'Settings',
   '/settings/users': 'User Management',
+  '/profile': 'My Profile',
+  '/prospects': 'Prospects',
+  '/paid-leads': 'Paid Leads',
+  '/negotiation': 'Negotiation',
+  '/disposition': 'Disposition',
+  '/offers': 'Offers',
+  '/deal-board': 'Deal Board',
+  '/analytics': 'Analytics',
 };
 
 interface HeaderProps {
@@ -47,7 +55,7 @@ function getRoleLabel(role: string): string {
 export function Header({ onMenuClick }: HeaderProps) {
   const pathname = usePathname();
   const router = useRouter();
-  const { user, logout } = useAuth();
+  const { user, logout, isAdmin, isManager } = useAuth();
   const title = pageTitles[pathname] ?? 'Dominion Ranger';
 
   async function handleLogout() {
@@ -80,20 +88,26 @@ export function Header({ onMenuClick }: HeaderProps) {
                 <ChevronDown className="h-3 w-3 text-muted-foreground hidden sm:block" />
               </button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-48">
-              <div className="px-2 py-1.5">
+            <DropdownMenuContent align="end" className="w-52">
+              <div className="px-3 py-2">
                 <p className="text-sm font-medium">{user.name}</p>
                 <p className="text-xs text-muted-foreground">{user.email}</p>
               </div>
               <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={() => router.push('/settings')}>
+              <DropdownMenuItem onClick={() => router.push('/profile')}>
                 <User className="mr-2 h-4 w-4" />
-                Profile
+                My Profile
               </DropdownMenuItem>
+              {(isAdmin || isManager) && (
+                <DropdownMenuItem onClick={() => router.push('/settings')}>
+                  <Settings className="mr-2 h-4 w-4" />
+                  Settings
+                </DropdownMenuItem>
+              )}
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={handleLogout} className="text-destructive">
                 <LogOut className="mr-2 h-4 w-4" />
-                Sign out
+                Sign Out
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
