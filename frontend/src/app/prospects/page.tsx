@@ -37,6 +37,7 @@ import { ErrorState } from '@/components/ui/error-state';
 import { PropertyDetailSheet } from '@/components/property-detail/property-detail-sheet';
 import { ScoreHoverCard } from '@/components/scoring/score-breakdown-tooltip';
 import { useProspects, useCounties, usePromoteProperties } from '@/hooks/use-prospects';
+import { useFunnelDrag, type FunnelDragData } from '@/lib/funnel-drag-context';
 import { getScoreTier, SCORE_TIERS } from '@/lib/constants';
 import type { Prospect, LeadWithProperty } from '@/lib/types';
 
@@ -399,11 +400,30 @@ function ProspectRow({
 }) {
   const tier = getScoreTier(row.compositeScore);
   const tierConfig = SCORE_TIERS[tier];
+  const { setIsDragging } = useFunnelDrag();
+
+  const dragData: FunnelDragData = {
+    leadInstanceId: null,
+    dominionLeadId: row.dominionLeadId,
+    currentStage: 'prospect',
+    address: row.streetAddress ?? '—',
+  };
 
   return (
     <TableRow
-      className="cursor-pointer hover:bg-accent/50"
+      className="cursor-pointer hover:bg-accent/50 cursor-grab active:cursor-grabbing"
       onClick={onClick}
+      draggable
+      onDragStart={(e) => {
+        e.dataTransfer.setData('application/json', JSON.stringify(dragData));
+        e.dataTransfer.effectAllowed = 'move';
+        e.currentTarget.classList.add('opacity-50');
+        setIsDragging(true);
+      }}
+      onDragEnd={(e) => {
+        e.currentTarget.classList.remove('opacity-50');
+        setIsDragging(false);
+      }}
     >
       <TableCell onClick={(e) => e.stopPropagation()}>
         <Checkbox checked={isSelected} onCheckedChange={onToggle} />

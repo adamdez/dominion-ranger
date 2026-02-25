@@ -13,6 +13,7 @@ import { EmptyState } from '@/components/ui/empty-state';
 import { FunnelStageBadge } from '@/components/funnel/funnel-stage-badge';
 import { ScoreHoverCard } from '@/components/scoring/score-breakdown-tooltip';
 import { PropertyDetailSheet } from '@/components/property-detail/property-detail-sheet';
+import { useFunnelDrag, type FunnelDragData } from '@/lib/funnel-drag-context';
 import { useFunnelLeads, useFunnelAdvance, useFunnelDecline } from '@/hooks/use-funnel';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
@@ -49,6 +50,7 @@ export default function LeadsPage() {
   const advance = useFunnelAdvance();
   const decline = useFunnelDecline();
 
+  const { setIsDragging } = useFunnelDrag();
   const rows = data?.data ?? [];
   const pagination = data?.pagination;
 
@@ -103,8 +105,17 @@ export default function LeadsPage() {
             </TableHeader>
             <TableBody>
               {rows.map((row) => (
-                <TableRow key={row.leadInstanceId} className="cursor-pointer hover:bg-accent/50"
-                  onClick={() => setDetail(toLeadWithProperty(row))}>
+                <TableRow key={row.leadInstanceId} className="cursor-pointer hover:bg-accent/50 cursor-grab active:cursor-grabbing"
+                  onClick={() => setDetail(toLeadWithProperty(row))}
+                  draggable
+                  onDragStart={(e) => {
+                    const dragData: FunnelDragData = { leadInstanceId: row.leadInstanceId, dominionLeadId: row.dominionLeadId, currentStage: row.funnelStage ?? 'lead', address: row.streetAddress ?? '—' };
+                    e.dataTransfer.setData('application/json', JSON.stringify(dragData));
+                    e.dataTransfer.effectAllowed = 'move';
+                    e.currentTarget.classList.add('opacity-50');
+                    setIsDragging(true);
+                  }}
+                  onDragEnd={(e) => { e.currentTarget.classList.remove('opacity-50'); setIsDragging(false); }}>
                   <TableCell className="max-w-[200px] truncate font-medium text-sm">
                     {row.streetAddress ?? '—'}
                     {row.city && <span className="ml-1 text-xs text-muted-foreground">{row.city}</span>}

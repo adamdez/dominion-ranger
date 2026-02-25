@@ -10,6 +10,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { EmptyState } from '@/components/ui/empty-state';
 import { PropertyDetailSheet } from '@/components/property-detail/property-detail-sheet';
 import { useFunnelLeads, useFunnelAdvance, useFunnelDecline } from '@/hooks/use-funnel';
+import { useFunnelDrag, type FunnelDragData } from '@/lib/funnel-drag-context';
 import { toast } from 'sonner';
 import type { FunnelLead, LeadWithProperty } from '@/lib/types';
 import { formatDistanceToNow } from 'date-fns';
@@ -127,8 +128,21 @@ function NegotiationCard({
   onDecline: () => void;
   onView: () => void;
 }) {
+  const { setIsDragging } = useFunnelDrag();
+  const dragData: FunnelDragData = { leadInstanceId: lead.leadInstanceId, dominionLeadId: lead.dominionLeadId, currentStage: lead.funnelStage ?? 'negotiation', address: lead.streetAddress ?? '—' };
+
   return (
-    <Card className="hover:border-amber-500/30 transition-colors">
+    <Card
+      className="hover:border-amber-500/30 transition-colors cursor-grab active:cursor-grabbing"
+      draggable
+      onDragStart={(e) => {
+        e.dataTransfer.setData('application/json', JSON.stringify(dragData));
+        e.dataTransfer.effectAllowed = 'move';
+        e.currentTarget.classList.add('opacity-50');
+        setIsDragging(true);
+      }}
+      onDragEnd={(e) => { e.currentTarget.classList.remove('opacity-50'); setIsDragging(false); }}
+    >
       <CardContent className="p-4 space-y-3">
         <div>
           <p className="font-medium text-sm truncate">{lead.streetAddress ?? '—'}</p>
