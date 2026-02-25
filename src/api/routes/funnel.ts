@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import { sql, eq, and } from 'drizzle-orm';
+import { sql, eq, and, asc, desc } from 'drizzle-orm';
 import { db } from '../../db/connection.js';
 import { leadInstances, properties } from '../../db/schema/index.js';
 import { logActivity } from '../../modules/analytics/activity-logger.js';
@@ -42,6 +42,8 @@ const funnelLeadsQuery = z.object({
   page: z.coerce.number().int().positive().default(1),
   pageSize: z.coerce.number().int().min(1).max(100).default(50),
   search: z.string().optional(),
+  sort: z.enum(['composite_score', 'updated_at', 'created_at']).default('composite_score'),
+  order: z.enum(['asc', 'desc']).default('desc'),
 });
 
 const funnelStatsSchema = z.object({}).optional();
@@ -317,7 +319,13 @@ export async function funnelRoutes(app: FastifyInstance): Promise<void> {
           eq(latestScores.rn, 1),
         ))
         .where(whereClause)
-        .orderBy(sql`${leadInstances.updatedAt} DESC`)
+        .orderBy(
+          query.sort === 'composite_score'
+            ? (query.order === 'asc' ? asc(latestScores.compositeScore) : desc(latestScores.compositeScore))
+            : query.sort === 'created_at'
+              ? (query.order === 'asc' ? asc(leadInstances.createdAt) : desc(leadInstances.createdAt))
+              : (query.order === 'asc' ? asc(leadInstances.updatedAt) : desc(leadInstances.updatedAt))
+        )
         .limit(query.pageSize)
         .offset(offset);
 

@@ -35,7 +35,7 @@ export default function NegotiationPage() {
   const [search, setSearch] = useState('');
   const [detail, setDetail] = useState<LeadWithProperty | null>(null);
 
-  const { data, isLoading } = useFunnelLeads('negotiation', { page, pageSize: 50, search: search || undefined });
+  const { data, isLoading } = useFunnelLeads('negotiation', { page, pageSize: 50, search: search || undefined, sort: 'created_at', order: 'desc' });
   const advance = useFunnelAdvance();
   const decline = useFunnelDecline();
 

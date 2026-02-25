@@ -45,7 +45,7 @@ export default function LeadsPage() {
   const [offerDialog, setOfferDialog] = useState<FunnelLead | null>(null);
   const [offerAmount, setOfferAmount] = useState('');
 
-  const { data, isLoading } = useFunnelLeads('lead', { page, pageSize: 50, search: search || undefined });
+  const { data, isLoading } = useFunnelLeads('lead', { page, pageSize: 50, search: search || undefined, sort: 'composite_score', order: 'desc' });
   const advance = useFunnelAdvance();
   const decline = useFunnelDecline();
 

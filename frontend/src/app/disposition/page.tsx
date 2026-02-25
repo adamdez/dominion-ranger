@@ -35,7 +35,7 @@ export default function DispositionPage() {
   const [search, setSearch] = useState('');
   const [detail, setDetail] = useState<LeadWithProperty | null>(null);
 
-  const { data, isLoading } = useFunnelLeads('disposition', { page, pageSize: 50, search: search || undefined });
+  const { data, isLoading } = useFunnelLeads('disposition', { page, pageSize: 50, search: search || undefined, sort: 'created_at', order: 'desc' });
 
   const rows = data?.data ?? [];
   const pagination = data?.pagination;

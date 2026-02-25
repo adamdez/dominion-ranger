@@ -7,6 +7,8 @@ export function useFunnelLeads(stage: string, params: {
   page?: number;
   pageSize?: number;
   search?: string;
+  sort?: string;
+  order?: 'asc' | 'desc';
 } = {}) {
   return useQuery({
     queryKey: ['funnel', stage, params],
@@ -15,6 +17,8 @@ export function useFunnelLeads(stage: string, params: {
       if (params.page) sp.set('page', String(params.page));
       if (params.pageSize) sp.set('pageSize', String(params.pageSize));
       if (params.search) sp.set('search', params.search);
+      if (params.sort) sp.set('sort', params.sort);
+      if (params.order) sp.set('order', params.order);
       const { data } = await api.get<PaginatedResponse<FunnelLead>>(
         `/api/funnel/leads/${stage}?${sp}`,
       );

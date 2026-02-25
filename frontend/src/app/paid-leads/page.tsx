@@ -48,7 +48,7 @@ export default function PaidLeadsPage() {
   const [addDialog, setAddDialog] = useState(false);
   const [addSearch, setAddSearch] = useState('');
 
-  const { data, isLoading } = useFunnelLeads('paid_lead', { page, pageSize: 50, search: search || undefined });
+  const { data, isLoading } = useFunnelLeads('paid_lead', { page, pageSize: 50, search: search || undefined, sort: 'composite_score', order: 'desc' });
   const advance = useFunnelAdvance();
   const decline = useFunnelDecline();
   const promote = usePromoteProperties();
