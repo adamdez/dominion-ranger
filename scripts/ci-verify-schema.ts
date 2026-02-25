@@ -32,8 +32,10 @@ const REQUIRED_TABLES = [
   'comp_reports',
   'offers',
   'deals',
-  'marketing_campaigns',
-  'marketing_touchpoints',
+  'marketing_channels',
+  'campaigns',
+  'campaign_spend_entries',
+  'lead_source_attribution',
 ];
 
 async function main() {
