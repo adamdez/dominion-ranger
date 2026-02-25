@@ -29,6 +29,9 @@ import { compRoutes } from './routes/comps.js';
 import { offerRoutes } from './routes/offers.js';
 import { prospectRoutes } from './routes/prospects.js';
 import { funnelRoutes } from './routes/funnel.js';
+import { inviteRoutes } from './routes/invite.js';
+import { notificationRoutes } from './routes/notifications.js';
+import { userProfileRoutes } from './routes/user-profile.js';
 import { RangerError } from '../lib/errors.js';
 import { ZodError } from 'zod';
 import { logError } from '../modules/error-logging/index.js';
@@ -67,6 +70,7 @@ export async function createServer() {
     if (request.url === '/api/sms/status' || request.url === '/api/sms/inbound') return;
     if (request.url === '/api/health/deep') return;
     if (request.url === '/api/auth/login' || request.url === '/api/auth/refresh' || request.url === '/api/auth/logout') return;
+    if (request.url.startsWith('/api/invite/') && (request.method === 'GET' || request.method === 'POST')) return;
 
     await authMiddleware(request, reply);
   });
@@ -128,6 +132,9 @@ export async function createServer() {
   await app.register(offerRoutes);
   await app.register(prospectRoutes);
   await app.register(funnelRoutes);
+  await app.register(inviteRoutes);
+  await app.register(notificationRoutes);
+  await app.register(userProfileRoutes);
 
   return app;
 }
