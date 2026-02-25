@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import { login, refreshAccessToken, logout, createUser, hashPassword } from '../../modules/auth/index.js';
+import { login, refreshAccessToken, logout, createUser, hashPassword, initiatePasswordReset, resetPasswordWithToken } from '../../modules/auth/index.js';
 import { db } from '../../db/connection.js';
 import { users } from '../../db/schema/index.js';
 import { eq } from 'drizzle-orm';
@@ -107,6 +107,29 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
     if (body.password) setData.passwordHash = await hashPassword(body.password);
     await db.update(users).set(setData).where(eq(users.userId, userId));
     return { success: true };
+  });
+
+  app.post('/api/auth/forgot-password', async (request) => {
+    const body = z.object({ email: z.string().email() }).parse(request.body);
+    await initiatePasswordReset(body.email);
+    return { message: 'If this email exists, a reset link has been generated. Contact your admin.' };
+  });
+
+  app.post('/api/auth/reset-password', async (request, reply) => {
+    const body = z.object({ token: z.string().uuid(), newPassword: z.string().min(8) }).parse(request.body);
+    const ok = await resetPasswordWithToken(body.token, body.newPassword);
+    if (!ok) return reply.code(400).send({ error: 'Invalid or expired reset token' });
+    return { success: true, message: 'Password reset successfully' };
+  });
+
+  app.post('/api/auth/admin/initiate-reset', async (request, reply) => {
+    const reqUser = (request as unknown as Record<string, { role: Role }>).user;
+    if (reqUser?.role !== 'ADMIN') return reply.code(403).send({ error: 'Admin access required' });
+    const body = z.object({ email: z.string().email() }).parse(request.body);
+    const result = await initiatePasswordReset(body.email);
+    if (!result) return reply.code(404).send({ error: 'User not found' });
+    const baseUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+    return { token: result.token, resetLink: `${baseUrl}/reset-password/${result.token}` };
   });
 
   app.patch('/api/auth/me/password', async (request, reply) => {

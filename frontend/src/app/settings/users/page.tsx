@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
-import { Plus, Pencil, UserCheck, UserX } from 'lucide-react';
+import { Plus, Pencil, UserCheck, UserX, Eye, EyeOff, KeyRound, Copy } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -49,7 +49,10 @@ export default function UsersPage() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<UserRow | null>(null);
   const [form, setForm] = useState<UserFormData>(emptyForm);
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
+  const [resetLinkDialog, setResetLinkDialog] = useState<{ email: string; resetLink: string } | null>(null);
+  const [resettingUser, setResettingUser] = useState<string | null>(null);
 
   const { data, isLoading } = useQuery({
     queryKey: ['auth-users'],
@@ -97,6 +100,21 @@ export default function UsersPage() {
 
   function toggleActive(u: UserRow) { updateMut.mutate({ userId: u.id, updates: { active: !u.active } }); }
 
+  async function handleInitiateReset(u: UserRow) {
+    setError('');
+    setResetLinkDialog(null);
+    setResettingUser(u.id);
+    try {
+      const { data } = await api.post<{ token: string; resetLink: string }>('/api/auth/admin/initiate-reset', { email: u.email });
+      setResetLinkDialog({ email: u.email, resetLink: data.resetLink });
+    } catch (e: unknown) {
+      const err = e as { response?: { data?: { error?: string } } };
+      setError(err.response?.data?.error || 'Failed to initiate reset');
+    } finally {
+      setResettingUser(null);
+    }
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -131,6 +149,7 @@ export default function UsersPage() {
                     <td className="px-4 py-3 text-muted-foreground">{u.lastLoginAt ? new Date(u.lastLoginAt).toLocaleDateString() : 'Never'}</td>
                     <td className="px-4 py-3 text-right">
                       <div className="flex items-center justify-end gap-1">
+                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleInitiateReset(u)} title="Reset password" disabled={resettingUser === u.id}><KeyRound className="h-3.5 w-3.5" /></Button>
                         <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(u)}><Pencil className="h-3.5 w-3.5" /></Button>
                         <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => toggleActive(u)}>
                           {u.active ? <UserX className="h-3.5 w-3.5 text-destructive" /> : <UserCheck className="h-3.5 w-3.5 text-emerald-500" />}
@@ -159,7 +178,24 @@ export default function UsersPage() {
             </div>
             <div className="space-y-1.5">
               <label className="text-sm font-medium">Password{editingUser ? ' (leave blank to keep)' : ''}</label>
-              <input type="password" value={form.password} onChange={e => setForm(f => ({ ...f, password: e.target.value }))} className="flex h-9 w-full rounded-md border border-input bg-background px-3 text-sm" required={!editingUser} minLength={8} />
+              <div className="relative">
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  value={form.password}
+                  onChange={e => setForm(f => ({ ...f, password: e.target.value }))}
+                  className="flex h-9 w-full rounded-md border border-input bg-background px-3 pr-10 text-sm"
+                  required={!editingUser}
+                  minLength={8}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-300"
+                  tabIndex={-1}
+                >
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
             </div>
             <div className="space-y-1.5">
               <label className="text-sm font-medium">Role</label>
@@ -183,6 +219,62 @@ export default function UsersPage() {
               <Button type="submit" disabled={createMut.isPending || updateMut.isPending}>{editingUser ? 'Save' : 'Create User'}</Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!resetLinkDialog} onOpenChange={(open) => !open && setResetLinkDialog(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader><DialogTitle>Reset Password Link</DialogTitle></DialogHeader>
+          {resetLinkDialog && (
+            <div className="space-y-3">
+              <p className="text-sm text-muted-foreground">
+                Share this link with {resetLinkDialog.email}. It expires in 1 hour.
+              </p>
+              <div className="flex gap-2">
+                <input
+                  readOnly
+                  value={resetLinkDialog.resetLink}
+                  className="flex h-9 flex-1 rounded-md border border-input bg-background px-3 text-sm font-mono"
+                />
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => navigator.clipboard.writeText(resetLinkDialog.resetLink)}
+                >
+                  Copy
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!resetLinkDialog} onOpenChange={(open) => !open && setResetLinkDialog(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader><DialogTitle>Reset link generated</DialogTitle></DialogHeader>
+          {resetLinkDialog && (
+            <div className="space-y-3">
+              <p className="text-sm text-muted-foreground">
+                Share this link with <strong>{resetLinkDialog.email}</strong>. It expires in 1 hour.
+              </p>
+              <div className="flex gap-2">
+                <input
+                  readOnly
+                  value={resetLinkDialog.resetLink}
+                  className="flex h-9 flex-1 rounded-md border border-input bg-background px-3 text-sm font-mono"
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  className="h-9 w-9 shrink-0"
+                  onClick={() => navigator.clipboard.writeText(resetLinkDialog.resetLink)}
+                >
+                  <Copy className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </div>

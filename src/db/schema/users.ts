@@ -19,6 +19,8 @@ export const users = pgTable(
     phone: varchar('phone', { length: 20 }),
     twilioCallerId: varchar('twilio_caller_id', { length: 20 }),
     avatarUrl: text('avatar_url'),
+    resetToken: text('reset_token'),
+    resetTokenExpires: timestamp('reset_token_expires', { withTimezone: true }),
     active: boolean('active').default(true).notNull(),
     lastLoginAt: timestamp('last_login_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),

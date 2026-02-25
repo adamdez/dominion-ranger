@@ -1,17 +1,21 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
-import { Shield } from 'lucide-react';
+import { Shield, Eye, EyeOff } from 'lucide-react';
+import Link from 'next/link';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const { login } = useAuth();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const resetSuccess = searchParams.get('reset') === 'success';
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -38,6 +42,12 @@ export default function LoginPage() {
           <p className="text-xs text-muted-foreground">Lead Intelligence System</p>
         </div>
 
+        {resetSuccess && (
+          <p className="rounded-md bg-emerald-500/10 px-3 py-2 text-center text-sm text-emerald-400">
+            Password reset successfully. Please sign in.
+          </p>
+        )}
+
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
             <label htmlFor="email" className="text-sm font-medium">Email</label>
@@ -55,15 +65,25 @@ export default function LoginPage() {
 
           <div className="space-y-2">
             <label htmlFor="password" className="text-sm font-medium">Password</label>
-            <input
-              id="password"
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="Enter your password"
-              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              required
-            />
+            <div className="relative">
+              <input
+                id="password"
+                type={showPassword ? 'text' : 'password'}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Enter your password"
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 pr-10 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                required
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-300"
+                tabIndex={-1}
+              >
+                {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
+            </div>
           </div>
 
           {error && <p className="text-sm text-destructive">{error}</p>}
@@ -77,9 +97,17 @@ export default function LoginPage() {
           </button>
         </form>
 
-        <p className="text-center text-xs text-muted-foreground">
-          Contact your admin if you need an account
-        </p>
+        <div className="space-y-2 text-center">
+          <Link
+            href="/forgot-password"
+            className="text-xs text-muted-foreground hover:text-primary transition-colors"
+          >
+            Forgot password?
+          </Link>
+          <p className="text-xs text-muted-foreground">
+            Contact your admin if you need an account
+          </p>
+        </div>
       </div>
     </div>
   );

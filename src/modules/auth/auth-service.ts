@@ -140,6 +140,54 @@ export async function hashPassword(password: string): Promise<string> {
   return bcrypt.hash(password, 12);
 }
 
+export async function initiatePasswordReset(email: string): Promise<{ token: string } | null> {
+  const [user] = await db
+    .select()
+    .from(users)
+    .where(eq(users.email, email.toLowerCase().trim()))
+    .limit(1);
+
+  if (!user) return null;
+
+  const token = randomUUID();
+  const expiresAt = new Date();
+  expiresAt.setHours(expiresAt.getHours() + 1);
+
+  await db.update(users)
+    .set({
+      resetToken: token,
+      resetTokenExpires: expiresAt,
+      updatedAt: new Date(),
+    })
+    .where(eq(users.userId, user.userId));
+
+  return { token };
+}
+
+export async function resetPasswordWithToken(token: string, newPassword: string): Promise<boolean> {
+  const [user] = await db
+    .select()
+    .from(users)
+    .where(eq(users.resetToken, token))
+    .limit(1);
+
+  if (!user || !user.resetTokenExpires || user.resetTokenExpires < new Date()) {
+    return false;
+  }
+
+  const passwordHash = await hashPassword(newPassword);
+  await db.update(users)
+    .set({
+      passwordHash,
+      resetToken: null,
+      resetTokenExpires: null,
+      updatedAt: new Date(),
+    })
+    .where(eq(users.userId, user.userId));
+
+  return true;
+}
+
 export async function createUser(data: {
   email: string;
   password: string;

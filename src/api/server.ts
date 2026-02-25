@@ -69,7 +69,7 @@ export async function createServer() {
     if (request.url.startsWith('/api/dialer/voice') || request.url === '/api/dialer/status' || request.url === '/api/dialer/recording') return;
     if (request.url === '/api/sms/status' || request.url === '/api/sms/inbound') return;
     if (request.url === '/api/health/deep') return;
-    if (request.url === '/api/auth/login' || request.url === '/api/auth/refresh' || request.url === '/api/auth/logout') return;
+    if (request.url === '/api/auth/login' || request.url === '/api/auth/refresh' || request.url === '/api/auth/logout' || request.url === '/api/auth/forgot-password' || request.url === '/api/auth/reset-password') return;
 
     await authMiddleware(request, reply);
   });
