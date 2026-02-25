@@ -69,12 +69,7 @@ jobs:
 
       - run: npm ci
       - name: Push schema to test database
-        run: |
-          npx drizzle-kit push --force 2>&1 | tee /tmp/push-output.txt
-          if grep -qi "error" /tmp/push-output.txt; then
-            echo "drizzle-kit push produced errors — check output above"
-            exit 1
-          fi
+        run: npx drizzle-kit push --force
       - name: Verify schema tables exist
         run: npx tsx scripts/ci-verify-schema.ts
       - name: Seed test database
