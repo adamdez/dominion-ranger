@@ -7,6 +7,7 @@ export function useFunnelLeads(stage: string, params: {
   page?: number;
   pageSize?: number;
   search?: string;
+  view?: 'mine' | 'unassigned' | 'all';
 } = {}) {
   return useQuery({
     queryKey: ['funnel', stage, params],
@@ -15,6 +16,7 @@ export function useFunnelLeads(stage: string, params: {
       if (params.page) sp.set('page', String(params.page));
       if (params.pageSize) sp.set('pageSize', String(params.pageSize));
       if (params.search) sp.set('search', params.search);
+      if (params.view) sp.set('view', params.view);
       const { data } = await api.get<PaginatedResponse<FunnelLead>>(
         `/api/funnel/leads/${stage}?${sp}`,
       );
@@ -56,6 +58,28 @@ export function useFunnelAdvance() {
     },
     onError: (err: unknown) => {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Failed to advance';
+      toast.error(msg);
+    },
+  });
+}
+
+export function useClaimLead() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (body: { leadInstanceId: string; expectedVersion: number }) => {
+      const { data } = await api.post(`/api/leads/${body.leadInstanceId}/claim`, {
+        expectedVersion: body.expectedVersion,
+      });
+      return data;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['funnel'] });
+      qc.invalidateQueries({ queryKey: ['funnelStats'] });
+      qc.invalidateQueries({ queryKey: ['leads'] });
+      toast.success('Lead claimed successfully');
+    },
+    onError: (err: unknown) => {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Failed to claim lead — it may have already been claimed';
       toast.error(msg);
     },
   });
