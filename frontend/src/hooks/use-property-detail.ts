@@ -47,10 +47,10 @@ export function usePropertyEvents(dominionLeadId: string | null) {
     queryKey: ['property-events', dominionLeadId],
     queryFn: async (): Promise<DistressEvent[]> => {
       try {
-        const { data } = await api.get<DistressEvent[]>(
+        const { data } = await api.get<{ events: DistressEvent[]; count: number } | DistressEvent[]>(
           `/api/properties/${dominionLeadId}/events`,
         );
-        return data;
+        return Array.isArray(data) ? data : Array.isArray(data?.events) ? data.events : [];
       } catch {
         return [];
       }
