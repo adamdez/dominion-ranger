@@ -28,6 +28,7 @@ import { settingsRoutes } from './routes/settings.js';
 import { compRoutes } from './routes/comps.js';
 import { offerRoutes } from './routes/offers.js';
 import { prospectRoutes } from './routes/prospects.js';
+import { funnelRoutes } from './routes/funnel.js';
 import { RangerError } from '../lib/errors.js';
 import { ZodError } from 'zod';
 import { logError } from '../modules/error-logging/index.js';
@@ -126,6 +127,7 @@ export async function createServer() {
   await app.register(compRoutes);
   await app.register(offerRoutes);
   await app.register(prospectRoutes);
+  await app.register(funnelRoutes);
 
   return app;
 }
