@@ -6,7 +6,9 @@ import {
   boolean,
   numeric,
   integer,
+  bigint,
   timestamp,
+  date,
   jsonb,
   uniqueIndex,
   index,
@@ -73,6 +75,19 @@ export const properties = pgTable(
     acreage: numeric('acreage', { precision: 10, scale: 4 }),
     regridData: jsonb('regrid_data'),
     regridEnrichedAt: timestamp('regrid_enriched_at', { withTimezone: true }),
+
+    // BatchData / enrichment outputs
+    enrichmentData: jsonb('enrichment_data'),
+    enrichedAt: timestamp('enriched_at', { withTimezone: true }),
+    bedrooms: integer('bedrooms'),
+    bathrooms: numeric('bathrooms', { precision: 3, scale: 1 }),
+    sqft: integer('sqft'),
+    yearBuilt: integer('year_built'),
+    lotSqft: integer('lot_sqft'),
+    lastSaleDate: date('last_sale_date'),
+    lastSalePriceCents: bigint('last_sale_price_cents', { mode: 'number' }),
+    assessedValueCents: bigint('assessed_value_cents', { mode: 'number' }),
+    marketValueCents: bigint('market_value_cents', { mode: 'number' }),
 
     // Metadata
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),

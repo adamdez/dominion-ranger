@@ -1,16 +1,25 @@
 /**
  * Standalone CSV Reimport Script
- * 
+ *
  * Reads PropertyRadar CSV with Ranger Full Extract fields,
  * updates existing properties with severity attributes,
  * creates distress events from flag columns.
- * 
- * Usage: npx tsx src/scripts/reimport-csv.ts spokane.csv
- * 
+ *
+ * Usage:
+ *   npx tsx src/scripts/reimport-csv.ts spokane.csv
+ *   npx tsx src/scripts/reimport-csv.ts kootenai.csv KOOTENAI ID
+ *   npx tsx src/scripts/reimport-csv.ts kootenai.csv KOOTENAI ID --dry-run
+ *
+ * When county/state are passed on CLI, they are used as defaults for all rows
+ * (for CSVs like Kootenai that lack those columns).
+ *
+ * Rows without APN get a synthetic identifier: SYNTH-{hash} so reimport is idempotent.
+ *
  * This bypasses BullMQ and the API — runs directly against the DB.
  * Processes records sequentially to avoid Neon connection pool exhaustion.
  */
 
+import { createHash } from 'node:crypto';
 import { createReadStream } from 'node:fs';
 import { createInterface } from 'node:readline';
 import { join } from 'node:path';
@@ -49,11 +58,18 @@ export interface ReimportResult {
 
 export async function runReimportCsv(
   filePath: string,
-  options?: { county?: string; state?: string },
+  options?: { county?: string; state?: string; dryRun?: boolean },
 ): Promise<ReimportResult> {
   const defaultCounty = options?.county?.toUpperCase();
   const defaultState = options?.state?.toUpperCase();
-  return runImport(filePath, defaultCounty, defaultState);
+  return runImport(filePath, defaultCounty, defaultState, options?.dryRun ?? false);
+}
+
+/** Generate deterministic synthetic APN from address for rows missing APN. */
+function syntheticApn(streetAddress: string, city: string | null, state: string | null): string {
+  const normalized = `${(streetAddress || '').trim().toUpperCase()}-${(city || '').trim().toUpperCase()}-${(state || '').trim().toUpperCase()}`;
+  const hash = createHash('sha256').update(normalized).digest('hex').slice(0, 12);
+  return `SYNTH-${hash}`;
 }
 
 // ── CSV Parsing ─────────────────────────────────
@@ -78,14 +94,14 @@ function parseCsvLine(line: string): string[] {
   return result;
 }
 
-// Column name → index mapping
+// Column name → index mapping (includes Kootenai / reduced-column-set aliases)
 const HEADER_MAP: Record<string, string[]> = {
   type:             ['type'],
-  address:          ['address'],
+  address:          ['address', 'property address', 'street', 'street address', 'property_address'],
   city:             ['city'],
   county:           ['county'],
   state:            ['state'],
-  zip:              ['zip'],
+  zip:              ['zip', 'zipcode', 'zip code'],
   sqft:             ['sq ft'],
   beds:             ['beds'],
   baths:            ['baths'],
@@ -97,7 +113,7 @@ const HEADER_MAP: Record<string, string[]> = {
   hudRent:          ['hud rent'],
   listedForSale:    ['listed for sale?'],
   foreclosure:      ['foreclosure?'],
-  apn:              ['apn'],
+  apn:              ['apn', 'parcel', 'parcel id', 'parcel_id', 'parcelid'],
   mailAddress:      ['mail address'],
   mailCity:         ['mail city'],
   mailState:        ['mail state'],
@@ -179,11 +195,14 @@ async function runImport(
   filePath: string,
   defaultCounty?: string,
   defaultState?: string,
+  dryRun = false,
 ): Promise<ReimportResult> {
   console.log(`\n🏗️  Dominion Ranger CSV Reimport`);
   console.log(`   File: ${filePath}`);
   console.log(`   County: ${defaultCounty || 'from CSV'}`);
-  console.log(`   State: ${defaultState || 'from CSV'}\n`);
+  console.log(`   State: ${defaultState || 'from CSV'}`);
+  if (dryRun) console.log(`   Mode: DRY-RUN (no inserts)\n`);
+  else console.log('');
 
   const rl = createInterface({
     input: createReadStream(filePath, 'utf-8'),
@@ -198,7 +217,9 @@ async function runImport(
   let eventsCreated = 0;
   let errors = 0;
   let skipped = 0;
+  let dryRunCount = 0;
   const dominionLeadIds: string[] = [];
+  const dryRunPreview: Array<Record<string, unknown>> = [];
 
   const startTime = Date.now();
 
@@ -216,14 +237,43 @@ async function runImport(
     const values = parseCsvLine(line);
     if (values.length === 0 || values.every(v => !v.trim())) continue;
 
-    const apn = get(values, mapping, 'apn');
     const address = get(values, mapping, 'address');
-    if (!apn && !address) { skipped++; continue; }
-
+    const city = get(values, mapping, 'city');
     const county = get(values, mapping, 'county')?.toUpperCase() || defaultCounty || null;
     const state = get(values, mapping, 'state')?.toUpperCase() || defaultState || null;
+    const zip = get(values, mapping, 'zip') || null; // missing zip → null, don't crash
+
+    let apn = get(values, mapping, 'apn');
+    if (!apn && address) {
+      // Synthetic APN: require county for unique constraint (apn + county)
+      if (!county) {
+        console.warn(`  Row ${lineNum}: No APN and no county (need CLI county for synthetic ID). Skipping.`);
+        skipped++;
+        continue;
+      }
+      apn = syntheticApn(address, city, state);
+      if (!dryRun) console.warn(`  Row ${lineNum}: No APN found, using synthetic ID: ${apn}`);
+    }
+    if (!apn && !address) { skipped++; continue; }
     const ownerRaw = get(values, mapping, 'owner') || '';
     const { first: ownerFirst, last: ownerLast } = parseOwnerName(ownerRaw);
+
+    // Dry-run: collect preview and skip DB
+    if (dryRun) {
+      if (dryRunPreview.length < 5) {
+        dryRunPreview.push({
+          apn,
+          address,
+          city,
+          county,
+          state,
+          zip: zip ?? '(empty)',
+          owner: ownerRaw || '(empty)',
+        });
+      }
+      dryRunCount++;
+      continue;
+    }
 
     // Build mailing address
     const mailParts = [
@@ -276,8 +326,8 @@ async function runImport(
           county,
           state,
           streetAddress: address,
-          city: get(values, mapping, 'city'),
-          zip: get(values, mapping, 'zip'),
+          city,
+          zip: zip || null,
           ownerName: ownerRaw || null,
           ownerFirst,
           ownerLast,
@@ -488,12 +538,25 @@ async function runImport(
 
   const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
 
+  if (dryRun) {
+    console.log(`\n📋 Dry-run complete in ${elapsed}s`);
+    console.log(`   Total rows that would be imported: ${dryRunCount}`);
+    console.log(`   Skipped: ${skipped}`);
+    console.log(`\n   First 5 rows (as mapped):`);
+    dryRunPreview.forEach((row, i) => {
+      console.log(`   ${i + 1}. APN: ${row.apn} | ${row.address} | ${row.city}, ${row.state} ${row.zip} | ${row.owner}`);
+    });
+    console.log('\n   Run without --dry-run to import.\n');
+    return { created: 0, updated: 0, eventsCreated: 0, dominionLeadIds: [] };
+  }
+
   console.log(`\n✅ Import complete in ${elapsed}s`);
   console.log(`   Updated: ${updated}`);
   console.log(`   Created: ${created}`);
   console.log(`   Events:  ${eventsCreated}`);
   console.log(`   Errors:  ${errors}`);
-  console.log(`   Skipped: ${skipped}\n`);
+  console.log(`   Skipped: ${skipped}`);
+  console.log('\n   Run scoring with: npx tsx src/scripts/backfill-scoring.ts\n');
 
   return { created, updated, eventsCreated, dominionLeadIds };
 }
@@ -501,16 +564,18 @@ async function runImport(
 // CLI entry — only run when executed directly (not when imported)
 const isMainModule = process.argv[1]?.includes('reimport-csv') ?? false;
 if (isMainModule) {
-  const fileName = process.argv[2];
+  const args = process.argv.slice(2).filter(a => a !== '--dry-run');
+  const dryRun = process.argv.includes('--dry-run');
+  const fileName = args[0];
   if (!fileName) {
-    console.error('Usage: npx tsx src/scripts/reimport-csv.ts <filename.csv>');
+    console.error('Usage: npx tsx src/scripts/reimport-csv.ts <filename.csv> [county] [state] [--dry-run]');
     process.exit(1);
   }
   const filePath = fileName.includes('/') || fileName.includes('\\') ? fileName : join(IMPORT_DIR, fileName);
-  const defaultCounty = process.argv[3]?.toUpperCase();
-  const defaultState = process.argv[4]?.toUpperCase();
+  const defaultCounty = args[1]?.toUpperCase();
+  const defaultState = args[2]?.toUpperCase();
 
-  runImport(filePath, defaultCounty, defaultState)
+  runImport(filePath, defaultCounty, defaultState, dryRun)
     .then(() => {
       pool.end();
       process.exit(0);
