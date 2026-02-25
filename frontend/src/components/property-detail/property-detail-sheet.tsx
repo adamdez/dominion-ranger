@@ -61,6 +61,15 @@ import { useLeadNotes, useAddNote } from '@/hooks/use-notes';
 import { CompsTab } from '@/components/comps/comps-tab';
 import { OffersTab } from '@/components/offers/offers-tab';
 import { NewOfferDialog } from '@/components/offers/new-offer-dialog';
+import { FunnelStageBadge } from '@/components/funnel/funnel-stage-badge';
+import { useFunnelAdvance, useFunnelDecline } from '@/hooks/use-funnel';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
+} from '@/components/ui/dialog';
+import type { FunnelStage } from '@/lib/types';
+import { toast } from 'sonner';
 
 interface PropertyDetailSheetProps {
   lead: LeadWithProperty | null;
@@ -72,12 +81,16 @@ export function PropertyDetailSheet({ lead, open, onClose }: PropertyDetailSheet
   const [tab, setTab] = useState('overview');
   const [taskDialogOpen, setTaskDialogOpen] = useState(false);
   const [offerDialogOpen, setOfferDialogOpen] = useState(false);
+  const [funnelOfferDialog, setFunnelOfferDialog] = useState(false);
+  const [funnelOfferAmount, setFunnelOfferAmount] = useState('');
 
   const claimMutation = useClaimLead();
   const transitionMutation = useTransitionLead();
   const complianceMutation = useRunCompliance();
   const skipTraceMutation = useSkipTrace();
   const dealStageMutation = useDealStageTransition();
+  const funnelAdvance = useFunnelAdvance();
+  const funnelDecline = useFunnelDecline();
   const addTagMutation = useAddTag();
   const removeTagMutation = useRemoveTag();
 
@@ -109,6 +122,52 @@ export function PropertyDetailSheet({ lead, open, onClose }: PropertyDetailSheet
             {lead.ownerName ?? 'Unknown Owner'}
           </p>
         </SheetHeader>
+
+        <FunnelActionBar
+          lead={lead}
+          onAdvance={(targetStage, opts) => {
+            if (targetStage === 'negotiation') {
+              setFunnelOfferDialog(true);
+              return;
+            }
+            funnelAdvance.mutate(
+              { leadInstanceId: lead.leadInstanceId, targetStage, ...opts },
+              { onSuccess: () => { toast.success(`Moved to ${targetStage}`); onClose(); } },
+            );
+          }}
+          onDecline={() => {
+            funnelDecline.mutate(
+              { leadInstanceId: lead.leadInstanceId },
+              { onSuccess: () => { toast.success('Declined'); onClose(); } },
+            );
+          }}
+          loading={funnelAdvance.isPending || funnelDecline.isPending}
+        />
+
+        <Dialog open={funnelOfferDialog} onOpenChange={setFunnelOfferDialog}>
+          <DialogContent>
+            <DialogHeader><DialogTitle>Move to Negotiation</DialogTitle></DialogHeader>
+            <div className="space-y-3 py-2">
+              <p className="text-sm text-muted-foreground">{lead.streetAddress}</p>
+              <div>
+                <Label>Offer Amount ($)</Label>
+                <Input type="number" placeholder="150000" value={funnelOfferAmount}
+                  onChange={(e) => setFunnelOfferAmount(e.target.value)} />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setFunnelOfferDialog(false)}>Cancel</Button>
+              <Button disabled={funnelAdvance.isPending} onClick={() => {
+                const cents = Math.round(parseFloat(funnelOfferAmount) * 100);
+                if (isNaN(cents) || cents <= 0) { toast.error('Enter a valid amount'); return; }
+                funnelAdvance.mutate(
+                  { leadInstanceId: lead.leadInstanceId, targetStage: 'negotiation', offerAmountCents: cents },
+                  { onSuccess: () => { setFunnelOfferDialog(false); setFunnelOfferAmount(''); toast.success('Moved to Negotiation'); onClose(); } },
+                );
+              }}>Move to Negotiation</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
         <Tabs value={tab} onValueChange={setTab} className="flex-1 flex flex-col overflow-hidden">
           <TabsList className="mx-6 w-fit">
@@ -801,4 +860,50 @@ function TimelineEntry({ item }: { item: TimelineItem }) {
 function formatPhone(phone: string): string {
   if (phone.length === 10) return `(${phone.slice(0, 3)}) ${phone.slice(3, 6)}-${phone.slice(6)}`;
   return phone;
+}
+
+function FunnelActionBar({
+  lead,
+  onAdvance,
+  onDecline,
+  loading,
+}: {
+  lead: LeadWithProperty;
+  onAdvance: (targetStage: string, opts?: { notes?: string }) => void;
+  onDecline: () => void;
+  loading: boolean;
+}) {
+  const funnelStage = ((lead as LeadWithProperty & { funnelStage?: string }).funnelStage ?? 'prospect') as FunnelStage;
+
+  const actions: Record<FunnelStage, { forward?: { label: string; stage: string }; canDecline: boolean }> = {
+    prospect: { forward: { label: 'Move to Leads', stage: 'lead' }, canDecline: false },
+    lead: { forward: { label: 'Move to Negotiation', stage: 'negotiation' }, canDecline: true },
+    paid_lead: { forward: { label: 'Move to Negotiation', stage: 'negotiation' }, canDecline: true },
+    negotiation: { forward: { label: 'Mark Accepted', stage: 'disposition' }, canDecline: true },
+    disposition: { forward: undefined, canDecline: false },
+    declined: { forward: { label: 'Re-engage', stage: 'lead' }, canDecline: false },
+  };
+
+  const config = actions[funnelStage] ?? actions.prospect;
+
+  return (
+    <div className="mx-6 mb-2 rounded-md border border-border bg-muted/30 px-4 py-2 flex items-center justify-between">
+      <div className="flex items-center gap-2">
+        <span className="text-xs text-muted-foreground">Stage:</span>
+        <FunnelStageBadge stage={funnelStage} />
+      </div>
+      <div className="flex items-center gap-2">
+        {config.forward && (
+          <Button size="sm" disabled={loading} onClick={() => onAdvance(config.forward!.stage)}>
+            {config.forward.label}
+          </Button>
+        )}
+        {config.canDecline && (
+          <Button size="sm" variant="ghost" className="text-red-400" disabled={loading} onClick={onDecline}>
+            Decline
+          </Button>
+        )}
+      </div>
+    </div>
+  );
 }
