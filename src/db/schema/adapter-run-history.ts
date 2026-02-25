@@ -7,7 +7,7 @@ import {
   timestamp,
   index,
 } from 'drizzle-orm/pg-core';
-import { marketConfigs } from './market-configs.js';
+import { marketConfigs } from './market-configs';
 
 export const adapterRunHistory = pgTable(
   'adapter_run_history',
