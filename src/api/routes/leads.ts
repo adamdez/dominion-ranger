@@ -654,6 +654,22 @@ export async function leadRoutes(app: FastifyInstance): Promise<void> {
           // Individual failures don't block others
         }
       }
+
+      if (updated > 0) {
+        try {
+          const { createNotification } = await import('./notifications.js');
+          await createNotification({
+            userId: body.assignedTo,
+            type: 'LEAD_ASSIGNED',
+            title: `${updated} lead${updated > 1 ? 's' : ''} assigned to you`,
+            message: `You have been assigned ${updated} new lead${updated > 1 ? 's' : ''}.`,
+            link: '/leads',
+          });
+        } catch {
+          // Notification failures are non-critical
+        }
+      }
+
       return { updated };
     },
   );

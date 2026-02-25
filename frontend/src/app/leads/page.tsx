@@ -14,6 +14,7 @@ import { FunnelStageBadge } from '@/components/funnel/funnel-stage-badge';
 import { FunnelViewToggle, type FunnelView } from '@/components/funnel/funnel-view-toggle';
 import { PropertyDetailSheet } from '@/components/property-detail/property-detail-sheet';
 import { useFunnelLeads, useFunnelAdvance, useFunnelDecline, useClaimLead } from '@/hooks/use-funnel';
+import { AssignDropdown } from '@/components/funnel/assign-dropdown';
 import { useAuth } from '@/lib/auth-context';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
@@ -117,7 +118,17 @@ export default function LeadsPage() {
                   </TableCell>
                   <TableCell className="text-sm">{row.ownerName ?? '—'}</TableCell>
                   <TableCell><ScoreBadge score={row.compositeScore} /></TableCell>
-                  <TableCell className="text-sm text-muted-foreground">{row.assignedTo ?? '—'}</TableCell>
+                  <TableCell className="text-sm text-muted-foreground">
+                    <div className="flex items-center gap-1">
+                      <span className="truncate">{row.assignedTo ?? 'Unassigned'}</span>
+                      {(isAdmin || isManager) && (
+                        <AssignDropdown
+                          leadInstanceIds={[row.leadInstanceId]}
+                          currentAssignee={row.assignedTo}
+                        />
+                      )}
+                    </div>
+                  </TableCell>
                   <TableCell className="text-xs text-muted-foreground">
                     {formatDistanceToNow(new Date(row.updatedAt), { addSuffix: true })}
                   </TableCell>
