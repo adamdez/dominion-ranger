@@ -6,14 +6,14 @@ import type { PipelineLead, PipelineStats } from '@/lib/types';
 import { toast } from 'sonner';
 import { DEAL_STAGES } from '@/lib/constants';
 
+// ─── Deal Board / Pipeline Hooks (existing) ─────────────
+
 export function usePipeline() {
   return useQuery({
     queryKey: ['pipeline'],
     refetchInterval: 30_000,
     refetchIntervalInBackground: false,
     queryFn: async () => {
-      // TODO: wire to backend when phase-3/backend-intelligence merges
-      // GET /api/leads?limit=500&includeTags=true&includeDealStage=true
       try {
         const { data } = await api.get<{ data: PipelineLead[] }>('/api/leads', {
           params: { pageSize: 500 },
@@ -35,7 +35,6 @@ export function usePipelineStats() {
   return useQuery({
     queryKey: ['pipelineStats'],
     queryFn: async (): Promise<PipelineStats[]> => {
-      // TODO: wire to GET /api/pipeline/stats when backend merges
       return DEAL_STAGES.map(s => ({ stage: s.key, count: 0, totalValueCents: 0 }));
     },
   });
@@ -45,7 +44,6 @@ export function useDealStageTransition() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async ({ leadInstanceId, stage }: { leadInstanceId: string; stage: string }) => {
-      // TODO: wire to PATCH /api/leads/:leadInstanceId/deal-stage when backend merges
       const { data } = await api.patch(`/api/leads/${leadInstanceId}/deal-stage`, { stage });
       return data;
     },
@@ -60,10 +58,6 @@ export function useDealStageTransition() {
   });
 }
 
-/**
- * Map existing lead statuses to deal stages for backward compatibility
- * until the backend explicitly stores deal_stage.
- */
 function mapStatusToDealStage(status: string): string {
   const mapping: Record<string, string> = {
     PROMOTED: 'NEW_LEAD',
@@ -78,4 +72,92 @@ function mapStatusToDealStage(status: string): string {
     DEAD: 'CLOSED_LOST',
   };
   return mapping[status] ?? 'NEW_LEAD';
+}
+
+// ─── Pipeline Automation Hooks (new) ─────────────────────
+
+export interface PipelineJobResult {
+  job: string;
+  success: boolean;
+  message: string;
+  count?: number;
+  errors?: number;
+  durationMs: number;
+  completedAt: string;
+}
+
+export interface PipelineToggles {
+  autoImport: boolean;
+  autoScoring: boolean;
+  autoPromotion: boolean;
+  nightlyRescore: boolean;
+}
+
+export interface PipelineStatus {
+  enabled: boolean;
+  toggles: PipelineToggles;
+  lastRuns: {
+    import: PipelineJobResult | null;
+    scoring: PipelineJobResult | null;
+    promotion: PipelineJobResult | null;
+    rescore: PipelineJobResult | null;
+  };
+}
+
+export function usePipelineStatus() {
+  return useQuery({
+    queryKey: ['pipelineStatus'],
+    queryFn: async () => {
+      const { data } = await api.get<PipelineStatus>('/api/pipeline/status');
+      return data;
+    },
+    refetchInterval: 30_000,
+  });
+}
+
+export function useTogglePipelineEnabled() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (enabled: boolean) => {
+      const { data } = await api.patch('/api/pipeline/enabled', { enabled });
+      return data;
+    },
+    onSuccess: (_, enabled) => {
+      toast.success(`Pipeline automation ${enabled ? 'enabled' : 'disabled'}`);
+      qc.invalidateQueries({ queryKey: ['pipelineStatus'] });
+    },
+    onError: () => toast.error('Failed to update pipeline toggle'),
+  });
+}
+
+export function useUpdatePipelineToggles() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (toggles: Partial<PipelineToggles>) => {
+      const { data } = await api.patch('/api/pipeline/toggles', toggles);
+      return data;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['pipelineStatus'] });
+    },
+    onError: () => toast.error('Failed to update pipeline settings'),
+  });
+}
+
+export function useRunPipelineJob() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (job: 'import' | 'scoring' | 'promotion' | 'rescore') => {
+      const endpoint = `/api/system/run-${job}`;
+      const { data } = await api.post(endpoint, {});
+      return data;
+    },
+    onSuccess: (_, job) => {
+      toast.success(`${job.charAt(0).toUpperCase() + job.slice(1)} job started`);
+      qc.invalidateQueries({ queryKey: ['pipelineStatus'] });
+    },
+    onError: (_, job) => {
+      toast.error(`Failed to run ${job} job`);
+    },
+  });
 }

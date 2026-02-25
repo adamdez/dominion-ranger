@@ -1,6 +1,6 @@
 'use client';
 
-import { Settings, Database, BarChart3, RefreshCw, Play, ArrowUpCircle, AlertTriangle, Activity, ToggleLeft } from 'lucide-react';
+import { Settings, Database, BarChart3, RefreshCw, Play, ArrowUpCircle, AlertTriangle, Activity, ToggleLeft, Zap, CheckCircle, XCircle } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
@@ -11,6 +11,13 @@ import { ErrorState } from '@/components/ui/error-state';
 import { useSystemStats } from '@/hooks/use-system';
 import { useScoringStats, useRunScoring, useRunPromotion } from '@/hooks/use-scoring';
 import { useFeatureFlags, useToggleFeatureFlag, useRecentErrors, useDeepHealth } from '@/hooks/use-settings';
+import {
+  usePipelineStatus,
+  useTogglePipelineEnabled,
+  useUpdatePipelineToggles,
+  useRunPipelineJob,
+} from '@/hooks/use-pipeline';
+import type { PipelineJobResult } from '@/hooks/use-pipeline';
 import { SCORE_TIERS } from '@/lib/constants';
 import { useAuth } from '@/lib/auth-context';
 
@@ -24,6 +31,10 @@ export default function SettingsPage() {
   const toggleFlag = useToggleFeatureFlag();
   const errors = useRecentErrors(isAdmin);
   const health = useDeepHealth();
+  const pipeline = usePipelineStatus();
+  const togglePipelineEnabled = useTogglePipelineEnabled();
+  const updatePipelineToggles = useUpdatePipelineToggles();
+  const runPipelineJob = useRunPipelineJob();
 
   if (stats.error) {
     return <ErrorState message="Failed to load settings" onRetry={() => stats.refetch()} />;
@@ -90,6 +101,101 @@ export default function SettingsPage() {
               Promote
             </Button>
           </div>
+        </CardContent>
+      </Card>
+
+      {/* Pipeline Automation */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            <Zap className="h-4 w-4" />
+            Pipeline Automation
+            {pipeline.data && (
+              <Badge
+                variant={pipeline.data.enabled ? 'default' : 'secondary'}
+                className="ml-auto text-xs"
+              >
+                {pipeline.data.enabled ? 'Active' : 'Paused'}
+              </Badge>
+            )}
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {pipeline.isLoading ? (
+            <div className="space-y-3">
+              {[1, 2, 3, 4, 5].map(i => <Skeleton key={i} className="h-10 w-full" />)}
+            </div>
+          ) : pipeline.data ? (
+            <>
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium">Master Kill Switch</p>
+                  <p className="text-xs text-muted-foreground">
+                    When disabled, all scheduled pipeline jobs are paused
+                  </p>
+                </div>
+                <Switch
+                  checked={pipeline.data.enabled}
+                  onCheckedChange={(enabled) => togglePipelineEnabled.mutate(enabled)}
+                  disabled={togglePipelineEnabled.isPending}
+                />
+              </div>
+
+              <Separator />
+
+              <PipelineToggleRow
+                label="Auto-Import"
+                description="Check for new CSVs every 6 hours"
+                checked={pipeline.data.toggles.autoImport}
+                disabled={!pipeline.data.enabled || updatePipelineToggles.isPending}
+                onCheckedChange={(v) => updatePipelineToggles.mutate({ autoImport: v })}
+                lastRun={pipeline.data.lastRuns.import}
+                onRunNow={() => runPipelineJob.mutate('import')}
+                running={runPipelineJob.isPending}
+              />
+
+              <Separator />
+
+              <PipelineToggleRow
+                label="Auto-Scoring"
+                description="Score unscored properties every hour"
+                checked={pipeline.data.toggles.autoScoring}
+                disabled={!pipeline.data.enabled || updatePipelineToggles.isPending}
+                onCheckedChange={(v) => updatePipelineToggles.mutate({ autoScoring: v })}
+                lastRun={pipeline.data.lastRuns.scoring}
+                onRunNow={() => runPipelineJob.mutate('scoring')}
+                running={runPipelineJob.isPending}
+              />
+
+              <Separator />
+
+              <PipelineToggleRow
+                label="Auto-Promotion"
+                description="Promote qualified leads every hour"
+                checked={pipeline.data.toggles.autoPromotion}
+                disabled={!pipeline.data.enabled || updatePipelineToggles.isPending}
+                onCheckedChange={(v) => updatePipelineToggles.mutate({ autoPromotion: v })}
+                lastRun={pipeline.data.lastRuns.promotion}
+                onRunNow={() => runPipelineJob.mutate('promotion')}
+                running={runPipelineJob.isPending}
+              />
+
+              <Separator />
+
+              <PipelineToggleRow
+                label="Nightly Rescore"
+                description="Full rescore of all properties daily at 2 AM"
+                checked={pipeline.data.toggles.nightlyRescore}
+                disabled={!pipeline.data.enabled || updatePipelineToggles.isPending}
+                onCheckedChange={(v) => updatePipelineToggles.mutate({ nightlyRescore: v })}
+                lastRun={pipeline.data.lastRuns.rescore}
+                onRunNow={() => runPipelineJob.mutate('rescore')}
+                running={runPipelineJob.isPending}
+              />
+            </>
+          ) : (
+            <p className="text-sm text-muted-foreground">Unable to load pipeline status</p>
+          )}
         </CardContent>
       </Card>
 
@@ -308,4 +414,71 @@ function formatUptime(seconds: number): string {
   const mins = Math.floor((seconds % 3600) / 60);
   if (hours > 0) return `${hours}h ${mins}m`;
   return `${mins}m`;
+}
+
+function PipelineToggleRow({
+  label,
+  description,
+  checked,
+  disabled,
+  onCheckedChange,
+  lastRun,
+  onRunNow,
+  running,
+}: {
+  label: string;
+  description: string;
+  checked: boolean;
+  disabled: boolean;
+  onCheckedChange: (v: boolean) => void;
+  lastRun: PipelineJobResult | null;
+  onRunNow: () => void;
+  running: boolean;
+}) {
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between">
+        <div className="flex-1 min-w-0 pr-4">
+          <p className="text-sm font-medium">{label}</p>
+          <p className="text-xs text-muted-foreground">{description}</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-7 text-xs px-2"
+            disabled={running}
+            onClick={onRunNow}
+          >
+            <Play className="h-3 w-3 mr-1" />
+            Run
+          </Button>
+          <Switch
+            checked={checked}
+            onCheckedChange={onCheckedChange}
+            disabled={disabled}
+          />
+        </div>
+      </div>
+      {lastRun && (
+        <div className="flex items-center gap-2 text-[11px] text-muted-foreground pl-0.5">
+          {lastRun.success ? (
+            <CheckCircle className="h-3 w-3 text-emerald-500 shrink-0" />
+          ) : (
+            <XCircle className="h-3 w-3 text-red-500 shrink-0" />
+          )}
+          <span className="truncate">{lastRun.message}</span>
+          <span className="shrink-0 tabular-nums">
+            {new Date(lastRun.completedAt).toLocaleString(undefined, {
+              month: 'short',
+              day: 'numeric',
+              hour: 'numeric',
+              minute: '2-digit',
+            })}
+          </span>
+          <span className="shrink-0 tabular-nums">({lastRun.durationMs}ms)</span>
+        </div>
+      )}
+    </div>
+  );
 }

@@ -6,6 +6,7 @@ import { initializeAdapters } from './ingestion/adapters/registry.js';
 import { scheduleIngestionJobs } from './jobs/queues.js';
 import { wireEventHandlers } from './events/wiring.js';
 import { startWorkers } from './jobs/worker.js';
+import { startScheduler, stopScheduler } from './jobs/scheduler.js';
 
 async function main(): Promise<void> {
   logger.info('╔══════════════════════════════════════════╗');
@@ -43,13 +44,20 @@ async function main(): Promise<void> {
     logger.warn({ err }, 'Could not schedule BullMQ jobs (Redis may be unavailable)');
   }
 
-  // Step 7: Start API server
+  // Step 7: Start pipeline scheduler (node-cron)
+  if (process.env.ENABLE_SCHEDULER !== 'false') {
+    startScheduler();
+    logger.info('Pipeline scheduler started');
+  }
+
+  // Step 8: Start API server
   const app = await startServer();
 
   // ─── Graceful Shutdown ─────────────────────────
   const shutdown = async (signal: string) => {
     logger.info({ signal }, 'Shutdown signal received');
 
+    stopScheduler();
     await app.close();
     await closeDatabase();
 
