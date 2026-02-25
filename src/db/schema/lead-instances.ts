@@ -60,6 +60,11 @@ export const leadInstances = pgTable(
 
     dealStage: varchar('deal_stage', { length: 32 }).default('NEW_LEAD'),
 
+    funnelStage: text('funnel_stage').notNull().default('prospect'),
+    declinedCount: integer('declined_count').notNull().default(0),
+    declinedAt: timestamp('declined_at', { withTimezone: true }),
+    previousFunnelStage: text('previous_funnel_stage'),
+
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
   },
@@ -69,6 +74,7 @@ export const leadInstances = pgTable(
     index('idx_lead_instances_status').on(table.status),
     index('idx_lead_instances_created_at').on(table.createdAt),
     index('idx_lead_instances_deal_stage').on(table.dealStage),
+    index('idx_lead_instances_funnel_stage').on(table.funnelStage),
   ],
 );
 
