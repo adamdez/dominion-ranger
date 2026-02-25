@@ -3,8 +3,8 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import {
-  Building2, Users, Phone, CheckCircle, Handshake, Package, XCircle,
-  PhoneCall, SearchCheck, Clock, DollarSign, AlertCircle, Home, Target,
+  Users, CheckCircle, Handshake, Package, XCircle,
+  PhoneCall, SearchCheck, Clock, DollarSign, AlertCircle, Home,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -17,20 +17,17 @@ import {
 import { TasksWidget } from '@/components/tasks/tasks-widget';
 import { useSystemStats } from '@/hooks/use-system';
 import { useLeadStats } from '@/hooks/use-dashboard';
-import { usePipelineStats } from '@/hooks/use-pipeline';
+
 import { useTaskStats } from '@/hooks/use-tasks';
 import { useOfferStats } from '@/hooks/use-offers';
 import { useFunnelStats } from '@/hooks/use-funnel';
-import { SCORE_TIERS, DEAL_STAGES } from '@/lib/constants';
-import { VerseOfTheDay } from '@/components/verse-of-the-day';
-
+import { SCORE_TIERS } from '@/lib/constants';
 type DateRange = '7d' | '30d' | '90d';
 
 export default function DashboardPage() {
   const [dateRange, setDateRange] = useState<DateRange>('30d');
   const stats = useSystemStats();
   const leadStats = useLeadStats();
-  const pipelineStats = usePipelineStats();
   const taskStats = useTaskStats();
   const offerStats = useOfferStats();
   const funnelStats = useFunnelStats();
@@ -44,14 +41,9 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-6">
-      {/* Header with verse of the day and date range */}
+      {/* Header with date range */}
       <div className="flex items-center justify-between gap-4">
-        <div className="flex items-center gap-4 min-w-0">
-          <h1 className="text-2xl font-bold tracking-tight shrink-0">Dashboard</h1>
-          <div className="hidden md:block min-w-0">
-            <VerseOfTheDay />
-          </div>
-        </div>
+        <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
         <Select value={dateRange} onValueChange={(v) => setDateRange(v as DateRange)}>
           <SelectTrigger className="w-32">
             <SelectValue />
@@ -165,50 +157,8 @@ export default function DashboardPage() {
         </Link>
       </div>
 
-      {/* Pipeline Value + Pending Actions + Tasks */}
+      {/* Pending Actions + Tasks */}
       <div className="grid gap-4 lg:grid-cols-3">
-        {/* Pipeline Value */}
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base flex items-center gap-2">
-              <DollarSign className="h-4 w-4" />
-              Pipeline Value
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {pipelineStats.isLoading ? (
-              <Skeleton className="h-20 w-full" />
-            ) : (
-              <div className="space-y-3">
-                <div>
-                  <div className="text-2xl font-bold tabular-nums">
-                    ${formatCurrency((pipelineStats.data ?? []).reduce((sum, s) => sum + s.totalValueCents, 0))}
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    {(pipelineStats.data ?? []).reduce((sum, s) => sum + s.count, 0)} active leads
-                  </p>
-                </div>
-                <div className="space-y-1">
-                  {(pipelineStats.data ?? [])
-                    .filter(s => s.totalValueCents > 0 || ['OFFER_MADE', 'UNDER_CONTRACT', 'TITLE_ESCROW'].includes(s.stage))
-                    .slice(0, 5)
-                    .map(s => {
-                      const stageConfig = DEAL_STAGES.find(d => d.key === s.stage);
-                      return (
-                        <div key={s.stage} className="flex items-center justify-between text-xs">
-                          <span className="text-muted-foreground">{stageConfig?.label ?? s.stage}</span>
-                          <span className="font-medium tabular-nums">
-                            ${formatCurrency(s.totalValueCents)} ({s.count})
-                          </span>
-                        </div>
-                      );
-                    })}
-                </div>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
         {/* Pending Actions */}
         <Card>
           <CardHeader className="pb-3">
@@ -381,45 +331,65 @@ function MetricRow({ label, value }: { label: string; value: number }) {
   );
 }
 
-function formatCurrency(cents: number): string {
-  if (cents >= 100_000_00) return `${(cents / 100_000_00).toFixed(0)}M`;
-  if (cents >= 100_00) return `${(cents / 100_00).toFixed(0)}K`;
-  return (cents / 100).toFixed(0);
-}
-
 function formatCompact(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
   if (n >= 1_000) return `${(n / 1_000).toFixed(0)}K`;
   return n.toString();
 }
 
-const CONVERSION_RATE = 0.05;
 const LOW_FEE = 10_000;
 const HIGH_FEE = 25_000;
 
+const STAGE_CONFIG = [
+  { key: 'prospects',   label: 'Prospects',   conversion: 0.01 },
+  { key: 'leads',       label: 'Leads',       conversion: 0.10 },
+  { key: 'paidLeads',   label: 'Paid Leads',  conversion: 0.10 },
+  { key: 'negotiation', label: 'Negotiation', conversion: 0.50 },
+  { key: 'disposition', label: 'Disposition', conversion: 1.00 },
+] as const;
+
 function PipelineValueCard({ funnelStats, loading }: {
-  funnelStats: { prospects?: number; leads?: number; paidLeads?: number; negotiation?: number } | undefined;
+  funnelStats: { prospects?: number; leads?: number; paidLeads?: number; negotiation?: number; disposition?: number } | undefined;
   loading: boolean;
 }) {
-  const count = (funnelStats?.prospects ?? 0)
-    + (funnelStats?.leads ?? 0)
-    + (funnelStats?.paidLeads ?? 0)
-    + (funnelStats?.negotiation ?? 0);
-  const lowEstimate = Math.round(count * CONVERSION_RATE * LOW_FEE);
-  const highEstimate = Math.round(count * CONVERSION_RATE * HIGH_FEE);
+  const stages = STAGE_CONFIG.map(s => {
+    const count = (funnelStats as Record<string, number> | undefined)?.[s.key] ?? 0;
+    return {
+      ...s,
+      count,
+      low: Math.round(count * s.conversion * LOW_FEE),
+      high: Math.round(count * s.conversion * HIGH_FEE),
+    };
+  });
+
+  const totalCount = stages.reduce((sum, s) => sum + s.count, 0);
+  const totalLow = stages.reduce((sum, s) => sum + s.low, 0);
+  const totalHigh = stages.reduce((sum, s) => sum + s.high, 0);
 
   return (
     <div className="bg-zinc-800/50 border border-zinc-700/50 rounded-lg p-4">
       {loading ? (
-        <Skeleton className="h-16 w-full" />
+        <Skeleton className="h-40 w-full" />
       ) : (
         <>
           <div className="text-xs text-zinc-500 uppercase tracking-wider">Estimated Pipeline Value</div>
           <div className="text-lg font-mono text-emerald-400 mt-1">
-            ${formatCompact(lowEstimate)} – ${formatCompact(highEstimate)}
+            ${formatCompact(totalLow)} – ${formatCompact(totalHigh)}
           </div>
           <div className="text-xs text-zinc-500 mt-1">
-            {count.toLocaleString()} active prospects × 5% × $10K–$25K fee
+            {totalCount.toLocaleString()} total × weighted conversion × $10K–$25K fee
+          </div>
+
+          <div className="border-t border-zinc-700/50 mt-3 pt-3 space-y-1.5">
+            {stages.map(s => (
+              <div key={s.key} className="flex items-center text-xs">
+                <span className="text-zinc-500 w-24">{s.label}</span>
+                <span className="text-zinc-400 font-mono tabular-nums w-16 text-right">{s.count.toLocaleString()}</span>
+                <span className="text-zinc-300 font-mono tabular-nums ml-auto">
+                  ${formatCompact(s.low)} – ${formatCompact(s.high)}
+                </span>
+              </div>
+            ))}
           </div>
         </>
       )}

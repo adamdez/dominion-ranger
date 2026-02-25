@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { Sidebar } from './sidebar';
 import { Header } from './header';
+import { VerseOfTheDay } from '@/components/verse-of-the-day';
 import { useAuth } from '@/lib/auth-context';
 import { setApiAccessToken } from '@/lib/api';
 import { FunnelDragProvider, useFunnelDrag } from '@/lib/funnel-drag-context';
@@ -54,6 +55,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
         <div className="md:pl-[220px]">
           <Header onMenuClick={() => setSidebarOpen(true)} />
+          <div className="hidden md:flex items-center px-4 md:px-6 py-2 border-b border-border">
+            <VerseOfTheDay />
+          </div>
           <main className="p-4 md:p-6">{children}</main>
         </div>
       </div>
