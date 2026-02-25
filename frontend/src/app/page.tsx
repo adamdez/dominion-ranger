@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import {
-  Building2, Users, Phone, CheckCircle, TrendingUp,
+  Building2, Users, Phone, CheckCircle, Handshake, Package, XCircle,
   PhoneCall, SearchCheck, Clock, DollarSign, AlertCircle, Home, Target,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -20,6 +20,7 @@ import { useLeadStats } from '@/hooks/use-dashboard';
 import { usePipelineStats } from '@/hooks/use-pipeline';
 import { useTaskStats } from '@/hooks/use-tasks';
 import { useOfferStats } from '@/hooks/use-offers';
+import { useFunnelStats } from '@/hooks/use-funnel';
 import { SCORE_TIERS, DEAL_STAGES } from '@/lib/constants';
 
 type DateRange = '7d' | '30d' | '90d';
@@ -31,6 +32,7 @@ export default function DashboardPage() {
   const pipelineStats = usePipelineStats();
   const taskStats = useTaskStats();
   const offerStats = useOfferStats();
+  const funnelStats = useFunnelStats();
 
   // Suppress unused-var lint — dateRange reserved for future analytics filtering
   void dateRange;
@@ -56,47 +58,48 @@ export default function DashboardPage() {
         </Select>
       </div>
 
-      {/* Stat Cards */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+      {/* Funnel Stat Cards */}
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-6">
         <Link href="/prospects" className="block transition-opacity hover:opacity-90">
           <StatCard
-            title="Total Prospects"
-            value={stats.data?.overview?.totalProperties}
+            title="Prospects"
+            value={funnelStats.data?.prospects ?? stats.data?.overview?.totalProperties}
             icon={Home}
-            loading={stats.isLoading}
+            loading={funnelStats.isLoading}
           />
         </Link>
-        <Link href="/pipeline" className="block transition-opacity hover:opacity-90">
+        <Link href="/leads" className="block transition-opacity hover:opacity-90">
           <StatCard
-            title="In Pipeline"
-            value={leadStats.data?.total ?? stats.data?.overview?.promotedLeads}
-            icon={Target}
-            loading={leadStats.isLoading}
+            title="Active Leads"
+            value={funnelStats.data?.leads}
+            icon={Users}
+            loading={funnelStats.isLoading}
           />
         </Link>
-        <Card className="p-4">
-          {stats.isLoading || leadStats.isLoading ? (
-            <Skeleton className="h-12 w-full" />
-          ) : (
-            <div className="flex items-center gap-3">
-              <TrendingUp className="h-5 w-5 text-emerald-500" />
-              <div>
-                <p className="text-sm text-muted-foreground">Conversion Rate</p>
-                <p className="text-xl font-bold tabular-nums">
-                  {stats.data?.overview?.totalProperties && (leadStats.data?.total ?? stats.data?.overview?.promotedLeads)
-                    ? `${(((leadStats.data?.total ?? stats.data?.overview?.promotedLeads ?? 0) / stats.data.overview.totalProperties) * 100).toFixed(1)}%`
-                    : '0%'}
-                </p>
-              </div>
-            </div>
-          )}
-        </Card>
-        <StatCard
-          title="Dial Ready"
-          value={leadStats.data?.dialReady}
-          icon={Phone}
-          loading={leadStats.isLoading}
-        />
+        <Link href="/negotiation" className="block transition-opacity hover:opacity-90">
+          <StatCard
+            title="In Negotiation"
+            value={funnelStats.data?.negotiation}
+            icon={Handshake}
+            loading={funnelStats.isLoading}
+          />
+        </Link>
+        <Link href="/disposition" className="block transition-opacity hover:opacity-90">
+          <StatCard
+            title="In Disposition"
+            value={funnelStats.data?.disposition}
+            icon={Package}
+            loading={funnelStats.isLoading}
+          />
+        </Link>
+        <Link href="/prospects" className="block transition-opacity hover:opacity-90">
+          <StatCard
+            title="Declined"
+            value={funnelStats.data?.declined}
+            icon={XCircle}
+            loading={funnelStats.isLoading}
+          />
+        </Link>
         <StatCard
           title="Closed This Month"
           value={leadStats.data?.closedThisMonth}
@@ -123,7 +126,7 @@ export default function DashboardPage() {
             loading={taskStats.isLoading}
           />
         </Link>
-        <Link href="/pipeline" className="block transition-opacity hover:opacity-90">
+        <Link href="/leads" className="block transition-opacity hover:opacity-90">
           <StatCard
             title="New Leads (24h)"
             value={leadStats.data?.newLeads24h ?? 0}
@@ -131,7 +134,7 @@ export default function DashboardPage() {
             loading={leadStats.isLoading}
           />
         </Link>
-        <Link href="/offers?status=active" className="block transition-opacity hover:opacity-90">
+        <Link href="/negotiation" className="block transition-opacity hover:opacity-90">
           <Card className="p-4">
             {offerStats.isLoading ? (
               <Skeleton className="h-12 w-full" />
