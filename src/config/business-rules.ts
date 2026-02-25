@@ -11,9 +11,9 @@
  */
 export const BUSINESS_RULES = {
   tiers: {
-    A: { minScore: 80, label: 'Tier A' },
-    B: { minScore: 60, label: 'Tier B' },
-    C: { minScore: 40, label: 'Tier C' },
+    A: { minScore: 65, label: 'Tier A' },
+    B: { minScore: 45, label: 'Tier B' },
+    C: { minScore: 25, label: 'Tier C' },
   },
 
   promotionSliceLimit: 5,

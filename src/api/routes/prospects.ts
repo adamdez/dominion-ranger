@@ -77,10 +77,10 @@ export async function prospectRoutes(app: FastifyInstance): Promise<void> {
 
       if (query.tier && query.tier !== 'all') {
         const tierRanges: Record<string, [number, number]> = {
-          A: [80, 100],
-          B: [60, 80],
-          C: [40, 60],
-          D: [0, 40],
+          A: [65, 100],
+          B: [45, 65],
+          C: [25, 45],
+          D: [0, 25],
         };
         const [min, max] = tierRanges[query.tier];
         conditions.push(sql`${latestScores.compositeScore} >= ${min}`);

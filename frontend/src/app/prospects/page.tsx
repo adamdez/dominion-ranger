@@ -207,10 +207,10 @@ export default function ProspectsPage() {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All Tiers</SelectItem>
-            <SelectItem value="A">Tier A (80+)</SelectItem>
-            <SelectItem value="B">Tier B (60-79)</SelectItem>
-            <SelectItem value="C">Tier C (40-59)</SelectItem>
-            <SelectItem value="D">Tier D (&lt;40)</SelectItem>
+            <SelectItem value="A">Tier A (65+)</SelectItem>
+            <SelectItem value="B">Tier B (45-64)</SelectItem>
+            <SelectItem value="C">Tier C (25-44)</SelectItem>
+            <SelectItem value="D">Tier D (&lt;25)</SelectItem>
           </SelectContent>
         </Select>
 

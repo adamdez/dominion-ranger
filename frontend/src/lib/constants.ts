@@ -24,9 +24,9 @@ export const DISPOSITION_TYPES = {
 } as const;
 
 export const SCORE_TIERS = {
-  A: { min: 80, label: 'Tier A', color: 'bg-green-500', textColor: 'text-green-700 dark:text-green-400' },
-  B: { min: 60, label: 'Tier B', color: 'bg-yellow-500', textColor: 'text-yellow-700 dark:text-yellow-400' },
-  C: { min: 40, label: 'Tier C', color: 'bg-orange-500', textColor: 'text-orange-700 dark:text-orange-400' },
+  A: { min: 65, label: 'Tier A', color: 'bg-green-500', textColor: 'text-green-700 dark:text-green-400' },
+  B: { min: 45, label: 'Tier B', color: 'bg-yellow-500', textColor: 'text-yellow-700 dark:text-yellow-400' },
+  C: { min: 25, label: 'Tier C', color: 'bg-orange-500', textColor: 'text-orange-700 dark:text-orange-400' },
   D: { min: 0, label: 'Tier D', color: 'bg-red-500', textColor: 'text-red-700 dark:text-red-400' },
 } as const;
 
@@ -71,9 +71,9 @@ export type ScoreTier = keyof typeof SCORE_TIERS;
 
 export function getScoreTier(score: number | null): ScoreTier {
   if (!score) return 'D';
-  if (score >= 80) return 'A';
-  if (score >= 60) return 'B';
-  if (score >= 40) return 'C';
+  if (score >= 65) return 'A';
+  if (score >= 45) return 'B';
+  if (score >= 25) return 'C';
   return 'D';
 }
 
