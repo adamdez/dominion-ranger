@@ -114,6 +114,9 @@ export default function DashboardPage() {
         />
       </div>
 
+      {/* Estimated Pipeline Value */}
+      <PipelineValueCard funnelStats={funnelStats.data} loading={funnelStats.isLoading} />
+
       {/* Task & New Lead Cards — clickable */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Link href="/tasks" className="block transition-opacity hover:opacity-90">
@@ -382,4 +385,44 @@ function formatCurrency(cents: number): string {
   if (cents >= 100_000_00) return `${(cents / 100_000_00).toFixed(0)}M`;
   if (cents >= 100_00) return `${(cents / 100_00).toFixed(0)}K`;
   return (cents / 100).toFixed(0);
+}
+
+function formatCompact(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 1_000) return `${(n / 1_000).toFixed(0)}K`;
+  return n.toString();
+}
+
+const CONVERSION_RATE = 0.05;
+const LOW_FEE = 10_000;
+const HIGH_FEE = 25_000;
+
+function PipelineValueCard({ funnelStats, loading }: {
+  funnelStats: { prospects?: number; leads?: number; paidLeads?: number; negotiation?: number } | undefined;
+  loading: boolean;
+}) {
+  const count = (funnelStats?.prospects ?? 0)
+    + (funnelStats?.leads ?? 0)
+    + (funnelStats?.paidLeads ?? 0)
+    + (funnelStats?.negotiation ?? 0);
+  const lowEstimate = Math.round(count * CONVERSION_RATE * LOW_FEE);
+  const highEstimate = Math.round(count * CONVERSION_RATE * HIGH_FEE);
+
+  return (
+    <div className="bg-zinc-800/50 border border-zinc-700/50 rounded-lg p-4">
+      {loading ? (
+        <Skeleton className="h-16 w-full" />
+      ) : (
+        <>
+          <div className="text-xs text-zinc-500 uppercase tracking-wider">Estimated Pipeline Value</div>
+          <div className="text-lg font-mono text-emerald-400 mt-1">
+            ${formatCompact(lowEstimate)} – ${formatCompact(highEstimate)}
+          </div>
+          <div className="text-xs text-zinc-500 mt-1">
+            {count.toLocaleString()} active prospects × 5% × $10K–$25K fee
+          </div>
+        </>
+      )}
+    </div>
+  );
 }

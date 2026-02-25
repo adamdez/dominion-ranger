@@ -111,6 +111,20 @@ export function VerseOfTheDay() {
             <p className="text-xs leading-relaxed text-zinc-400">
               {verse.commentary}
             </p>
+
+            {verse.sourceUrl && (
+              <a
+                href={verse.sourceUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1.5 text-xs text-emerald-400 hover:text-emerald-300 mt-3"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <span>📚</span>
+                <span>Read more: {verse.sourceTitle || 'Source'}</span>
+                <span>→</span>
+              </a>
+            )}
           </div>
         </div>
       )}
