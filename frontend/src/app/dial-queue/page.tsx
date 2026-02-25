@@ -25,6 +25,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { useDialQueue, useLogDisposition } from '@/hooks/use-dial-queue';
 import { useTransitionLead } from '@/hooks/use-leads';
 import { useSkipTrace } from '@/hooks/use-skip-trace';
+import { useResolveContacts } from '@/hooks/use-contact-resolver';
 import { useDialerStatus } from '@/hooks/use-dialer';
 import { useTwilioContext } from '@/components/dialer/twilio-provider';
 import {
@@ -66,6 +67,7 @@ export default function DialQueuePage() {
   const logDisposition = useLogDisposition();
   const transitionLead = useTransitionLead();
   const skipTrace = useSkipTrace();
+  const resolveContacts = useResolveContacts();
   const dialerStatus = useDialerStatus();
   const twilio = useTwilioContext();
 
@@ -283,14 +285,20 @@ export default function DialQueuePage() {
                       </ScoreHoverCard>
                     </div>
                     <div className="flex items-center gap-1 mt-0.5">
+                      {lead.phone ? (
+                        <span className="text-[10px] font-mono text-muted-foreground">
+                          {lead.phone.length === 10
+                            ? `(${lead.phone.slice(0,3)}) ${lead.phone.slice(3,6)}-${lead.phone.slice(6)}`
+                            : lead.phone}
+                        </span>
+                      ) : (
+                        <span className="text-[10px] text-amber-500 font-medium">No phone</span>
+                      )}
                       {(lead.topSignals as string[] | undefined)?.[0] && (
                         <Badge variant="outline" className="text-[10px] px-1 py-0">
                           {EVENT_LABELS[(lead.topSignals as string[])[0]]?.label ?? (lead.topSignals as string[])[0]}
                         </Badge>
                       )}
-                      <span className="text-[10px] text-muted-foreground">
-                        {lead.updatedAt ? formatDistanceToNow(new Date(lead.updatedAt), { addSuffix: true }) : 'Never contacted'}
-                      </span>
                     </div>
                   </button>
                 ))}
@@ -331,11 +339,19 @@ export default function DialQueuePage() {
                       <div>
                         <p className="text-sm font-medium">No phone — run skip trace</p>
                         <div className="flex gap-2 mt-2">
-                          <Button size="sm" variant="outline" disabled={skipTrace.isPending} onClick={() => skipTrace.mutate({ dominionLeadId: currentLead.dominionLeadId, tier: 'STANDARD' })}>
-                            <SearchCheck className="mr-1 h-3 w-3" /> Standard
+                          <Button
+                            size="sm" variant="outline"
+                            disabled={resolveContacts.isPending || skipTrace.isPending}
+                            onClick={() => resolveContacts.mutate({ dominionLeadId: currentLead.dominionLeadId, tier: 'basic' })}
+                          >
+                            <SearchCheck className="mr-1 h-3 w-3" /> BatchData ($0.01)
                           </Button>
-                          <Button size="sm" variant="outline" disabled={skipTrace.isPending} onClick={() => skipTrace.mutate({ dominionLeadId: currentLead.dominionLeadId, tier: 'ADVANCED' })}>
-                            <Zap className="mr-1 h-3 w-3" /> Advanced
+                          <Button
+                            size="sm" variant="outline"
+                            disabled={resolveContacts.isPending || skipTrace.isPending}
+                            onClick={() => resolveContacts.mutate({ dominionLeadId: currentLead.dominionLeadId, tier: 'deep' })}
+                          >
+                            <Zap className="mr-1 h-3 w-3" /> Deep Trace
                           </Button>
                         </div>
                       </div>

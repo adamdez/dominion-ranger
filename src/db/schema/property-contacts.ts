@@ -4,6 +4,8 @@ import {
   varchar,
   boolean,
   timestamp,
+  integer,
+  text,
   jsonb,
   index,
 } from 'drizzle-orm/pg-core';
@@ -39,9 +41,15 @@ export const propertyContacts = pgTable(
     dndEmail: boolean('dnd_email').default(false),
 
     source: varchar('source', { length: 32 }),
+    confidence: varchar('confidence', { length: 16 }).default('medium'),
 
     isPrimary: boolean('is_primary').default(false),
     isOwnerMatch: boolean('is_owner_match').default(false),
+
+    verifiedAt: timestamp('verified_at', { withTimezone: true }),
+    lastAttemptedAt: timestamp('last_attempted_at', { withTimezone: true }),
+    attemptCount: integer('attempt_count').default(0),
+    notes: text('notes'),
 
     rawData: jsonb('raw_data'),
 

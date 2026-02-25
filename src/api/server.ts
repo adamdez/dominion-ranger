@@ -22,7 +22,7 @@ import { smsRoutes } from './routes/sms.js';
 import { propertyDetailRoutes } from './routes/property-detail.js';
 import { tagRoutes } from './routes/tags.js';
 import { taskRoutes } from './routes/tasks.js';
-//import { contactRoutes } from './routes/contacts.js';
+import { contactRoutes } from './routes/contacts.js';
 import { savedFilterRoutes } from './routes/saved-filters.js';
 import { settingsRoutes } from './routes/settings.js';
 import { compRoutes } from './routes/comps.js';
@@ -118,7 +118,7 @@ export async function createServer() {
   await app.register(propertyDetailRoutes);
   await app.register(tagRoutes);
   await app.register(taskRoutes);
-  //await app.register(contactRoutes);
+  await app.register(contactRoutes);
   await app.register(savedFilterRoutes);
   await app.register(settingsRoutes);
   await app.register(compRoutes);

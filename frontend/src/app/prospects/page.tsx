@@ -11,6 +11,7 @@ import {
   ArrowUpDown,
   UserPlus,
   Download,
+  SearchCheck,
 } from 'lucide-react';
 import {
   Table,
@@ -38,11 +39,17 @@ import { ErrorState } from '@/components/ui/error-state';
 import { PropertyDetailSheet } from '@/components/property-detail/property-detail-sheet';
 import { ScoreHoverCard } from '@/components/scoring/score-breakdown-tooltip';
 import { useProspects, useCounties, usePromoteProperties } from '@/hooks/use-prospects';
+import { useBulkResolveContacts } from '@/hooks/use-contact-resolver';
 import { exportToCsv } from '@/lib/csv-export';
 import api from '@/lib/api';
 import { useFunnelDrag, type FunnelDragData } from '@/lib/funnel-drag-context';
 import { getScoreTier, SCORE_TIERS } from '@/lib/constants';
 import type { Prospect, LeadWithProperty } from '@/lib/types';
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel,
+  AlertDialogContent, AlertDialogDescription, AlertDialogFooter,
+  AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
 
 type SortField = 'composite_score' | 'equity_estimate' | 'last_event' | 'street_address' | 'owner_name' | 'county';
 
@@ -69,6 +76,7 @@ export default function ProspectsPage() {
 
   const { data: counties } = useCounties();
   const promote = usePromoteProperties();
+  const bulkResolve = useBulkResolveContacts();
 
   const rows = data?.data ?? [];
   const pagination = data?.pagination;
@@ -233,14 +241,52 @@ export default function ProspectsPage() {
         </div>
         <div className="flex items-center gap-2">
           {selected.size > 0 && (
-            <Button
-              size="sm"
-              onClick={handlePromote}
-              disabled={promotableCount === 0 || promote.isPending}
-            >
-              <UserPlus className="mr-1.5 h-3.5 w-3.5" />
-              Promote {promotableCount > 0 ? `(${promotableCount})` : ''}
-            </Button>
+            <>
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={bulkResolve.isPending}
+                  >
+                    <SearchCheck className="mr-1.5 h-3.5 w-3.5" />
+                    {bulkResolve.isPending
+                      ? 'Skip Tracing...'
+                      : `Skip Trace (${selected.size})`}
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Skip Trace {selected.size} Properties</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      This will skip trace {selected.size} propert{selected.size === 1 ? 'y' : 'ies'} using
+                      BatchData at $0.01 each = <span className="font-semibold">${(selected.size * 0.01).toFixed(2)}</span>.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                    <AlertDialogAction
+                      onClick={() => {
+                        bulkResolve.mutate({
+                          dominionLeadIds: Array.from(selected),
+                          tier: 'basic',
+                        }, { onSuccess: () => setSelected(new Set()) });
+                      }}
+                    >
+                      Confirm — Skip Trace
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+              <Button
+                size="sm"
+                onClick={handlePromote}
+                disabled={promotableCount === 0 || promote.isPending}
+              >
+                <UserPlus className="mr-1.5 h-3.5 w-3.5" />
+                Promote {promotableCount > 0 ? `(${promotableCount})` : ''}
+              </Button>
+            </>
           )}
         </div>
       </div>

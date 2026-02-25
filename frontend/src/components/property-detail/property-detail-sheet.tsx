@@ -27,6 +27,7 @@ import {
   useLeadAudit,
 } from '@/hooks/use-leads';
 import { useSkipTrace } from '@/hooks/use-skip-trace';
+import { useResolveContacts, useAddManualContact } from '@/hooks/use-contact-resolver';
 import {
   usePropertyDetail,
   usePropertyEvents,
@@ -91,6 +92,11 @@ export function PropertyDetailSheet({ lead, open, onClose }: PropertyDetailSheet
   const [funnelOfferDialog, setFunnelOfferDialog] = useState(false);
   const [funnelOfferAmount, setFunnelOfferAmount] = useState('');
   const [enriching, setEnriching] = useState(false);
+  const [manualContactOpen, setManualContactOpen] = useState(false);
+  const [manualPhone, setManualPhone] = useState('');
+  const [manualEmail, setManualEmail] = useState('');
+  const [manualName, setManualName] = useState('');
+  const [manualType, setManualType] = useState('owner');
   const { accessToken } = useAuth();
   const queryClient = useQueryClient();
 
@@ -98,6 +104,8 @@ export function PropertyDetailSheet({ lead, open, onClose }: PropertyDetailSheet
   const transitionMutation = useTransitionLead();
   const complianceMutation = useRunCompliance();
   const skipTraceMutation = useSkipTrace();
+  const resolveContactsMutation = useResolveContacts();
+  const addManualContactMutation = useAddManualContact();
   const dealStageMutation = useDealStageTransition();
   const funnelAdvance = useFunnelAdvance();
   const funnelDecline = useFunnelDecline();
@@ -440,23 +448,29 @@ export function PropertyDetailSheet({ lead, open, onClose }: PropertyDetailSheet
                     <div className="flex gap-2">
                       <Button
                         size="sm" variant="outline"
-                        disabled={skipTraceMutation.isPending}
-                        onClick={() => skipTraceMutation.mutate({
-                          dominionLeadId: lead.dominionLeadId, tier: 'STANDARD',
+                        disabled={resolveContactsMutation.isPending || skipTraceMutation.isPending}
+                        onClick={() => resolveContactsMutation.mutate({
+                          dominionLeadId: lead.dominionLeadId, tier: 'basic',
                         })}
                       >
                         <SearchCheck className="mr-1.5 h-3.5 w-3.5" />
-                        {skipTraceMutation.isPending ? 'Tracing...' : 'Standard Trace'}
+                        {resolveContactsMutation.isPending ? 'Tracing...' : 'Skip Trace ($0.01)'}
                       </Button>
                       <Button
                         size="sm" variant="outline"
-                        disabled={skipTraceMutation.isPending}
-                        onClick={() => skipTraceMutation.mutate({
-                          dominionLeadId: lead.dominionLeadId, tier: 'ADVANCED',
+                        disabled={resolveContactsMutation.isPending || skipTraceMutation.isPending}
+                        onClick={() => resolveContactsMutation.mutate({
+                          dominionLeadId: lead.dominionLeadId, tier: 'deep',
                         })}
                       >
                         <Zap className="mr-1.5 h-3.5 w-3.5" />
-                        Advanced
+                        Deep Skip Trace
+                      </Button>
+                      <Button
+                        size="sm" variant="outline"
+                        onClick={() => setManualContactOpen(true)}
+                      >
+                        + Manual
                       </Button>
                     </div>
                   </div>
@@ -514,6 +528,66 @@ export function PropertyDetailSheet({ lead, open, onClose }: PropertyDetailSheet
                     </>
                   )}
                 </div>
+
+                {/* Manual Contact Dialog */}
+                <Dialog open={manualContactOpen} onOpenChange={setManualContactOpen}>
+                  <DialogContent>
+                    <DialogHeader><DialogTitle>Add Manual Contact</DialogTitle></DialogHeader>
+                    <div className="space-y-3 py-2">
+                      <div>
+                        <Label>Name</Label>
+                        <Input value={manualName} onChange={(e) => setManualName(e.target.value)} placeholder="John Smith" />
+                      </div>
+                      <div>
+                        <Label>Phone</Label>
+                        <Input value={manualPhone} onChange={(e) => setManualPhone(e.target.value)} placeholder="5091234567" />
+                      </div>
+                      <div>
+                        <Label>Email</Label>
+                        <Input value={manualEmail} onChange={(e) => setManualEmail(e.target.value)} placeholder="john@example.com" />
+                      </div>
+                      <div>
+                        <Label>Type</Label>
+                        <Select value={manualType} onValueChange={setManualType}>
+                          <SelectTrigger><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="owner">Owner</SelectItem>
+                            <SelectItem value="spouse">Spouse</SelectItem>
+                            <SelectItem value="relative">Relative</SelectItem>
+                            <SelectItem value="tenant">Tenant</SelectItem>
+                            <SelectItem value="agent">Agent</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                    <DialogFooter>
+                      <Button variant="outline" onClick={() => setManualContactOpen(false)}>Cancel</Button>
+                      <Button
+                        disabled={addManualContactMutation.isPending || (!manualPhone && !manualEmail)}
+                        onClick={() => {
+                          addManualContactMutation.mutate({
+                            dominionLeadId: lead.dominionLeadId,
+                            contactName: manualName || undefined,
+                            contactType: manualType.toUpperCase(),
+                            phone: manualPhone || undefined,
+                            email: manualEmail || undefined,
+                            isPrimary: (contacts.data ?? []).length === 0,
+                          }, {
+                            onSuccess: () => {
+                              setManualContactOpen(false);
+                              setManualName('');
+                              setManualPhone('');
+                              setManualEmail('');
+                              setManualType('owner');
+                            },
+                          });
+                        }}
+                      >
+                        Add Contact
+                      </Button>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
               </TabsContent>
 
               {/* ─── Signals Tab ─── */}
@@ -861,32 +935,52 @@ function SignalCard({ event }: { event: DistressEvent }) {
 }
 
 function EnhancedContactCard({ contact }: { contact: PropertyContact }) {
+  const sourceColors: Record<string, string> = {
+    batchdata: 'bg-blue-500/10 text-blue-600 border-blue-500/30',
+    tracerfy: 'bg-purple-500/10 text-purple-600 border-purple-500/30',
+    reiskip: 'bg-orange-500/10 text-orange-600 border-orange-500/30',
+    manual: 'bg-gray-500/10 text-gray-600 border-gray-500/30',
+    property_record: 'bg-green-500/10 text-green-600 border-green-500/30',
+    propertyradar: 'bg-emerald-500/10 text-emerald-600 border-emerald-500/30',
+  };
+
   return (
-    <div className="rounded-lg border p-3 space-y-2">
-      <div className="flex items-center gap-2">
+    <div className={`rounded-lg border p-3 space-y-2 ${contact.isPrimary ? 'border-amber-500/40 bg-amber-500/5' : ''}`}>
+      <div className="flex items-center gap-2 flex-wrap">
         {contact.isPrimary && <span className="text-amber-500">&#9733;</span>}
         <span className="text-sm font-medium">{contact.fullName ?? 'Unknown'}</span>
         {contact.contactType && (
           <Badge variant="outline" className="text-[10px]">{contact.contactType}</Badge>
         )}
-        {contact.dndCalls && <Badge variant="destructive" className="text-[10px]">DNC</Badge>}
+        {contact.source && (
+          <Badge variant="outline" className={`text-[10px] ${sourceColors[contact.source.toLowerCase()] ?? ''}`}>
+            {contact.source}
+          </Badge>
+        )}
+        {contact.dndCalls && <Badge variant="destructive" className="text-[10px]">DNC Calls</Badge>}
+        {contact.dndSms && <Badge variant="destructive" className="text-[10px]">DNC SMS</Badge>}
       </div>
       {contact.phone && (
         <div className="flex items-center gap-2 text-sm">
           <Phone className="h-3.5 w-3.5 text-green-600" />
-          <span className="font-mono">{formatPhone(contact.phone)}</span>
+          <a href={`tel:${contact.phone}`} className="font-mono hover:underline text-green-700 dark:text-green-400">
+            {formatPhone(contact.phone)}
+          </a>
           {contact.phoneType && <span className="text-xs text-muted-foreground">({contact.phoneType})</span>}
-          {contact.phoneStatus && <span className="text-xs text-muted-foreground">{contact.phoneStatus}</span>}
+          {contact.phoneStatus && contact.phoneStatus !== 'UNKNOWN' && (
+            <span className={`text-xs ${contact.phoneStatus === 'CONNECTED' ? 'text-green-600' : 'text-red-500'}`}>
+              {contact.phoneStatus}
+            </span>
+          )}
         </div>
       )}
       {contact.email && (
         <div className="flex items-center gap-2 text-sm">
           <Mail className="h-3.5 w-3.5 text-blue-600" />
-          <span>{contact.email}</span>
+          <a href={`mailto:${contact.email}`} className="hover:underline text-blue-700 dark:text-blue-400">
+            {contact.email}
+          </a>
         </div>
-      )}
-      {contact.source && (
-        <div className="text-xs text-muted-foreground">Source: {contact.source}</div>
       )}
     </div>
   );
