@@ -70,6 +70,10 @@ import {
 } from '@/components/ui/dialog';
 import type { FunnelStage } from '@/lib/types';
 import { toast } from 'sonner';
+import { Loader2 } from 'lucide-react';
+import { useAuth } from '@/lib/auth-context';
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3100';
 
 interface PropertyDetailSheetProps {
   lead: LeadWithProperty | null;
@@ -83,6 +87,8 @@ export function PropertyDetailSheet({ lead, open, onClose }: PropertyDetailSheet
   const [offerDialogOpen, setOfferDialogOpen] = useState(false);
   const [funnelOfferDialog, setFunnelOfferDialog] = useState(false);
   const [funnelOfferAmount, setFunnelOfferAmount] = useState('');
+  const [enriching, setEnriching] = useState(false);
+  const { accessToken } = useAuth();
 
   const claimMutation = useClaimLead();
   const transitionMutation = useTransitionLead();
@@ -107,9 +113,25 @@ export function PropertyDetailSheet({ lead, open, onClose }: PropertyDetailSheet
   const property = propertyDetail.data;
   const isLoading = claimMutation.isPending || transitionMutation.isPending || complianceMutation.isPending;
 
+  async function handleEnrich() {
+    setEnriching(true);
+    try {
+      const res = await fetch(`${API_URL}/api/properties/${lead.dominionLeadId}/enrich`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      if (res.ok) toast.success('Property data enrichment queued');
+      else toast.error('Enrichment failed');
+    } catch {
+      toast.error('Enrichment failed');
+    } finally {
+      setEnriching(false);
+    }
+  }
+
   return (
     <Sheet open={open} onOpenChange={(v) => !v && onClose()}>
-      <SheetContent className="w-full sm:max-w-2xl overflow-hidden flex flex-col p-0">
+      <SheetContent className="w-[75vw] max-w-[75vw] overflow-hidden flex flex-col p-0">
         <SheetHeader className="px-6 pt-6 pb-3 space-y-1">
           <SheetTitle className="text-lg">
             {lead.streetAddress ?? 'Unknown Address'}
@@ -340,6 +362,10 @@ export function PropertyDetailSheet({ lead, open, onClose }: PropertyDetailSheet
                     />
                     <Button size="sm" variant="outline" onClick={() => setOfferDialogOpen(true)}>
                       <DollarSign className="mr-1.5 h-3.5 w-3.5" />Make Offer
+                    </Button>
+                    <Button variant="outline" size="sm" onClick={handleEnrich} disabled={enriching}>
+                      {enriching ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                      🔄 Pull Property Data
                     </Button>
                   </div>
                 </div>

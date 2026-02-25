@@ -1,7 +1,13 @@
 import type { FastifyInstance } from 'fastify';
 import { eq, desc } from 'drizzle-orm';
 import { db } from '../../db/connection.js';
-import { scoringRecords, propertyContacts, properties } from '../../db/schema/index.js';
+import {
+  scoringRecords,
+  propertyContacts,
+  properties,
+  leadInstances,
+  activityLog,
+} from '../../db/schema/index.js';
 import { getPropertyById, getPropertyCount } from '../../modules/properties/index.js';
 import { getEventsByProperty } from '../../modules/distress-events/index.js';
 import { getLatestScore, getScoringHistory } from '../../modules/scoring/index.js';
@@ -11,6 +17,7 @@ import { getAuditTrail } from '../../modules/compliance/index.js';
 import { requireRole } from '../middleware/auth.js';
 import { BUSINESS_RULES } from '../../config/business-rules.js';
 import { propertyParamsSchema, propertyScoreHistoryQuery } from '../schemas/properties.js';
+import { z } from 'zod';
 
 export async function propertyRoutes(app: FastifyInstance): Promise<void> {
 
@@ -210,6 +217,53 @@ export async function propertyRoutes(app: FastifyInstance): Promise<void> {
       }
 
       return result;
+    },
+  );
+
+  // POST /api/properties/:dominionLeadId/enrich
+  // Stub for now — returns success, logs to activity_log
+  app.post<{ Params: { dominionLeadId: string } }>(
+    '/api/properties/:dominionLeadId/enrich',
+    { preHandler: [requireRole('properties.read')] },
+    async (request, reply) => {
+      const params = z.object({ dominionLeadId: z.string().min(1) }).parse(request.params);
+      const user = (request as unknown as Record<string, { userId?: string }>).user;
+
+      const [property] = await db
+        .select({ dominionLeadId: properties.dominionLeadId })
+        .from(properties)
+        .where(eq(properties.dominionLeadId, params.dominionLeadId))
+        .limit(1);
+
+      if (!property) {
+        return reply.code(404).send({ success: false, message: 'Property not found' });
+      }
+
+      const [latestLeadInstance] = await db
+        .select({ leadInstanceId: leadInstances.leadInstanceId })
+        .from(leadInstances)
+        .where(eq(leadInstances.dominionLeadId, params.dominionLeadId))
+        .orderBy(desc(leadInstances.updatedAt))
+        .limit(1);
+
+      await db.insert(activityLog).values({
+        dominionLeadId: params.dominionLeadId,
+        leadInstanceId: latestLeadInstance?.leadInstanceId ?? null,
+        userId: user?.userId ?? 'system',
+        activityType: 'STATUS_CHANGED',
+        channel: 'MANUAL_EMAIL',
+        meta: {
+          action: 'property_enrichment_queued',
+          providers: ['batchdata', 'regrid'],
+          source: 'property_detail_overview',
+        },
+      });
+
+      return {
+        success: true,
+        message: 'Property data enrichment queued',
+        providers: ['batchdata', 'regrid'],
+      };
     },
   );
 }
