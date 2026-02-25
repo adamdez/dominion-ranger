@@ -85,6 +85,10 @@ export type { CompReport, NewCompReport } from './comp-reports';
 export { offers } from './offers';
 export type { Offer, NewOffer } from './offers';
 
+// ─── Notifications ───────────────────────────────────
+export { notifications } from './notifications';
+export type { Notification, NewNotification } from './notifications';
+
 // ─── Operational ───────────────────────────────────
 export { featureFlags } from './feature-flags';
 export type { FeatureFlag, NewFeatureFlag } from './feature-flags';
