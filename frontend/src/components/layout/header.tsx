@@ -12,6 +12,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { useAuth } from '@/lib/auth-context';
+import { NotificationBell } from './notification-bell';
 
 const pageTitles: Record<string, string> = {
   '/': 'Dashboard',
@@ -71,7 +72,8 @@ export function Header({ onMenuClick }: HeaderProps) {
 
       <h1 className="text-lg font-semibold">{title}</h1>
 
-      <div className="ml-auto flex items-center gap-3">
+      <div className="ml-auto flex items-center gap-2">
+        {user && <NotificationBell />}
         {user && (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
