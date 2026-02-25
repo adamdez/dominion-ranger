@@ -110,7 +110,7 @@ export async function propertyRoutes(app: FastifyInstance): Promise<void> {
         .orderBy(desc(scoringRecords.createdAt))
         .limit(1);
 
-      if (!record) return { topSignals: [], scores: null };
+      if (!record) return { topSignals: [], scores: null, tier: 'D' };
 
       const contributions = (record.signalContributions as Array<Record<string, unknown>>) ?? [];
       const topSignals = contributions
@@ -121,12 +121,20 @@ export async function propertyRoutes(app: FastifyInstance): Promise<void> {
           eventLayer: c.eventLayer,
           contribution: Number(c.finalContribution) || 0,
           daysSinceTrigger: c.daysSinceTrigger,
+          triggerDate: c.triggerDate ?? c.filingDate ?? null,
+          rawAmount: c.rawAmount ?? null,
         }));
+
+      const comp = Number(record.compositeScore) || 0;
+      const tier = comp >= BUSINESS_RULES.scoring.tiers.A.minScore ? 'A'
+        : comp >= BUSINESS_RULES.scoring.tiers.B.minScore ? 'B'
+        : comp >= BUSINESS_RULES.scoring.tiers.C.minScore ? 'C' : 'D';
 
       return {
         topSignals,
+        tier,
         scores: {
-          composite: Number(record.compositeScore),
+          composite: comp,
           motivation: Number(record.motivationScore),
           deal: Number(record.dealScore),
           confidence: Number(record.confidenceScore),

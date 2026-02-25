@@ -189,10 +189,10 @@ export async function prospectRoutes(app: FastifyInstance): Promise<void> {
       let promoted = 0;
       let skipped = 0;
       let errors = 0;
+      const promotedInstances: Array<{ dominionLeadId: string; leadInstanceId: string }> = [];
 
       for (const propId of propertyIds) {
         try {
-          // propId could be dominionLeadId or propertyId, resolve to dominionLeadId
           const [prop] = await db
             .select({ dominionLeadId: properties.dominionLeadId })
             .from(properties)
@@ -209,7 +209,6 @@ export async function prospectRoutes(app: FastifyInstance): Promise<void> {
             continue;
           }
 
-          // Check if already has an active lead instance
           const [existing] = await db
             .select({ id: leadInstances.leadInstanceId })
             .from(leadInstances)
@@ -223,12 +222,18 @@ export async function prospectRoutes(app: FastifyInstance): Promise<void> {
 
           if (existing) {
             skipped++;
+            promotedInstances.push({ dominionLeadId: prop.dominionLeadId, leadInstanceId: existing.id });
             continue;
           }
 
-          await createLeadInstance({
+          const instance = await createLeadInstance({
             dominionLeadId: prop.dominionLeadId,
-            promotionId: prop.dominionLeadId, // Use dominionLeadId as pseudo-promotionId for manual promotes
+            promotionId: prop.dominionLeadId,
+          });
+
+          promotedInstances.push({
+            dominionLeadId: prop.dominionLeadId,
+            leadInstanceId: instance.leadInstanceId ?? instance.lead_instance_id,
           });
 
           await logActivity({
@@ -246,7 +251,7 @@ export async function prospectRoutes(app: FastifyInstance): Promise<void> {
         }
       }
 
-      return { promoted, skipped, errors };
+      return { promoted, skipped, errors, promotedInstances };
     },
   );
 }
