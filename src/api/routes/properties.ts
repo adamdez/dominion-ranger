@@ -112,7 +112,11 @@ export async function propertyRoutes(app: FastifyInstance): Promise<void> {
 
       if (!record) return { topSignals: [], scores: null, tier: 'D' };
 
-      const contributions = (record.signalContributions as Array<Record<string, unknown>>) ?? [];
+      let raw = record.signalContributions;
+      if (typeof raw === 'string') {
+        try { raw = JSON.parse(raw); } catch { raw = []; }
+      }
+      const contributions = (Array.isArray(raw) ? raw : []) as Array<Record<string, unknown>>;
       const topSignals = contributions
         .sort((a, b) => (Number(b.finalContribution) || 0) - (Number(a.finalContribution) || 0))
         .slice(0, 8)

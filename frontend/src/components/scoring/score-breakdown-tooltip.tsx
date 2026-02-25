@@ -1,10 +1,11 @@
 'use client';
 
+import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import api from '@/lib/api';
 import { Badge } from '@/components/ui/badge';
 import { getScoreTier, SCORE_TIERS } from '@/lib/constants';
-import { TrendingUp, AlertTriangle, DollarSign, Clock } from 'lucide-react';
+import { TrendingUp, AlertTriangle, DollarSign, Clock, Loader2 } from 'lucide-react';
 import {
   HoverCard,
   HoverCardTrigger,
@@ -142,8 +143,9 @@ export function ScoreHoverCard({ score, dominionLeadId, children }: ScoreHoverCa
   const tier = getScoreTier(score);
   const tierConfig = SCORE_TIERS[tier];
   const comp = Number(score) || 0;
+  const [isOpen, setIsOpen] = useState(false);
 
-  const { data } = useQuery({
+  const { data, isLoading, isError } = useQuery({
     queryKey: ['score-breakdown', dominionLeadId],
     queryFn: async () => {
       const { data } = await api.get<{
@@ -166,11 +168,11 @@ export function ScoreHoverCard({ score, dominionLeadId, children }: ScoreHoverCa
       return data;
     },
     staleTime: 5 * 60_000,
-    enabled: !!dominionLeadId,
+    enabled: !!dominionLeadId && isOpen,
   });
 
   return (
-    <HoverCard openDelay={500} closeDelay={100}>
+    <HoverCard openDelay={300} closeDelay={200} onOpenChange={setIsOpen}>
       <HoverCardTrigger asChild>
         <span className="cursor-help">{children}</span>
       </HoverCardTrigger>
@@ -221,7 +223,14 @@ export function ScoreHoverCard({ score, dominionLeadId, children }: ScoreHoverCa
           <div className="border-t border-zinc-700/50" />
 
           {/* Signal contributions */}
-          {data?.topSignals && data.topSignals.length > 0 ? (
+          {isLoading ? (
+            <div className="flex items-center justify-center py-2">
+              <Loader2 className="h-4 w-4 animate-spin text-zinc-500" />
+              <span className="ml-2 text-[11px] text-zinc-500">Loading signals...</span>
+            </div>
+          ) : isError ? (
+            <p className="text-[11px] text-red-400">Failed to load signal data</p>
+          ) : data?.topSignals && data.topSignals.length > 0 ? (
             <div className="space-y-1">
               {data.topSignals.slice(0, 6).map((sig, i) => {
                 const config = EVENT_LABELS[sig.eventType] ?? { label: sig.eventType, severity: 'low' as const };
@@ -238,7 +247,7 @@ export function ScoreHoverCard({ score, dominionLeadId, children }: ScoreHoverCa
               })}
             </div>
           ) : (
-            <p className="text-[11px] text-zinc-500">No signal data</p>
+            <p className="text-[11px] text-zinc-500">No distress signals on record</p>
           )}
         </div>
       </HoverCardContent>
