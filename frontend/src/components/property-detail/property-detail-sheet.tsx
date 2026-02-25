@@ -341,6 +341,36 @@ export function PropertyDetailSheet({ lead, open, onClose }: PropertyDetailSheet
                   </div>
                 </div>
 
+                <Separator />
+
+                {/* Action Buttons */}
+                <div className="space-y-3">
+                  <h4 className="text-sm font-semibold text-muted-foreground">ACTIONS</h4>
+                  <div className="flex flex-wrap gap-2">
+                    <StatusActions
+                      lead={lead}
+                      onClaim={() => claimMutation.mutate({
+                        leadInstanceId: lead.leadInstanceId,
+                        expectedVersion: lead.version,
+                      })}
+                      onCompliance={() => complianceMutation.mutate(lead.leadInstanceId)}
+                      onTransition={(toStatus) => transitionMutation.mutate({
+                        leadInstanceId: lead.leadInstanceId,
+                        toStatus,
+                        expectedVersion: lead.version,
+                      })}
+                      loading={isLoading}
+                    />
+                    <Button size="sm" variant="outline" onClick={() => setOfferDialogOpen(true)}>
+                      <DollarSign className="mr-1.5 h-3.5 w-3.5" />Make Offer
+                    </Button>
+                    <Button variant="outline" size="sm" onClick={handleEnrich} disabled={enriching}>
+                      {enriching ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                      🔄 Pull Property Data
+                    </Button>
+                  </div>
+                </div>
+
                 {/* Property Details */}
                 {property && (
                   <>
@@ -477,36 +507,6 @@ export function PropertyDetailSheet({ lead, open, onClose }: PropertyDetailSheet
                     </div>
                   </>
                 )}
-
-                <Separator />
-
-                {/* Action Buttons */}
-                <div className="space-y-3">
-                  <h4 className="text-sm font-semibold text-muted-foreground">ACTIONS</h4>
-                  <div className="flex flex-wrap gap-2">
-                    <StatusActions
-                      lead={lead}
-                      onClaim={() => claimMutation.mutate({
-                        leadInstanceId: lead.leadInstanceId,
-                        expectedVersion: lead.version,
-                      })}
-                      onCompliance={() => complianceMutation.mutate(lead.leadInstanceId)}
-                      onTransition={(toStatus) => transitionMutation.mutate({
-                        leadInstanceId: lead.leadInstanceId,
-                        toStatus,
-                        expectedVersion: lead.version,
-                      })}
-                      loading={isLoading}
-                    />
-                    <Button size="sm" variant="outline" onClick={() => setOfferDialogOpen(true)}>
-                      <DollarSign className="mr-1.5 h-3.5 w-3.5" />Make Offer
-                    </Button>
-                    <Button variant="outline" size="sm" onClick={handleEnrich} disabled={enriching}>
-                      {enriching ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-                      🔄 Pull Property Data
-                    </Button>
-                  </div>
-                </div>
 
                 <Separator />
 

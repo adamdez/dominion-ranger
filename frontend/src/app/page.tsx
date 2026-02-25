@@ -4,7 +4,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import {
   Users, CheckCircle, Handshake, Package, XCircle,
-  PhoneCall, SearchCheck, Clock, DollarSign, AlertCircle, Home,
+  PhoneCall, SearchCheck, Clock, DollarSign, AlertCircle, Home, Info,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -14,6 +14,10 @@ import { ErrorState } from '@/components/ui/error-state';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle,
+} from '@/components/ui/dialog';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { TasksWidget } from '@/components/tasks/tasks-widget';
 import { useSystemStats } from '@/hooks/use-system';
 import { useLeadStats } from '@/hooks/use-dashboard';
@@ -331,68 +335,217 @@ function MetricRow({ label, value }: { label: string; value: number }) {
   );
 }
 
-function formatCompact(n: number): string {
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
-  if (n >= 1_000) return `${(n / 1_000).toFixed(0)}K`;
-  return n.toString();
+function formatCurrency(amount: number): string {
+  if (amount >= 1_000_000) return `$${(amount / 1_000_000).toFixed(1)}M`;
+  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(amount);
 }
 
-const LOW_FEE = 10_000;
-const HIGH_FEE = 25_000;
+function formatFullCurrency(amount: number): string {
+  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(amount);
+}
 
-const STAGE_CONFIG = [
-  { key: 'prospects',   label: 'Prospects',   conversion: 0.01 },
-  { key: 'leads',       label: 'Leads',       conversion: 0.10 },
-  { key: 'paidLeads',   label: 'Paid Leads',  conversion: 0.10 },
-  { key: 'negotiation', label: 'Negotiation', conversion: 0.50 },
-  { key: 'disposition', label: 'Disposition', conversion: 1.00 },
-] as const;
+const FEE_LOW = 10_000;
+const FEE_HIGH = 25_000;
+
+const STAGE_CONVERSION_RATES: Record<string, { rate: number; label: string; description: string }> = {
+  prospects:   { rate: 0.01, label: '1%',   description: 'Cold — early stage, no contact yet' },
+  leads:       { rate: 0.10, label: '10%',  description: 'Contact made, showing interest' },
+  paidLeads:   { rate: 0.10, label: '10%',  description: 'Inbound or paid acquisition' },
+  negotiation: { rate: 0.50, label: '50%',  description: 'Offer submitted, actively negotiating' },
+  disposition: { rate: 1.00, label: '100%', description: 'Deal accepted, pending close' },
+};
+
+const STAGE_ORDER = ['prospects', 'leads', 'paidLeads', 'negotiation', 'disposition'] as const;
+const STAGE_LABELS: Record<string, string> = {
+  prospects: 'Prospects',
+  leads: 'Leads',
+  paidLeads: 'Paid Leads',
+  negotiation: 'Negotiation',
+  disposition: 'Disposition',
+};
+
+type FunnelStatsShape = { prospects?: number; leads?: number; paidLeads?: number; negotiation?: number; disposition?: number } | undefined;
 
 function PipelineValueCard({ funnelStats, loading }: {
-  funnelStats: { prospects?: number; leads?: number; paidLeads?: number; negotiation?: number; disposition?: number } | undefined;
+  funnelStats: FunnelStatsShape;
   loading: boolean;
 }) {
-  const stages = STAGE_CONFIG.map(s => {
-    const count = (funnelStats as Record<string, number> | undefined)?.[s.key] ?? 0;
+  const [modalOpen, setModalOpen] = useState(false);
+
+  const stages = STAGE_ORDER.map(key => {
+    const count = (funnelStats as Record<string, number> | undefined)?.[key] ?? 0;
+    const { rate } = STAGE_CONVERSION_RATES[key];
     return {
-      ...s,
+      key,
+      label: STAGE_LABELS[key],
       count,
-      low: Math.round(count * s.conversion * LOW_FEE),
-      high: Math.round(count * s.conversion * HIGH_FEE),
+      weightedLow: Math.round(count * rate * FEE_LOW),
+      weightedHigh: Math.round(count * rate * FEE_HIGH),
+      totalLow: Math.round(count * 1.0 * FEE_LOW),
+      totalHigh: Math.round(count * 1.0 * FEE_HIGH),
     };
   });
 
   const totalCount = stages.reduce((sum, s) => sum + s.count, 0);
-  const totalLow = stages.reduce((sum, s) => sum + s.low, 0);
-  const totalHigh = stages.reduce((sum, s) => sum + s.high, 0);
+  const weightedTotalLow = stages.reduce((sum, s) => sum + s.weightedLow, 0);
+  const weightedTotalHigh = stages.reduce((sum, s) => sum + s.weightedHigh, 0);
 
   return (
-    <div className="bg-zinc-800/50 border border-zinc-700/50 rounded-lg p-4">
-      {loading ? (
-        <Skeleton className="h-40 w-full" />
-      ) : (
-        <>
-          <div className="text-xs text-zinc-500 uppercase tracking-wider">Estimated Pipeline Value</div>
-          <div className="text-lg font-mono text-emerald-400 mt-1">
-            ${formatCompact(totalLow)} – ${formatCompact(totalHigh)}
-          </div>
-          <div className="text-xs text-zinc-500 mt-1">
-            {totalCount.toLocaleString()} total × weighted conversion × $10K–$25K fee
+    <>
+      <div
+        role="button"
+        tabIndex={0}
+        onClick={() => setModalOpen(true)}
+        onKeyDown={(e) => e.key === 'Enter' && setModalOpen(true)}
+        className="bg-zinc-800/50 border border-zinc-700/50 rounded-lg p-4 cursor-pointer transition-colors hover:border-emerald-500/50"
+      >
+        {loading ? (
+          <Skeleton className="h-24 w-full" />
+        ) : (
+          <>
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-zinc-500 uppercase tracking-wider">Estimated Pipeline Value</span>
+              <Info className="h-4 w-4 text-zinc-500" aria-hidden />
+            </div>
+            <div className="text-lg font-mono text-emerald-400 mt-1">
+              {formatCurrency(weightedTotalLow)} – {formatCurrency(weightedTotalHigh)}
+            </div>
+            <div className="text-xs text-zinc-500 mt-1">
+              {totalCount.toLocaleString()} properties across 5 stages
+            </div>
+          </>
+        )}
+      </div>
+
+      <PipelineValueModal
+        open={modalOpen}
+        onOpenChange={setModalOpen}
+        stages={stages}
+        weightedTotalLow={weightedTotalLow}
+        weightedTotalHigh={weightedTotalHigh}
+      />
+    </>
+  );
+}
+
+function PipelineValueModal({
+  open,
+  onOpenChange,
+  stages,
+  weightedTotalLow,
+  weightedTotalHigh,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  stages: Array<{
+    key: string;
+    label: string;
+    count: number;
+    weightedLow: number;
+    weightedHigh: number;
+    totalLow: number;
+    totalHigh: number;
+  }>;
+  weightedTotalLow: number;
+  weightedTotalHigh: number;
+}) {
+  const totalPortfolioLow = stages.reduce((sum, s) => sum + s.totalLow, 0);
+  const totalPortfolioHigh = stages.reduce((sum, s) => sum + s.totalHigh, 0);
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-3xl bg-zinc-900 border-zinc-800">
+        <DialogHeader>
+          <DialogTitle>Pipeline Value Analysis</DialogTitle>
+        </DialogHeader>
+
+        <div className="space-y-6">
+          {/* Section 1: Weighted Estimate */}
+          <div>
+            <h3 className="text-base font-semibold text-zinc-100">Weighted Pipeline Value</h3>
+            <p className="text-sm text-zinc-500 mb-3">Based on historical conversion rates per stage</p>
+            <div className="overflow-x-auto rounded-lg border border-zinc-800">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-zinc-800 bg-zinc-800/50">
+                    <th className="py-2 px-3 text-left text-zinc-400 font-medium">Stage</th>
+                    <th className="py-2 px-3 text-right text-zinc-400 font-medium">Count</th>
+                    <th className="py-2 px-3 text-center text-zinc-400 font-medium">Conv. Rate</th>
+                    <th className="py-2 px-3 text-right text-zinc-400 font-medium">Low ($10K/deal)</th>
+                    <th className="py-2 px-3 text-right text-zinc-400 font-medium">High ($25K/deal)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {stages.map((s, i) => (
+                    <tr key={s.key} className={i % 2 === 0 ? 'bg-zinc-800/30' : 'bg-zinc-900/50'}>
+                      <td className="py-2 px-3 text-zinc-300">{s.label}</td>
+                      <td className="py-2 px-3 text-right font-mono tabular-nums text-zinc-300">{s.count.toLocaleString()}</td>
+                      <td className="py-2 px-3 text-center">
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span className="text-zinc-400 cursor-help underline decoration-dotted">
+                              {STAGE_CONVERSION_RATES[s.key].label}
+                            </span>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p>{STAGE_CONVERSION_RATES[s.key].description}</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </td>
+                      <td className="py-2 px-3 text-right font-mono tabular-nums text-zinc-300">{formatFullCurrency(s.weightedLow)}</td>
+                      <td className="py-2 px-3 text-right font-mono tabular-nums text-zinc-300">{formatFullCurrency(s.weightedHigh)}</td>
+                    </tr>
+                  ))}
+                  <tr className="border-t border-zinc-700 bg-zinc-800/50 font-semibold">
+                    <td className="py-2 px-3 text-zinc-100">TOTAL</td>
+                    <td className="py-2 px-3 text-right" />
+                    <td className="py-2 px-3 text-center" />
+                    <td className="py-2 px-3 text-right font-mono tabular-nums text-emerald-500">{formatFullCurrency(weightedTotalLow)}</td>
+                    <td className="py-2 px-3 text-right font-mono tabular-nums text-emerald-500">{formatFullCurrency(weightedTotalHigh)}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
           </div>
 
-          <div className="border-t border-zinc-700/50 mt-3 pt-3 space-y-1.5">
-            {stages.map(s => (
-              <div key={s.key} className="flex items-center text-xs">
-                <span className="text-zinc-500 w-24">{s.label}</span>
-                <span className="text-zinc-400 font-mono tabular-nums w-16 text-right">{s.count.toLocaleString()}</span>
-                <span className="text-zinc-300 font-mono tabular-nums ml-auto">
-                  ${formatCompact(s.low)} – ${formatCompact(s.high)}
-                </span>
-              </div>
-            ))}
+          {/* Section separator */}
+          <hr className="border-zinc-800" />
+
+          {/* Section 2: Total Portfolio Value */}
+          <div>
+            <h3 className="text-base font-semibold text-zinc-100">Total Portfolio Value</h3>
+            <p className="text-sm text-zinc-500 mb-3">Maximum value if every property converts</p>
+            <div className="overflow-x-auto rounded-lg border border-zinc-800">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-zinc-800 bg-zinc-800/50">
+                    <th className="py-2 px-3 text-left text-zinc-400 font-medium">Stage</th>
+                    <th className="py-2 px-3 text-right text-zinc-400 font-medium">Count</th>
+                    <th className="py-2 px-3 text-right text-zinc-400 font-medium">Low ($10K/deal)</th>
+                    <th className="py-2 px-3 text-right text-zinc-400 font-medium">High ($25K/deal)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {stages.map((s, i) => (
+                    <tr key={s.key} className={i % 2 === 0 ? 'bg-zinc-800/30' : 'bg-zinc-900/50'}>
+                      <td className="py-2 px-3 text-zinc-300">{s.label}</td>
+                      <td className="py-2 px-3 text-right font-mono tabular-nums text-zinc-300">{s.count.toLocaleString()}</td>
+                      <td className="py-2 px-3 text-right font-mono tabular-nums text-zinc-300">{formatFullCurrency(s.totalLow)}</td>
+                      <td className="py-2 px-3 text-right font-mono tabular-nums text-zinc-300">{formatFullCurrency(s.totalHigh)}</td>
+                    </tr>
+                  ))}
+                  <tr className="border-t border-zinc-700 bg-zinc-800/50 font-semibold">
+                    <td className="py-2 px-3 text-zinc-100">TOTAL</td>
+                    <td className="py-2 px-3 text-right" />
+                    <td className="py-2 px-3 text-right font-mono tabular-nums text-emerald-500">{formatFullCurrency(totalPortfolioLow)}</td>
+                    <td className="py-2 px-3 text-right font-mono tabular-nums text-emerald-500">{formatFullCurrency(totalPortfolioHigh)}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
           </div>
-        </>
-      )}
-    </div>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
