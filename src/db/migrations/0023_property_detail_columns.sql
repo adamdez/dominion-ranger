@@ -1,0 +1,22 @@
+-- PropertyRadar CSV full column mapping — mail, purchase, tax, loan details
+ALTER TABLE properties ADD COLUMN IF NOT EXISTS mail_address TEXT;
+ALTER TABLE properties ADD COLUMN IF NOT EXISTS mail_city TEXT;
+ALTER TABLE properties ADD COLUMN IF NOT EXISTS mail_state TEXT;
+ALTER TABLE properties ADD COLUMN IF NOT EXISTS mail_zip TEXT;
+ALTER TABLE properties ADD COLUMN IF NOT EXISTS mail_vacant BOOLEAN;
+ALTER TABLE properties ADD COLUMN IF NOT EXISTS purchase_date DATE;
+ALTER TABLE properties ADD COLUMN IF NOT EXISTS purchase_amount_cents BIGINT;
+ALTER TABLE properties ADD COLUMN IF NOT EXISTS purchase_seller TEXT;
+ALTER TABLE properties ADD COLUMN IF NOT EXISTS tax_per_year_cents BIGINT;
+ALTER TABLE properties ADD COLUMN IF NOT EXISTS est_tax_percent NUMERIC(5,2);
+ALTER TABLE properties ADD COLUMN IF NOT EXISTS tax_delinquent_cents BIGINT;
+ALTER TABLE properties ADD COLUMN IF NOT EXISTS est_equity_percent NUMERIC(5,2);
+ALTER TABLE properties ADD COLUMN IF NOT EXISTS est_open_loans_cents BIGINT;
+ALTER TABLE properties ADD COLUMN IF NOT EXISTS cltv_percent NUMERIC(5,2);
+ALTER TABLE properties ADD COLUMN IF NOT EXISTS est_open_loans_count INTEGER;
+ALTER TABLE properties ADD COLUMN IF NOT EXISTS first_loan_purpose TEXT;
+ALTER TABLE properties ADD COLUMN IF NOT EXISTS first_loan_type TEXT;
+ALTER TABLE properties ADD COLUMN IF NOT EXISTS first_loan_date DATE;
+ALTER TABLE properties ADD COLUMN IF NOT EXISTS first_loan_amount_cents BIGINT;
+ALTER TABLE properties ADD COLUMN IF NOT EXISTS hud_rent INTEGER;
+ALTER TABLE properties ADD COLUMN IF NOT EXISTS property_type TEXT;

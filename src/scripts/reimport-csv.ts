@@ -20,7 +20,7 @@
  */
 
 import { createHash } from 'node:crypto';
-import { createReadStream } from 'node:fs';
+import { createReadStream, readFileSync } from 'node:fs';
 import { createInterface } from 'node:readline';
 import { join } from 'node:path';
 import pg from 'pg';
@@ -159,6 +159,7 @@ const HEADER_MAP: Record<string, string[]> = {
   secondLoanType:   ['2nd loan type'],
   secondRecDate:    ['2nd rec date'],
   secondPurpose:    ['2nd purpose'],
+  propertyType:     ['type'],
 };
 
 function buildMapping(headers: string[]): Record<string, number> {
@@ -323,6 +324,20 @@ async function runImport(
     // ── Parse numeric/boolean fields used by property upsert and events ──
     const taxAmt = num(get(values, mapping, 'taxDelinquentAmt'));
     const estEquityDollar = num(get(values, mapping, 'estEquityDollar'));
+    const purchaseAmt = num(get(values, mapping, 'purchaseAmt'));
+    const taxPerYear = num(get(values, mapping, 'annualTaxes'));
+    const estTaxPct = num(get(values, mapping, 'estTaxRate'));
+    const estEquityPct = num(get(values, mapping, 'estEquityPct'));
+    const estOpenLoansVal = num(get(values, mapping, 'estOpenLoans'));
+    const cltvVal = num(get(values, mapping, 'cltv'));
+    const openLoansCountVal = num(get(values, mapping, 'openLoansCount'));
+    const firstAmountVal = num(get(values, mapping, 'firstAmount'));
+    const hudRentVal = num(get(values, mapping, 'hudRent'));
+    const yearBuiltVal = num(get(values, mapping, 'yearBuilt'));
+    const lotSqftVal = num(get(values, mapping, 'lotSqft'));
+
+    const mailVacantVal = isTruthy(get(values, mapping, 'mailVacant'));
+    const firstRecDateStr = get(values, mapping, 'firstRecDate');
 
     const isBankrupt = isTruthy(get(values, mapping, 'bankruptcy'));
     const isDivorce = isTruthy(get(values, mapping, 'divorce'));
@@ -339,6 +354,11 @@ async function runImport(
       const candidateId = generateId();
       const candidatePropertyId = generateId();
 
+      const purchaseDateParsed = purchaseDateStr ? new Date(purchaseDateStr) : null;
+      const purchaseDateValid = purchaseDateParsed && !isNaN(purchaseDateParsed.getTime()) ? purchaseDateParsed : null;
+      const firstLoanDateParsed = firstRecDateStr ? new Date(firstRecDateStr) : null;
+      const firstLoanDateValid = firstLoanDateParsed && !isNaN(firstLoanDateParsed.getTime()) ? firstLoanDateParsed : null;
+
       const [result] = await db
         .insert(properties)
         .values({
@@ -354,10 +374,33 @@ async function runImport(
           ownerFirst,
           ownerLast,
           mailingAddress,
+          mailAddress: get(values, mapping, 'mailAddress') || null,
+          mailCity: get(values, mapping, 'mailCity') || null,
+          mailState: get(values, mapping, 'mailState') || null,
+          mailZip: get(values, mapping, 'mailZip') || null,
+          mailVacant: mailVacantVal,
           absenteeOwner: isAbsentee,
           equityEstimate: estEquityDollar?.toString() || null,
           ownershipDurationMonths: ownershipMonths,
           mortgageStatus: 'UNKNOWN',
+          purchaseDate: purchaseDateValid,
+          purchaseAmountCents: purchaseAmt != null ? Math.round(purchaseAmt * 100) : null,
+          purchaseSeller: get(values, mapping, 'purchaseSeller') || null,
+          taxPerYearCents: taxPerYear != null ? Math.round(taxPerYear * 100) : null,
+          estTaxPercent: estTaxPct,
+          taxDelinquentCents: taxAmt != null && taxAmt > 0 ? Math.round(taxAmt * 100) : null,
+          estEquityPercent: estEquityPct,
+          estOpenLoansCents: estOpenLoansVal != null ? Math.round(estOpenLoansVal * 100) : null,
+          cltvPercent: cltvVal,
+          estOpenLoansCount: openLoansCountVal != null ? Math.round(openLoansCountVal) : null,
+          firstLoanPurpose: get(values, mapping, 'firstPurpose') || null,
+          firstLoanType: get(values, mapping, 'firstLoanType') || null,
+          firstLoanDate: firstLoanDateValid,
+          firstLoanAmountCents: firstAmountVal != null ? Math.round(firstAmountVal * 100) : null,
+          hudRent: hudRentVal != null ? Math.round(hudRentVal) : null,
+          yearBuilt: yearBuiltVal != null ? Math.round(yearBuiltVal) : null,
+          lotSqft: lotSqftVal != null ? Math.round(lotSqftVal) : null,
+          propertyType: get(values, mapping, 'propertyType') || null,
         })
         .onConflictDoUpdate({
           target: [properties.apn, properties.county],
@@ -366,9 +409,32 @@ async function runImport(
             ownerFirst: sql`COALESCE(excluded.owner_first, ${properties.ownerFirst})`,
             ownerLast: sql`COALESCE(excluded.owner_last, ${properties.ownerLast})`,
             mailingAddress: sql`COALESCE(excluded.mailing_address, ${properties.mailingAddress})`,
+            mailAddress: sql`COALESCE(excluded.mail_address, ${properties.mailAddress})`,
+            mailCity: sql`COALESCE(excluded.mail_city, ${properties.mailCity})`,
+            mailState: sql`COALESCE(excluded.mail_state, ${properties.mailState})`,
+            mailZip: sql`COALESCE(excluded.mail_zip, ${properties.mailZip})`,
+            mailVacant: sql`COALESCE(excluded.mail_vacant, ${properties.mailVacant})`,
             absenteeOwner: sql`COALESCE(excluded.absentee_owner, ${properties.absenteeOwner})`,
             equityEstimate: sql`COALESCE(excluded.equity_estimate, ${properties.equityEstimate})`,
             ownershipDurationMonths: sql`COALESCE(excluded.ownership_duration_months, ${properties.ownershipDurationMonths})`,
+            purchaseDate: sql`COALESCE(excluded.purchase_date, ${properties.purchaseDate})`,
+            purchaseAmountCents: sql`COALESCE(excluded.purchase_amount_cents, ${properties.purchaseAmountCents})`,
+            purchaseSeller: sql`COALESCE(excluded.purchase_seller, ${properties.purchaseSeller})`,
+            taxPerYearCents: sql`COALESCE(excluded.tax_per_year_cents, ${properties.taxPerYearCents})`,
+            estTaxPercent: sql`COALESCE(excluded.est_tax_percent, ${properties.estTaxPercent})`,
+            taxDelinquentCents: sql`COALESCE(excluded.tax_delinquent_cents, ${properties.taxDelinquentCents})`,
+            estEquityPercent: sql`COALESCE(excluded.est_equity_percent, ${properties.estEquityPercent})`,
+            estOpenLoansCents: sql`COALESCE(excluded.est_open_loans_cents, ${properties.estOpenLoansCents})`,
+            cltvPercent: sql`COALESCE(excluded.cltv_percent, ${properties.cltvPercent})`,
+            estOpenLoansCount: sql`COALESCE(excluded.est_open_loans_count, ${properties.estOpenLoansCount})`,
+            firstLoanPurpose: sql`COALESCE(excluded.first_loan_purpose, ${properties.firstLoanPurpose})`,
+            firstLoanType: sql`COALESCE(excluded.first_loan_type, ${properties.firstLoanType})`,
+            firstLoanDate: sql`COALESCE(excluded.first_loan_date, ${properties.firstLoanDate})`,
+            firstLoanAmountCents: sql`COALESCE(excluded.first_loan_amount_cents, ${properties.firstLoanAmountCents})`,
+            hudRent: sql`COALESCE(excluded.hud_rent, ${properties.hudRent})`,
+            yearBuilt: sql`COALESCE(excluded.year_built, ${properties.yearBuilt})`,
+            lotSqft: sql`COALESCE(excluded.lot_sqft, ${properties.lotSqft})`,
+            propertyType: sql`COALESCE(excluded.property_type, ${properties.propertyType})`,
             updatedAt: new Date(),
           },
         })
@@ -586,11 +652,24 @@ async function runImport(
 // CLI entry — only run when executed directly (not when imported)
 const isMainModule = process.argv[1]?.includes('reimport-csv') ?? false;
 if (isMainModule) {
-  const args = process.argv.slice(2).filter(a => a !== '--dry-run');
+  if (process.argv.includes('--print-migration')) {
+    const migrationPath = join(process.cwd(), 'src/db/migrations/0023_property_detail_columns.sql');
+    try {
+      console.log('\n📋 Migration SQL (run manually in Neon):\n');
+      console.log(readFileSync(migrationPath, 'utf-8'));
+      console.log('\n');
+    } catch {
+      console.error('Migration file not found:', migrationPath);
+    }
+    process.exit(0);
+  }
+
+  const args = process.argv.slice(2).filter(a => a !== '--dry-run' && a !== '--print-migration');
   const dryRun = process.argv.includes('--dry-run');
   const fileName = args[0];
   if (!fileName) {
     console.error('Usage: npx tsx src/scripts/reimport-csv.ts <filename.csv> [county] [state] [--dry-run]');
+    console.error('       npx tsx src/scripts/reimport-csv.ts --print-migration  (print migration SQL)');
     process.exit(1);
   }
   const filePath = fileName.includes('/') || fileName.includes('\\') ? fileName : join(IMPORT_DIR, fileName);
