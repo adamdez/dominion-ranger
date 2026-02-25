@@ -97,12 +97,14 @@ export function usePropertyTasks(dominionLeadId: string | null) {
   return useQuery({
     queryKey: ['property-tasks', dominionLeadId],
     queryFn: async (): Promise<Task[]> => {
-      // TODO: wire to GET /api/tasks?dominionLeadId=... when backend merges
       try {
-        const { data } = await api.get<Task[]>('/api/tasks', {
+        const { data } = await api.get('/api/tasks', {
           params: { dominionLeadId },
         });
-        return data;
+        if (Array.isArray(data)) return data;
+        if (Array.isArray(data?.data)) return data.data;
+        if (Array.isArray(data?.tasks)) return data.tasks;
+        return [];
       } catch {
         return [];
       }

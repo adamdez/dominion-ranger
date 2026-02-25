@@ -13,14 +13,15 @@ interface TaskListProps {
 
 export function TaskList({ tasks }: TaskListProps) {
   const completeTask = useCompleteTask();
+  const taskList = Array.isArray(tasks) ? tasks : Array.isArray((tasks as unknown as Record<string, unknown>)?.data) ? (tasks as unknown as Record<string, Task[]>).data : [];
 
-  if (tasks.length === 0) {
+  if (taskList.length === 0) {
     return <p className="text-sm text-muted-foreground">No tasks.</p>;
   }
 
   return (
     <div className="space-y-1.5">
-      {tasks.map(task => {
+      {taskList.map(task => {
         const isOverdue = task.dueAt && isPast(new Date(task.dueAt)) && task.status === 'PENDING';
         const isDueToday = task.dueAt && isToday(new Date(task.dueAt));
         const isCompleted = task.status === 'COMPLETED';
