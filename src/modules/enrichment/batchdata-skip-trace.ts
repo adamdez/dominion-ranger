@@ -47,6 +47,62 @@ export interface BatchDataSkipTraceResult {
   error?: string;
 }
 
+/**
+ * Parse owner name string into first/last for BatchData skip trace.
+ * Handles: "LAST, FIRST", "FIRST & SPOUSE LAST", "FIRST MIDDLE LAST", entities (trusts/LLCs).
+ */
+export function parseOwnerName(ownerName: string): { first: string; last: string } | null {
+  if (!ownerName || ownerName.trim() === '') return null;
+
+  const name = ownerName.trim().toUpperCase();
+
+  // Skip trusts, LLCs, corps — skip trace won't work on entities
+  if (/\b(TRUST|LLC|INC|CORP|BANK|COUNTY|STATE|CITY|CHURCH|ASSOC|FOUNDATION)\b/i.test(name)) {
+    return null;
+  }
+
+  // Handle "LAST, FIRST" format
+  if (name.includes(',')) {
+    const [lastPart, firstPart] = name.split(',').map((s) => s.trim());
+    // Remove "& SPOUSE" from first name
+    const firstName = (firstPart || '').split(/\s*&\s*/)[0].trim();
+    // Remove middle initials (single letters)
+    const cleanFirst =
+      firstName.split(/\s+/).filter((w) => w.length > 1)[0] ||
+      firstName.split(/\s+/)[0] ||
+      '';
+    return {
+      first: cleanFirst,
+      last: lastPart.split(/\s+/)[0] || lastPart,
+    };
+  }
+
+  // Handle "FIRST & SPOUSE LAST" format (most common in our data)
+  // "JACK & SHIRLEY EVENOFF" → first: JACK, last: EVENOFF
+  if (name.includes('&')) {
+    const parts = name.split(/\s*&\s*/);
+    // First person's first name is before the &
+    const firstName = parts[0].trim().split(/\s+/).pop() || parts[0].trim();
+    // Last name is the last word of the full string
+    const allWords = name.split(/\s+/);
+    const lastName = allWords[allWords.length - 1];
+    return { first: firstName, last: lastName };
+  }
+
+  // Handle "FIRST MIDDLE LAST" or "FIRST LAST" format
+  const words = name.split(/\s+/).filter((w) => w.length > 0);
+  if (words.length >= 2) {
+    return { first: words[0], last: words[words.length - 1] };
+  }
+
+  // Single word — treat as last name
+  if (words.length === 1) {
+    return { first: '', last: words[0] };
+  }
+
+  return null;
+}
+
 function cleanPhone(raw: string | undefined | null): string | null {
   if (!raw) return null;
   const digits = raw.replace(/\D/g, '');
@@ -90,7 +146,10 @@ export async function batchDataSkipTrace(
   };
 
   logger.info(
-    { name: `${request.firstName} ${request.lastName}`, street: request.street },
+    {
+      name: { first: request.firstName, last: request.lastName },
+      address: body.requests[0].address,
+    },
     'BatchData skip trace request',
   );
 

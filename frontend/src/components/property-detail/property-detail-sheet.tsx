@@ -632,8 +632,20 @@ export function PropertyDetailSheet({ lead, open, onClose }: PropertyDetailSheet
                       {!lead.phone && !lead.phone2 && !lead.phone3 && (
                         <div className="rounded-lg border border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/30 p-4 text-center space-y-2">
                           <AlertTriangle className="h-6 w-6 text-amber-600 dark:text-amber-400 mx-auto" />
-                          <p className="text-sm font-medium">No contact data available</p>
-                          <p className="text-xs text-muted-foreground">Run a skip trace to find phone numbers and emails.</p>
+                          {resolveContactsMutation.isSuccess &&
+                          resolveContactsMutation.data?.dominionLeadId === lead.dominionLeadId &&
+                          resolveContactsMutation.data?.newContactsAdded === 0 &&
+                          (resolveContactsMutation.data?.contacts?.length ?? 0) === 0 ? (
+                            <>
+                              <p className="text-sm font-medium">No contacts found.</p>
+                              <p className="text-xs text-muted-foreground">Try Deep Skip Trace for a more thorough search.</p>
+                            </>
+                          ) : (
+                            <>
+                              <p className="text-sm font-medium">No contact data available</p>
+                              <p className="text-xs text-muted-foreground">Run a skip trace to find phone numbers and emails.</p>
+                            </>
+                          )}
                         </div>
                       )}
                     </>

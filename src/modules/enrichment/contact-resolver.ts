@@ -22,6 +22,7 @@ import { NotFoundError } from '../../lib/errors.js';
 import { logActivity } from '../analytics/activity-logger.js';
 import {
   batchDataSkipTrace,
+  parseOwnerName,
   type BatchDataPerson,
 } from './batchdata-skip-trace.js';
 
@@ -47,26 +48,6 @@ export interface ContactResolutionResult {
   primaryPhone: string | null;
   costCents: number;
   errors: string[];
-}
-
-function parseOwnerName(property: {
-  ownerFirst: string | null;
-  ownerLast: string | null;
-  ownerName: string | null;
-}): { first: string; last: string } {
-  let first = property.ownerFirst ?? '';
-  let last = property.ownerLast ?? '';
-  if (!first && !last && property.ownerName) {
-    const parts = property.ownerName.split(/[,\s]+/).filter(Boolean);
-    if (property.ownerName.includes(',')) {
-      last = parts[0] ?? '';
-      first = parts[1] ?? '';
-    } else {
-      first = parts[0] ?? '';
-      last = parts[parts.length - 1] ?? '';
-    }
-  }
-  return { first, last };
 }
 
 /**
@@ -118,21 +99,54 @@ export async function resolveContacts(
   // Tier: basic — BatchData skip trace
   if (tier === 'basic' || tier === 'deep') {
     try {
-      const { first, last } = parseOwnerName(property);
+      const ownerName =
+        property.ownerName ??
+        (property as { owner_name?: string }).owner_name ??
+        '';
+      const parsed = parseOwnerName(ownerName);
 
-      if (!first && !last) {
-        result.errors.push('No owner name available for skip trace');
-      } else if (!property.streetAddress) {
-        result.errors.push('No street address available for skip trace');
+      if (!parsed) {
+        logger.info(
+          { ownerName: property.ownerName },
+          'Cannot skip trace entity/trust owner',
+        );
+        result.errors.push('Cannot skip trace entity/trust owner');
       } else {
-        // Prefer mailing address for better contact resolution
-        let street = property.streetAddress;
-        let city = property.city ?? '';
-        let state = property.state ?? '';
-        let zip = property.zip ?? '';
+        const firstName =
+          property.ownerFirst ??
+          (property as { owner_first?: string }).owner_first ??
+          parsed.first;
+        const lastName =
+          property.ownerLast ??
+          (property as { owner_last?: string }).owner_last ??
+          parsed.last;
 
-        if (property.mailingAddress) {
-          const mailParts = property.mailingAddress.split(',').map((p) => p.trim());
+        // Prefer mailing address (more likely to reach owner), fall back to property address
+        let street =
+          property.mailAddress ??
+          (property as { mail_address?: string }).mail_address ??
+          property.streetAddress ??
+          '';
+        let city =
+          property.mailCity ??
+          (property as { mail_city?: string }).mail_city ??
+          property.city ??
+          '';
+        let state =
+          property.mailState ??
+          (property as { mail_state?: string }).mail_state ??
+          property.state ??
+          '';
+        let zip =
+          property.mailZip ??
+          (property as { mail_zip?: string }).mail_zip ??
+          property.zip ??
+          '';
+
+        if (!street && property.mailingAddress) {
+          const mailParts = property.mailingAddress
+            .split(',')
+            .map((p) => p.trim());
           if (mailParts.length >= 3) {
             street = mailParts[0];
             city = mailParts[1] ?? city;
@@ -140,29 +154,36 @@ export async function resolveContacts(
             zip = mailParts[3] ?? zip;
           }
         }
+        if (!street) {
+          street = property.streetAddress ?? '';
+        }
 
-        const batchResult = await batchDataSkipTrace({
-          firstName: first,
-          lastName: last,
-          street,
-          city,
-          state,
-          zip,
-        });
+        if (!street) {
+          result.errors.push('No street address available for skip trace');
+        } else {
+          const batchResult = await batchDataSkipTrace({
+            firstName,
+            lastName,
+            street,
+            city,
+            state,
+            zip,
+          });
 
-        if (batchResult.success) {
-          const newContacts = await insertPersonContacts(
-            dominionLeadId,
-            batchResult.persons,
-            'batchdata',
-            existingPhones,
-            existingEmails,
-          );
-          result.newContactsAdded += newContacts.length;
-          result.contacts.push(...newContacts);
-          result.costCents += 1; // $0.01
-        } else if (batchResult.error) {
-          result.errors.push(`BatchData: ${batchResult.error}`);
+          if (batchResult.success) {
+            const newContacts = await insertPersonContacts(
+              dominionLeadId,
+              batchResult.persons,
+              'batchdata',
+              existingPhones,
+              existingEmails,
+            );
+            result.newContactsAdded += newContacts.length;
+            result.contacts.push(...newContacts);
+            result.costCents += 1; // $0.01
+          } else if (batchResult.error) {
+            result.errors.push(`BatchData: ${batchResult.error}`);
+          }
         }
       }
     } catch (err) {
