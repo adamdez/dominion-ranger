@@ -65,10 +65,24 @@ export async function runReimportCsv(
   return runImport(filePath, defaultCounty, defaultState, options?.dryRun ?? false);
 }
 
+const JUNK_ADDRESSES = ['', 'unknown', 'n/a', 'none', 'null'];
+
 /** Generate deterministic synthetic APN from address for rows missing APN. */
-function syntheticApn(streetAddress: string, city: string | null, state: string | null): string {
-  const normalized = `${(streetAddress || '').trim().toUpperCase()}-${(city || '').trim().toUpperCase()}-${(state || '').trim().toUpperCase()}`;
-  const hash = createHash('sha256').update(normalized).digest('hex').slice(0, 12);
+function syntheticApn(
+  streetAddress: string,
+  city: string | null,
+  state: string | null,
+  lineNum: number,
+): string {
+  const addr = (streetAddress || '').trim();
+  const c = (city || '').trim().toLowerCase();
+  const s = (state || '').trim().toUpperCase();
+  // If city is unknown/empty, include row index to prevent collisions for generic addresses
+  const hashInput =
+    city && c !== 'unknown' && c !== 'n/a' && c !== 'none'
+      ? `${addr}-${city}-${s}`
+      : `${addr}-${city}-${s}-row${lineNum}`;
+  const hash = createHash('sha256').update(hashInput).digest('hex').slice(0, 12);
   return `SYNTH-${hash}`;
 }
 
@@ -243,6 +257,14 @@ async function runImport(
     const state = get(values, mapping, 'state')?.toUpperCase() || defaultState || null;
     const zip = get(values, mapping, 'zip') || null; // missing zip → null, don't crash
 
+    // Skip rows with no valid address — can't identify or contact
+    const addrLower = (address || '').toLowerCase().trim();
+    if (!address || JUNK_ADDRESSES.includes(addrLower)) {
+      console.warn(`⚠️  Row ${lineNum}: Skipping — no valid address (got: "${address ?? ''}")`);
+      skipped++;
+      continue;
+    }
+
     let apn = get(values, mapping, 'apn');
     if (!apn && address) {
       // Synthetic APN: require county for unique constraint (apn + county)
@@ -251,7 +273,7 @@ async function runImport(
         skipped++;
         continue;
       }
-      apn = syntheticApn(address, city, state);
+      apn = syntheticApn(address, city, state, lineNum);
       if (!dryRun) console.warn(`  Row ${lineNum}: No APN found, using synthetic ID: ${apn}`);
     }
     if (!apn && !address) { skipped++; continue; }
