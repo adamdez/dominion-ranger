@@ -130,9 +130,10 @@ export async function propertyRoutes(app: FastifyInstance): Promise<void> {
         }));
 
       const comp = Number(record.compositeScore) || 0;
-      const tier = comp >= BUSINESS_RULES.scoring.tiers.A.minScore ? 'A'
-        : comp >= BUSINESS_RULES.scoring.tiers.B.minScore ? 'B'
-        : comp >= BUSINESS_RULES.scoring.tiers.C.minScore ? 'C' : 'D';
+      const tiers = BUSINESS_RULES.tiers;
+      const tier = comp >= tiers.A.minScore ? 'A'
+        : comp >= tiers.B.minScore ? 'B'
+        : comp >= tiers.C.minScore ? 'C' : 'D';
 
       return {
         topSignals,
