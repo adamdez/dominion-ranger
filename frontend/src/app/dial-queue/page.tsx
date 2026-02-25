@@ -20,6 +20,7 @@ import { Badge } from '@/components/ui/badge';
 import { ScoreBadge } from '@/components/ui/score-badge';
 import { EmptyState } from '@/components/ui/empty-state';
 import { ErrorState } from '@/components/ui/error-state';
+import { ScoreHoverCard } from '@/components/scoring/score-breakdown-tooltip';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useDialQueue, useLogDisposition } from '@/hooks/use-dial-queue';
 import { useTransitionLead } from '@/hooks/use-leads';
@@ -277,7 +278,9 @@ export default function DialQueuePage() {
                       <span className="text-sm font-medium truncate flex-1">
                         {lead.ownerName ?? 'Unknown'}
                       </span>
-                      <ScoreBadge score={lead.compositeScore} />
+                      <ScoreHoverCard score={lead.compositeScore} dominionLeadId={lead.dominionLeadId}>
+                        <ScoreBadge score={lead.compositeScore} />
+                      </ScoreHoverCard>
                     </div>
                     <div className="flex items-center gap-1 mt-0.5">
                       {(lead.topSignals as string[] | undefined)?.[0] && (
@@ -353,7 +356,7 @@ export default function DialQueuePage() {
                   <div className="grid grid-cols-2 gap-2 mt-2 text-xs">
                     <div><span className="text-muted-foreground">Est. value:</span> {property?.equityEstimate ? `$${Number(property.equityEstimate).toLocaleString()}` : '—'}</div>
                     <div><span className="text-muted-foreground">Equity:</span> {property?.equityEstimate ?? '—'}</div>
-                    <div><span className="text-muted-foreground">Score:</span> <ScoreBadge score={currentLead.compositeScore} /></div>
+                    <div><span className="text-muted-foreground">Score:</span> <ScoreHoverCard score={currentLead.compositeScore} dominionLeadId={currentLead.dominionLeadId}><ScoreBadge score={currentLead.compositeScore} /></ScoreHoverCard></div>
                     <div><span className="text-muted-foreground">Signals:</span> {topSignal ? (EVENT_LABELS[topSignal]?.label ?? topSignal) : '—'}</div>
                   </div>
                 </div>

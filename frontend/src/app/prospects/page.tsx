@@ -35,6 +35,7 @@ import { ScoreBadge } from '@/components/ui/score-badge';
 import { EmptyState } from '@/components/ui/empty-state';
 import { ErrorState } from '@/components/ui/error-state';
 import { PropertyDetailSheet } from '@/components/property-detail/property-detail-sheet';
+import { ScoreHoverCard } from '@/components/scoring/score-breakdown-tooltip';
 import { useProspects, useCounties, usePromoteProperties } from '@/hooks/use-prospects';
 import { getScoreTier, SCORE_TIERS } from '@/lib/constants';
 import type { Prospect, LeadWithProperty } from '@/lib/types';
@@ -420,7 +421,9 @@ function ProspectRow({
         {row.county ?? '—'}
       </TableCell>
       <TableCell>
-        <ScoreBadge score={row.compositeScore} />
+        <ScoreHoverCard score={row.compositeScore} dominionLeadId={row.dominionLeadId}>
+          <ScoreBadge score={row.compositeScore} />
+        </ScoreHoverCard>
       </TableCell>
       <TableCell>
         <Badge

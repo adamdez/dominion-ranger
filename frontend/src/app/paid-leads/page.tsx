@@ -11,6 +11,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { ScoreBadge } from '@/components/ui/score-badge';
 import { EmptyState } from '@/components/ui/empty-state';
 import { PropertyDetailSheet } from '@/components/property-detail/property-detail-sheet';
+import { ScoreHoverCard } from '@/components/scoring/score-breakdown-tooltip';
 import { useFunnelLeads, useFunnelAdvance, useFunnelDecline } from '@/hooks/use-funnel';
 import { useProspects, usePromoteProperties } from '@/hooks/use-prospects';
 import {
@@ -141,7 +142,11 @@ export default function PaidLeadsPage() {
                     {row.city && <span className="ml-1 text-xs text-muted-foreground">{row.city}</span>}
                   </TableCell>
                   <TableCell className="text-sm">{row.ownerName ?? '—'}</TableCell>
-                  <TableCell><ScoreBadge score={row.compositeScore} /></TableCell>
+                  <TableCell>
+                    <ScoreHoverCard score={row.compositeScore} dominionLeadId={row.dominionLeadId}>
+                      <ScoreBadge score={row.compositeScore} />
+                    </ScoreHoverCard>
+                  </TableCell>
                   <TableCell className="text-xs text-muted-foreground">
                     {formatDistanceToNow(new Date(row.updatedAt), { addSuffix: true })}
                   </TableCell>
