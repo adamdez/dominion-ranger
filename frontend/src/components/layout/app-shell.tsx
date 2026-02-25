@@ -5,6 +5,13 @@ import { Sidebar } from './sidebar';
 import { Header } from './header';
 import { useAuth } from '@/lib/auth-context';
 import { setApiAccessToken } from '@/lib/api';
+import { FunnelDragProvider, useFunnelDrag } from '@/lib/funnel-drag-context';
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
+} from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -42,12 +49,51 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
-      <div className="md:pl-[220px]">
-        <Header onMenuClick={() => setSidebarOpen(true)} />
-        <main className="p-4 md:p-6">{children}</main>
+    <FunnelDragProvider>
+      <div className="min-h-screen bg-background">
+        <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+        <div className="md:pl-[220px]">
+          <Header onMenuClick={() => setSidebarOpen(true)} />
+          <main className="p-4 md:p-6">{children}</main>
+        </div>
       </div>
-    </div>
+      <OfferAmountDialog />
+    </FunnelDragProvider>
+  );
+}
+
+function OfferAmountDialog() {
+  const { offerPrompt, setOfferPrompt, submitOfferAndAdvance } = useFunnelDrag();
+  const [amount, setAmount] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+
+  const handleSubmit = async () => {
+    const cents = Math.round(parseFloat(amount) * 100);
+    if (isNaN(cents) || cents <= 0) return;
+    setSubmitting(true);
+    await submitOfferAndAdvance(cents);
+    setSubmitting(false);
+    setAmount('');
+  };
+
+  return (
+    <Dialog open={!!offerPrompt} onOpenChange={(open) => { if (!open) { setOfferPrompt(null); setAmount(''); } }}>
+      <DialogContent>
+        <DialogHeader><DialogTitle>Offer Amount Required</DialogTitle></DialogHeader>
+        <div className="space-y-3 py-2">
+          <p className="text-sm text-muted-foreground">
+            Moving <span className="font-medium text-foreground">{offerPrompt?.data.address}</span> to Negotiation requires an offer amount.
+          </p>
+          <div>
+            <Label>Offer Amount ($)</Label>
+            <Input type="number" placeholder="150000" value={amount} onChange={(e) => setAmount(e.target.value)} />
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => { setOfferPrompt(null); setAmount(''); }}>Cancel</Button>
+          <Button onClick={handleSubmit} disabled={submitting || !amount}>Move to Negotiation</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

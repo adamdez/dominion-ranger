@@ -3,7 +3,13 @@
 import { useQuery } from '@tanstack/react-query';
 import api from '@/lib/api';
 import { Badge } from '@/components/ui/badge';
+import { getScoreTier, SCORE_TIERS } from '@/lib/constants';
 import { TrendingUp, AlertTriangle, DollarSign, Clock } from 'lucide-react';
+import {
+  HoverCard,
+  HoverCardTrigger,
+  HoverCardContent,
+} from '@/components/ui/hover-card';
 
 export const EVENT_LABELS: Record<string, { label: string; severity: 'high' | 'medium' | 'low' }> = {
   TAX_DELINQUENCY: { label: 'Tax Delinquent', severity: 'high' },
@@ -114,7 +120,7 @@ export function ScoreBreakdownTooltip({
                 <Badge variant="outline" className={`text-[10px] ${SEVERITY_COLOR[config.severity]}`}>
                   {config.label}
                 </Badge>
-                <span className="text-[10px] font-mono text-muted-foreground">
+                <span className="text-[10px] font-mono text-emerald-400">
                   +{(sig.contribution ?? 0).toFixed(1)}
                 </span>
               </div>
@@ -123,5 +129,119 @@ export function ScoreBreakdownTooltip({
         </div>
       )}
     </div>
+  );
+}
+
+interface ScoreHoverCardProps {
+  score: number | null;
+  dominionLeadId: string;
+  children: React.ReactNode;
+}
+
+export function ScoreHoverCard({ score, dominionLeadId, children }: ScoreHoverCardProps) {
+  const tier = getScoreTier(score);
+  const tierConfig = SCORE_TIERS[tier];
+  const comp = Number(score) || 0;
+
+  const { data } = useQuery({
+    queryKey: ['score-breakdown', dominionLeadId],
+    queryFn: async () => {
+      const { data } = await api.get<{
+        topSignals: Array<{
+          eventType: string;
+          contribution: number;
+          daysSinceTrigger?: number;
+          triggerDate?: string | null;
+          rawAmount?: number | null;
+        }>;
+        tier: string;
+        scores: {
+          composite: number;
+          motivation: number;
+          deal: number;
+          confidence: number;
+          modelVersion: string;
+        } | null;
+      }>(`/api/properties/${dominionLeadId}/score-breakdown`);
+      return data;
+    },
+    staleTime: 5 * 60_000,
+    enabled: !!dominionLeadId,
+  });
+
+  return (
+    <HoverCard openDelay={500} closeDelay={100}>
+      <HoverCardTrigger asChild>
+        <span className="cursor-help">{children}</span>
+      </HoverCardTrigger>
+      <HoverCardContent
+        className="w-72 p-0 bg-zinc-900 border-zinc-700 text-zinc-200"
+        side="left"
+        align="start"
+      >
+        <div className="p-3 space-y-3">
+          {/* Header: Score + Tier */}
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="text-lg font-bold font-mono tabular-nums">{Math.round(comp)}</span>
+              <span className={`text-xs font-semibold px-1.5 py-0.5 rounded ${tierConfig.color} text-white`}>
+                {tierConfig.label}
+              </span>
+            </div>
+            {data?.scores?.modelVersion && (
+              <span className="text-[10px] text-zinc-500">v{data.scores.modelVersion}</span>
+            )}
+          </div>
+
+          {/* Sub-scores */}
+          {data?.scores && (
+            <div className="grid grid-cols-3 gap-2 text-[11px]">
+              <div className="text-center">
+                <div className="text-zinc-500">Motivation</div>
+                <div className="font-mono font-semibold text-amber-400">
+                  {Math.round(data.scores.motivation)}
+                </div>
+              </div>
+              <div className="text-center">
+                <div className="text-zinc-500">Deal</div>
+                <div className="font-mono font-semibold text-green-400">
+                  {Math.round(data.scores.deal)}
+                </div>
+              </div>
+              <div className="text-center">
+                <div className="text-zinc-500">Confidence</div>
+                <div className="font-mono font-semibold text-blue-400">
+                  {(data.scores.confidence * 100).toFixed(0)}%
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Divider */}
+          <div className="border-t border-zinc-700/50" />
+
+          {/* Signal contributions */}
+          {data?.topSignals && data.topSignals.length > 0 ? (
+            <div className="space-y-1">
+              {data.topSignals.slice(0, 6).map((sig, i) => {
+                const config = EVENT_LABELS[sig.eventType] ?? { label: sig.eventType, severity: 'low' as const };
+                return (
+                  <div key={i} className="flex items-center justify-between text-[11px]">
+                    <span className="text-zinc-300 truncate max-w-[140px]">
+                      {config.label}
+                    </span>
+                    <span className="font-mono text-emerald-400 tabular-nums">
+                      +{sig.contribution.toFixed(1)}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <p className="text-[11px] text-zinc-500">No signal data</p>
+          )}
+        </div>
+      </HoverCardContent>
+    </HoverCard>
   );
 }

@@ -1,9 +1,11 @@
 'use client';
 
+import { useState, type DragEvent } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/lib/auth-context';
+import { useFunnelDrag, type FunnelDragData } from '@/lib/funnel-drag-context';
 import {
   LayoutDashboard,
   Phone,
@@ -24,6 +26,7 @@ interface NavItem {
   label: string;
   icon: React.ComponentType<{ className?: string }>;
   adminOnly?: boolean;
+  funnelStage?: string;
 }
 
 interface NavGroup {
@@ -43,11 +46,11 @@ const navGroups: NavGroup[] = [
   {
     label: 'FUNNEL',
     items: [
-      { href: '/prospects', label: 'Prospects', icon: Home },
-      { href: '/leads', label: 'Leads', icon: Users },
-      { href: '/paid-leads', label: 'Paid Leads', icon: DollarSign },
-      { href: '/negotiation', label: 'Negotiation', icon: Handshake },
-      { href: '/disposition', label: 'Disposition', icon: Package },
+      { href: '/prospects', label: 'Prospects', icon: Home, funnelStage: 'prospect' },
+      { href: '/leads', label: 'Leads', icon: Users, funnelStage: 'lead' },
+      { href: '/paid-leads', label: 'Paid Leads', icon: DollarSign, funnelStage: 'paid_lead' },
+      { href: '/negotiation', label: 'Negotiation', icon: Handshake, funnelStage: 'negotiation' },
+      { href: '/disposition', label: 'Disposition', icon: Package, funnelStage: 'disposition' },
     ],
   },
   {
@@ -72,10 +75,35 @@ const navGroups: NavGroup[] = [
 export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void }) {
   const pathname = usePathname();
   const { isAdmin } = useAuth();
+  const { isDragging, handleFunnelDrop } = useFunnelDrag();
+  const [dragOverStage, setDragOverStage] = useState<string | null>(null);
 
   const isActive = (href: string) => {
     if (href === '/') return pathname === '/';
     return pathname.startsWith(href);
+  };
+
+  const onDragOver = (e: DragEvent, stage: string) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    setDragOverStage(stage);
+  };
+
+  const onDragLeave = () => {
+    setDragOverStage(null);
+  };
+
+  const onDrop = async (e: DragEvent, targetStage: string) => {
+    e.preventDefault();
+    setDragOverStage(null);
+    try {
+      const raw = e.dataTransfer.getData('application/json');
+      if (!raw) return;
+      const data: FunnelDragData = JSON.parse(raw);
+      await handleFunnelDrop(data, targetStage);
+    } catch {
+      // Invalid drag data
+    }
   };
 
   return (
@@ -103,7 +131,10 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
                 .filter((item) => !item.adminOnly || isAdmin)
                 .map((item) => {
                   const active = isActive(item.href);
-                  return (
+                  const isDropTarget = !!item.funnelStage;
+                  const isHovered = dragOverStage === item.funnelStage;
+
+                  const navLink = (
                     <Link
                       key={item.href}
                       href={item.href}
@@ -112,13 +143,29 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
                         'flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors',
                         active
                           ? 'border-l-2 border-emerald-500 bg-emerald-500/10 text-foreground'
-                          : 'border-l-2 border-transparent text-muted-foreground hover:bg-accent hover:text-accent-foreground'
+                          : 'border-l-2 border-transparent text-muted-foreground hover:bg-accent hover:text-accent-foreground',
+                        isHovered && 'bg-emerald-500/20 ring-1 ring-emerald-500 text-foreground',
                       )}
                     >
                       <item.icon className="h-4 w-4 shrink-0" />
                       {item.label}
                     </Link>
                   );
+
+                  if (isDropTarget && item.funnelStage) {
+                    return (
+                      <div
+                        key={item.href}
+                        onDragOver={(e) => onDragOver(e, item.funnelStage!)}
+                        onDragLeave={onDragLeave}
+                        onDrop={(e) => onDrop(e, item.funnelStage!)}
+                      >
+                        {navLink}
+                      </div>
+                    );
+                  }
+
+                  return navLink;
                 })}
             </div>
           ))}
@@ -126,6 +173,11 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
 
         <div className="border-t border-border p-4">
           <p className="text-xs text-muted-foreground">Dominion Ranger v2.3</p>
+          {isDragging && (
+            <p className="mt-1 text-[10px] text-emerald-400 animate-pulse">
+              Drop on a funnel stage to move
+            </p>
+          )}
         </div>
       </aside>
     </>
