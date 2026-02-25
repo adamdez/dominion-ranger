@@ -47,7 +47,7 @@ export default function ProspectsPage() {
   const [page, setPage] = useState(1);
   const [sort, setSort] = useState<SortField>('composite_score');
   const [order, setOrder] = useState<'asc' | 'desc'>('desc');
-  const [tier, setTier] = useState<string>('all');
+  const [tier, setTier] = useState<string>('A');
   const [county, setCounty] = useState<string>('');
   const [searchInput, setSearchInput] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
