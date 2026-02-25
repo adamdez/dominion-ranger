@@ -22,6 +22,7 @@ import { useTaskStats } from '@/hooks/use-tasks';
 import { useOfferStats } from '@/hooks/use-offers';
 import { useFunnelStats } from '@/hooks/use-funnel';
 import { SCORE_TIERS, DEAL_STAGES } from '@/lib/constants';
+import { VerseOfTheDay } from '@/components/verse-of-the-day';
 
 type DateRange = '7d' | '30d' | '90d';
 
@@ -43,9 +44,14 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-6">
-      {/* Header with date range */}
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
+      {/* Header with verse of the day and date range */}
+      <div className="flex items-center justify-between gap-4">
+        <div className="flex items-center gap-4 min-w-0">
+          <h1 className="text-2xl font-bold tracking-tight shrink-0">Dashboard</h1>
+          <div className="hidden md:block min-w-0">
+            <VerseOfTheDay />
+          </div>
+        </div>
         <Select value={dateRange} onValueChange={(v) => setDateRange(v as DateRange)}>
           <SelectTrigger className="w-32">
             <SelectValue />
