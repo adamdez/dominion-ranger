@@ -1,9 +1,10 @@
 'use client';
 
 import { usePathname, useRouter } from 'next/navigation';
-import { Menu, LogOut, User, ChevronDown } from 'lucide-react';
+import { Menu, LogOut, User, ChevronDown, Bell } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Badge } from '@/components/ui/badge';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -12,6 +13,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { useAuth } from '@/lib/auth-context';
+import { useNotifications } from '@/hooks/use-notifications';
 
 const pageTitles: Record<string, string> = {
   '/': 'Dashboard',
@@ -48,7 +50,9 @@ export function Header({ onMenuClick }: HeaderProps) {
   const pathname = usePathname();
   const router = useRouter();
   const { user, logout } = useAuth();
+  const notifications = useNotifications();
   const title = pageTitles[pathname] ?? 'Dominion Ranger';
+  const unreadCount = notifications.data?.filter((item) => !item.readAt).length ?? 0;
 
   async function handleLogout() {
     await logout();
@@ -64,6 +68,52 @@ export function Header({ onMenuClick }: HeaderProps) {
       <h1 className="text-lg font-semibold">{title}</h1>
 
       <div className="ml-auto flex items-center gap-3">
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" size="icon" className="relative" aria-label="Notifications">
+              <Bell className="h-5 w-5" />
+              {unreadCount > 0 && (
+                <Badge className="absolute -right-1 -top-1 h-5 min-w-5 rounded-full px-1.5 text-[10px]">
+                  {unreadCount > 9 ? '9+' : unreadCount}
+                </Badge>
+              )}
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-80">
+            <div className="px-2 py-1.5">
+              <p className="text-sm font-medium">Notifications</p>
+              <p className="text-xs text-muted-foreground">Latest updates for your account</p>
+            </div>
+            <DropdownMenuSeparator />
+            {notifications.isLoading ? (
+              <div className="px-2 py-2 text-xs text-muted-foreground">Loading notifications...</div>
+            ) : notifications.data && notifications.data.length > 0 ? (
+              notifications.data.slice(0, 8).map((notification) => (
+                <DropdownMenuItem key={notification.notificationId} className="py-2">
+                  <div className="w-full min-w-0">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="truncate text-sm font-medium">{notification.title}</p>
+                      {!notification.readAt && (
+                        <span className="h-2 w-2 shrink-0 rounded-full bg-primary" aria-hidden />
+                      )}
+                    </div>
+                    {notification.body && (
+                      <p className="truncate text-xs text-muted-foreground">{notification.body}</p>
+                    )}
+                    <p className="text-[10px] text-muted-foreground">
+                      {new Date(notification.createdAt).toLocaleString()}
+                    </p>
+                  </div>
+                </DropdownMenuItem>
+              ))
+            ) : (
+              <div className="px-2 py-2 text-xs text-muted-foreground">
+                No notifications yet.
+              </div>
+            )}
+          </DropdownMenuContent>
+        </DropdownMenu>
+
         {user && (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>

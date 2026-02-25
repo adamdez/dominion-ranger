@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useCallback } from 'react';
-import { Package, Search, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Package, Search, ChevronLeft, ChevronRight, Download } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -10,6 +10,8 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { EmptyState } from '@/components/ui/empty-state';
 import { PropertyDetailSheet } from '@/components/property-detail/property-detail-sheet';
 import { useFunnelLeads } from '@/hooks/use-funnel';
+import { exportToCsv } from '@/lib/csv-export';
+import api from '@/lib/api';
 import { useFunnelDrag, type FunnelDragData } from '@/lib/funnel-drag-context';
 import type { FunnelLead, LeadWithProperty } from '@/lib/types';
 import { formatDistanceToNow } from 'date-fns';
@@ -43,6 +45,41 @@ export default function DispositionPage() {
 
   const handleSearch = useCallback(() => { setSearch(searchInput); setPage(1); }, [searchInput]);
 
+  const handleExport = useCallback(async () => {
+    try {
+      const sp = new URLSearchParams();
+      if (search) sp.set('search', search);
+      const { data } = await api.get<Array<{
+        streetAddress: string | null;
+        city: string | null;
+        county: string | null;
+        ownerName: string | null;
+        phone: string | null;
+        compositeScore: number | null;
+        equityEstimate: string | null;
+        assignedTo: string | null;
+        funnelStage: string | null;
+        updatedAt: string;
+      }>>(`/api/export/funnel/disposition?${sp}`);
+      const rows = data.map(p => ({
+        address: p.streetAddress ?? '',
+        city: p.city ?? '',
+        county: p.county ?? '',
+        owner: p.ownerName ?? '',
+        phone: p.phone ?? '',
+        score: p.compositeScore ?? '',
+        tier: (p.compositeScore ?? 0) >= 65 ? 'A' : (p.compositeScore ?? 0) >= 45 ? 'B' : (p.compositeScore ?? 0) >= 25 ? 'C' : 'D',
+        equity: p.equityEstimate ?? '',
+        assigned_to: p.assignedTo ?? '',
+        funnel_stage: p.funnelStage ?? 'disposition',
+        updated_at: p.updatedAt ?? '',
+      }));
+      exportToCsv(`disposition-${new Date().toISOString().slice(0, 10)}.csv`, rows);
+    } catch {
+      // Error handled by api interceptor
+    }
+  }, [search]);
+
   return (
     <div className="flex h-full flex-col">
       <div className="flex items-center justify-between border-b border-border px-6 py-4">
@@ -61,6 +98,10 @@ export default function DispositionPage() {
             onKeyDown={(e) => e.key === 'Enter' && handleSearch()} />
         </div>
         <Button size="sm" variant="ghost" onClick={handleSearch}>Search</Button>
+        <Button variant="outline" size="sm" onClick={handleExport} className="gap-1.5">
+          <Download className="h-4 w-4" />
+          Export CSV
+        </Button>
       </div>
 
       <div className="flex-1 overflow-auto p-6">

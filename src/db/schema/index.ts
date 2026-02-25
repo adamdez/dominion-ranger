@@ -91,3 +91,5 @@ export type { FeatureFlag, NewFeatureFlag } from './feature-flags';
 
 export { errorLog } from './error-log';
 export type { ErrorLogEntry, NewErrorLogEntry } from './error-log';
+export { notifications } from './notifications';
+export type { Notification, NewNotification } from './notifications';

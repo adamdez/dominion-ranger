@@ -29,9 +29,11 @@ import { compRoutes } from './routes/comps.js';
 import { offerRoutes } from './routes/offers.js';
 import { prospectRoutes } from './routes/prospects.js';
 import { funnelRoutes } from './routes/funnel.js';
+import { exportRoutes } from './routes/export.js';
+import { notificationsRoutes } from './routes/notifications.js';
 import { RangerError } from '../lib/errors.js';
 import { ZodError } from 'zod';
-import { logError } from '../modules/error-logging/index.js';
+import { logSystemError } from '../modules/monitoring/error-logger.js';
 import { isTwilioConfigured, isClientConfigured } from '../modules/dialer/index.js';
 
 export async function createServer() {
@@ -92,12 +94,7 @@ export async function createServer() {
     }
 
     logger.error({ err: error, url: request.url }, 'Unhandled error');
-    logError({
-      errorType: 'UNHANDLED_API_ERROR',
-      message: error.message,
-      stack: error.stack,
-      context: { url: request.url, method: request.method },
-    }).catch(() => {});
+    logSystemError(error, `${request.method} ${request.url}`).catch(() => {});
     reply.code(500).send({
       error: 'INTERNAL_ERROR',
       message: env.NODE_ENV === 'production' ? 'Internal server error' : error.message,
@@ -128,6 +125,8 @@ export async function createServer() {
   await app.register(offerRoutes);
   await app.register(prospectRoutes);
   await app.register(funnelRoutes);
+  await app.register(exportRoutes);
+  await app.register(notificationsRoutes);
 
   return app;
 }

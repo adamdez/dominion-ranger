@@ -13,6 +13,7 @@ import { getPropertyCount } from '../../modules/properties/index.js';
 import { requireRole } from '../middleware/auth.js';
 import { BUSINESS_RULES } from '../../config/business-rules.js';
 import { topLeadsQuery } from '../schemas/system.js';
+import { getRecentSystemErrors } from '../../modules/monitoring/error-logger.js';
 
 export async function systemRoutes(app: FastifyInstance): Promise<void> {
 
@@ -106,6 +107,19 @@ export async function systemRoutes(app: FastifyInstance): Promise<void> {
       timestamp: new Date().toISOString(),
     };
   });
+
+  // GET /api/system/errors — Recent system errors (admin only)
+  app.get(
+    '/api/system/errors',
+    { preHandler: [requireRole('properties.read')] },
+    async (request, reply) => {
+      const user = (request as unknown as Record<string, { role?: string }>).user;
+      if (user?.role !== 'ADMIN') {
+        return reply.code(403).send({ error: 'Admin access required' });
+      }
+      return getRecentSystemErrors(50);
+    },
+  );
 
   // GET /api/leads/top — Top scored properties ready for outreach
   app.get<{

@@ -10,6 +10,7 @@ import {
   ChevronDown,
   ArrowUpDown,
   UserPlus,
+  Download,
 } from 'lucide-react';
 import {
   Table,
@@ -37,6 +38,8 @@ import { ErrorState } from '@/components/ui/error-state';
 import { PropertyDetailSheet } from '@/components/property-detail/property-detail-sheet';
 import { ScoreHoverCard } from '@/components/scoring/score-breakdown-tooltip';
 import { useProspects, useCounties, usePromoteProperties } from '@/hooks/use-prospects';
+import { exportToCsv } from '@/lib/csv-export';
+import api from '@/lib/api';
 import { useFunnelDrag, type FunnelDragData } from '@/lib/funnel-drag-context';
 import { getScoreTier, SCORE_TIERS } from '@/lib/constants';
 import type { Prospect, LeadWithProperty } from '@/lib/types';
@@ -84,6 +87,47 @@ export default function ProspectsPage() {
     setSearchTerm(searchInput);
     setPage(1);
   }, [searchInput]);
+
+  const handleExport = useCallback(async () => {
+    try {
+      const sp = new URLSearchParams();
+      if (tier && tier !== 'all') sp.set('tier', tier);
+      if (county) sp.set('county', county);
+      if (searchTerm) sp.set('search', searchTerm);
+      const { data } = await api.get<Array<{
+        streetAddress: string | null;
+        city: string | null;
+        state: string | null;
+        zip: string | null;
+        county: string | null;
+        ownerName: string | null;
+        phone: string | null;
+        compositeScore: number | null;
+        equityEstimate: string | null;
+        mortgageStatus: string | null;
+        signalCount: number | null;
+        lastEventDate: string | null;
+      }>>(`/api/export/prospects?${sp}`);
+      const rows = data.map(p => ({
+        address: p.streetAddress ?? '',
+        city: p.city ?? '',
+        state: p.state ?? '',
+        zip: p.zip ?? '',
+        county: p.county ?? '',
+        owner: p.ownerName ?? '',
+        phone: p.phone ?? '',
+        score: p.compositeScore ?? '',
+        tier: (p.compositeScore ?? 0) >= 65 ? 'A' : (p.compositeScore ?? 0) >= 45 ? 'B' : (p.compositeScore ?? 0) >= 25 ? 'C' : 'D',
+        equity: p.equityEstimate ?? '',
+        mortgage_status: p.mortgageStatus ?? '',
+        signal_count: p.signalCount ?? 0,
+        last_event: p.lastEventDate ?? '',
+      }));
+      exportToCsv(`prospects-${new Date().toISOString().slice(0, 10)}.csv`, rows);
+    } catch {
+      // Error handled by api interceptor
+    }
+  }, [tier, county, searchTerm]);
 
   const toggleSelect = useCallback((id: string) => {
     setSelected(prev => {
@@ -244,6 +288,10 @@ export default function ProspectsPage() {
           </div>
           <Button size="sm" variant="ghost" onClick={handleSearch}>
             Search
+          </Button>
+          <Button variant="outline" size="sm" onClick={handleExport} className="gap-1.5">
+            <Download className="h-4 w-4" />
+            Export CSV
           </Button>
         </div>
       </div>

@@ -12,15 +12,17 @@ import { useSystemStats } from '@/hooks/use-system';
 import { useScoringStats, useRunScoring, useRunPromotion } from '@/hooks/use-scoring';
 import { useFeatureFlags, useToggleFeatureFlag, useRecentErrors, useDeepHealth } from '@/hooks/use-settings';
 import { SCORE_TIERS } from '@/lib/constants';
+import { useAuth } from '@/lib/auth-context';
 
 export default function SettingsPage() {
+  const { isAdmin } = useAuth();
   const stats = useSystemStats();
   const scoringStats = useScoringStats();
   const runScoring = useRunScoring();
   const runPromotion = useRunPromotion();
   const flags = useFeatureFlags();
   const toggleFlag = useToggleFeatureFlag();
-  const errors = useRecentErrors();
+  const errors = useRecentErrors(isAdmin);
   const health = useDeepHealth();
 
   if (stats.error) {
@@ -181,45 +183,44 @@ export default function SettingsPage() {
         </CardContent>
       </Card>
 
-      {/* Recent Errors */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base flex items-center gap-2">
-            <AlertTriangle className="h-4 w-4" />
-            Recent Errors
-            {errors.data && errors.data.length > 0 && (
-              <Badge variant="destructive" className="ml-auto text-xs">
-                {errors.data.length}
-              </Badge>
-            )}
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          {errors.isLoading ? (
-            <div className="space-y-2">
-              {[1, 2, 3].map(i => <Skeleton key={i} className="h-12 w-full" />)}
-            </div>
-          ) : errors.data && errors.data.length > 0 ? (
-            <div className="space-y-2">
-              {errors.data.slice(0, 10).map((err) => (
-                <div key={err.errorId} className="rounded-md border p-2.5 text-xs space-y-1">
-                  <div className="flex items-center justify-between">
-                    <Badge variant="outline" className="text-[10px] font-mono">
-                      {err.errorType}
-                    </Badge>
-                    <span className="text-muted-foreground">
-                      {new Date(err.createdAt).toLocaleString()}
-                    </span>
+      {/* System Errors */}
+      {isAdmin && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2">
+              <AlertTriangle className="h-4 w-4" />
+              System Errors
+              {errors.data && errors.data.length > 0 && (
+                <Badge variant="destructive" className="ml-auto text-xs">
+                  {errors.data.length}
+                </Badge>
+              )}
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {errors.isLoading ? (
+              <div className="space-y-2">
+                {[1, 2, 3].map(i => <Skeleton key={i} className="h-12 w-full" />)}
+              </div>
+            ) : errors.data && errors.data.length > 0 ? (
+              <div className="space-y-2">
+                {errors.data.slice(0, 10).map((err) => (
+                  <div key={err.errorId} className="rounded-md border p-2.5 text-xs space-y-1">
+                    <div className="flex items-center justify-between">
+                      <span className="text-muted-foreground">
+                        {new Date(err.createdAt).toLocaleString()}
+                      </span>
+                    </div>
+                    <p className="text-muted-foreground truncate">{err.errorMessage}</p>
                   </div>
-                  <p className="text-muted-foreground truncate">{err.message}</p>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p className="text-sm text-muted-foreground">No recent errors</p>
-          )}
-        </CardContent>
-      </Card>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">No recent system errors</p>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Scoring Configuration */}
       <Card>

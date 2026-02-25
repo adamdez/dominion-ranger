@@ -14,11 +14,9 @@ export interface FeatureFlag {
 
 export interface ErrorLogEntry {
   errorId: string;
-  errorType: string;
-  message: string;
-  stack: string | null;
-  context: Record<string, unknown>;
-  resolved: boolean;
+  errorMessage: string;
+  errorStack: string | null;
+  context: Record<string, unknown> | null;
   createdAt: string;
 }
 
@@ -64,13 +62,14 @@ export function useToggleFeatureFlag() {
   });
 }
 
-export function useRecentErrors() {
+export function useRecentErrors(enabled = true) {
   return useQuery({
     queryKey: ['recentErrors'],
     queryFn: async () => {
-      const { data } = await api.get<ErrorLogEntry[]>('/api/settings/errors');
+      const { data } = await api.get<ErrorLogEntry[]>('/api/system/errors');
       return data;
     },
+    enabled,
     refetchInterval: 60_000,
   });
 }

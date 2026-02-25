@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useCallback } from 'react';
-import { DollarSign, Search, ChevronLeft, ChevronRight, Plus } from 'lucide-react';
+import { DollarSign, Search, ChevronLeft, ChevronRight, Plus, Download } from 'lucide-react';
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table';
@@ -14,6 +14,7 @@ import { PropertyDetailSheet } from '@/components/property-detail/property-detai
 import { ScoreHoverCard } from '@/components/scoring/score-breakdown-tooltip';
 import { useFunnelDrag, type FunnelDragData } from '@/lib/funnel-drag-context';
 import { useFunnelLeads, useFunnelAdvance, useFunnelDecline } from '@/hooks/use-funnel';
+import { exportToCsv } from '@/lib/csv-export';
 import { useProspects, usePromoteProperties } from '@/hooks/use-prospects';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
@@ -63,6 +64,39 @@ export default function PaidLeadsPage() {
   const pagination = data?.pagination;
 
   const handleSearch = useCallback(() => { setSearch(searchInput); setPage(1); }, [searchInput]);
+
+  const handleExport = useCallback(async () => {
+    try {
+      const sp = new URLSearchParams();
+      if (search) sp.set('search', search);
+      const { data } = await api.get<Array<{
+        streetAddress: string | null;
+        city: string | null;
+        county: string | null;
+        ownerName: string | null;
+        phone: string | null;
+        compositeScore: number | null;
+        equityEstimate: string | null;
+        funnelStage: string | null;
+        updatedAt: string;
+      }>>(`/api/export/funnel/paid_lead?${sp}`);
+      const rows = data.map(p => ({
+        address: p.streetAddress ?? '',
+        city: p.city ?? '',
+        county: p.county ?? '',
+        owner: p.ownerName ?? '',
+        phone: p.phone ?? '',
+        score: p.compositeScore ?? '',
+        tier: (p.compositeScore ?? 0) >= 65 ? 'A' : (p.compositeScore ?? 0) >= 45 ? 'B' : (p.compositeScore ?? 0) >= 25 ? 'C' : 'D',
+        equity: p.equityEstimate ?? '',
+        funnel_stage: p.funnelStage ?? 'paid_lead',
+        updated_at: p.updatedAt ?? '',
+      }));
+      exportToCsv(`paid-leads-${new Date().toISOString().slice(0, 10)}.csv`, rows);
+    } catch {
+      // Error handled by api interceptor
+    }
+  }, [search]);
 
   const handleAdvance = useCallback(() => {
     if (!offerDialog || !offerAmount) return;
@@ -117,6 +151,10 @@ export default function PaidLeadsPage() {
             onKeyDown={(e) => e.key === 'Enter' && handleSearch()} />
         </div>
         <Button size="sm" variant="ghost" onClick={handleSearch}>Search</Button>
+        <Button variant="outline" size="sm" onClick={handleExport} className="gap-1.5">
+          <Download className="h-4 w-4" />
+          Export CSV
+        </Button>
       </div>
 
       <div className="flex-1 overflow-auto">

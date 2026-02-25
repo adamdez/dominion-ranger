@@ -61,8 +61,8 @@ export async function createLeadInstance(input: {
     throw new ValidationError(`Active lead instance already exists for property ${input.dominionLeadId}`);
   }
 
-  const row = result.rows[0] as Record<string, unknown>;
-  const instance = { ...row, leadInstanceId: row.lead_instance_id ?? row.leadInstanceId } as LeadInstance;
+  const raw = result.rows[0] as Record<string, unknown>;
+  const instance = { ...raw, leadInstanceId: raw.lead_instance_id ?? raw.leadInstanceId } as LeadInstance;
 
   await logAudit({
     dominionLeadId: input.dominionLeadId,
@@ -71,8 +71,7 @@ export async function createLeadInstance(input: {
   });
 
   logger.info({ leadInstanceId, dominionLeadId: input.dominionLeadId }, 'Lead instance created');
-  const row = instance as unknown as { lead_instance_id?: string };
-  return { ...instance, leadInstanceId: row.lead_instance_id ?? leadInstanceId } as LeadInstance;
+  return instance;
 }
 
 /**

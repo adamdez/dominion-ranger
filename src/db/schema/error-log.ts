@@ -7,6 +7,8 @@ export const errorLog = pgTable(
     errorType: varchar('error_type', { length: 64 }).notNull(),
     message: text('message').notNull(),
     stack: text('stack'),
+    errorMessage: text('error_message'),
+    errorStack: text('error_stack'),
     context: jsonb('context').default({}),
     resolved: boolean('resolved').default(false),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
