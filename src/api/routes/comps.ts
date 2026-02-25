@@ -5,8 +5,11 @@ import {
   generateCompReport,
   getCompReport,
   getCompReportsForProperty,
+  getLatestCompReport,
   hasRecentCompReport,
+  analyzeComps,
 } from '../../modules/comps/index.js';
+import type { Comp, BatchDataComp } from '../../modules/comps/index.js';
 import { isFeatureEnabled } from '../../modules/feature-flags/index.js';
 import { db } from '../../db/connection.js';
 import { properties } from '../../db/schema/index.js';
@@ -105,6 +108,104 @@ export async function compRoutes(app: FastifyInstance): Promise<void> {
       const { dominionLeadId } = request.params;
       const reports = await getCompReportsForProperty(dominionLeadId);
       return reply.send({ reports });
+    },
+  );
+
+  // ─── Analyze endpoint: generates/uses cached report + runs comp selector ───
+
+  app.post<{ Params: { dominionLeadId: string }; Body: Record<string, unknown> }>(
+    '/api/properties/:dominionLeadId/comps/analyze',
+    { preHandler: [requireRole('properties.read')] },
+    async (request, reply) => {
+      if (!await isFeatureEnabled('comp_engine')) {
+        return reply.code(403).send({
+          error: 'FEATURE_DISABLED',
+          message: 'Comp engine is not enabled. Enable it in Settings → Feature Flags.',
+        });
+      }
+
+      if (!process.env.BATCHDATA_API_KEY) {
+        return reply.code(503).send({
+          error: 'NOT_CONFIGURED',
+          message: 'BatchData API key not configured. Set BATCHDATA_API_KEY in .env',
+        });
+      }
+
+      const { dominionLeadId } = request.params;
+      const body = z.object({
+        forceFresh: z.boolean().optional(),
+        radiusMiles: z.number().min(0.1).max(10).optional(),
+        searchMonths: z.number().int().min(1).max(24).optional(),
+      }).parse(request.body ?? {});
+
+      const [property] = await db
+        .select()
+        .from(properties)
+        .where(eq(properties.dominionLeadId, dominionLeadId))
+        .limit(1);
+
+      if (!property) {
+        return reply.code(404).send({ error: 'NOT_FOUND', message: 'Property not found' });
+      }
+
+      const subjectSqft = property.sqft ?? 0;
+
+      let report;
+      let cached = false;
+
+      if (!body.forceFresh && await hasRecentCompReport(dominionLeadId)) {
+        report = await getLatestCompReport(dominionLeadId);
+        cached = true;
+      }
+
+      if (!report) {
+        try {
+          report = await generateCompReport({
+            dominionLeadId,
+            address: property.streetAddress ?? property.standardizedAddress ?? '',
+            city: property.city ?? undefined,
+            state: property.state ?? undefined,
+            zip: property.zip ?? undefined,
+            beds: property.bedrooms ?? undefined,
+            baths: property.bathrooms ? parseFloat(property.bathrooms) : undefined,
+            sqft: subjectSqft || undefined,
+            lotSqft: property.lotSqft ?? undefined,
+            yearBuilt: property.yearBuilt ?? undefined,
+            radiusMiles: body.radiusMiles ?? 1.0,
+            searchMonths: body.searchMonths ?? 12,
+            generatedBy:
+              (request as unknown as { user?: { name?: string } }).user?.name ?? 'admin',
+          });
+        } catch (err: unknown) {
+          logger.error({ err, dominionLeadId }, 'Comp analysis failed');
+          return reply.code(502).send({
+            error: 'BATCHDATA_ERROR',
+            message: err instanceof Error ? err.message : 'Failed to fetch comp data',
+          });
+        }
+      }
+
+      const rawComps: Comp[] = ((report!.comps ?? []) as BatchDataComp[]).map((c) => ({
+        address: c.address,
+        salePrice: c.salePriceCents / 100,
+        saleDate: c.saleDate,
+        sqft: c.sqft,
+        beds: c.beds,
+        baths: c.baths,
+        yearBuilt: c.yearBuilt,
+        distanceMiles: c.distanceMiles,
+      }));
+
+      const analysis = analyzeComps(subjectSqft, rawComps);
+
+      return reply.send({
+        success: true,
+        cached,
+        reportId: report!.id,
+        subjectSqft,
+        ...analysis,
+        cachedAt: report!.createdAt,
+      });
     },
   );
 }

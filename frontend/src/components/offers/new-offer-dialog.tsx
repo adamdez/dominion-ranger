@@ -21,6 +21,8 @@ interface Props {
     ownerName?: string;
     arvCents?: number;
     rehabEstimateCents?: number;
+    maoAmountCents?: number;
+    assignmentFeeCents?: number;
   };
 }
 
@@ -45,7 +47,9 @@ export function NewOfferDialog({ open, onOpenChange, prefill }: Props) {
   const [propertyId, setPropertyId] = useState(prefill?.propertyId ?? '');
   const [leadInstanceId] = useState(prefill?.leadInstanceId ?? '');
 
-  const [offerAmount, setOfferAmount] = useState('');
+  const [offerAmount, setOfferAmount] = useState(
+    prefill?.maoAmountCents ? formatDollarInput(prefill.maoAmountCents) : '',
+  );
   const [earnest, setEarnest] = useState('1000');
   const [closingDays, setClosingDays] = useState('21');
   const [inspectionDays, setInspectionDays] = useState('10');
@@ -53,7 +57,9 @@ export function NewOfferDialog({ open, onOpenChange, prefill }: Props) {
 
   const [arv, setArv] = useState(prefill?.arvCents ? formatDollarInput(prefill.arvCents) : '');
   const [rehab, setRehab] = useState(prefill?.rehabEstimateCents ? formatDollarInput(prefill.rehabEstimateCents) : '');
-  const [assignmentFee, setAssignmentFee] = useState('10000');
+  const [assignmentFee, setAssignmentFee] = useState(
+    prefill?.assignmentFeeCents ? formatDollarInput(prefill.assignmentFeeCents) : '10000',
+  );
 
   const [contingencies, setContingencies] = useState<string[]>(DEFAULT_CONTINGENCIES);
   const [additionalTerms, setAdditionalTerms] = useState('');

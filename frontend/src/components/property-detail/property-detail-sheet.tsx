@@ -61,6 +61,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { useLeadNotes, useAddNote } from '@/hooks/use-notes';
 import { CompsTab } from '@/components/comps/comps-tab';
 import { OffersTab } from '@/components/offers/offers-tab';
+import type { OfferPrefill } from '@/components/offers/offers-tab';
 import { NewOfferDialog } from '@/components/offers/new-offer-dialog';
 import { FunnelStageBadge } from '@/components/funnel/funnel-stage-badge';
 import { useFunnelAdvance, useFunnelDecline } from '@/hooks/use-funnel';
@@ -86,6 +87,7 @@ export function PropertyDetailSheet({ lead, open, onClose }: PropertyDetailSheet
   const [tab, setTab] = useState('overview');
   const [taskDialogOpen, setTaskDialogOpen] = useState(false);
   const [offerDialogOpen, setOfferDialogOpen] = useState(false);
+  const [offerPrefillData, setOfferPrefillData] = useState<OfferPrefill | undefined>(undefined);
   const [funnelOfferDialog, setFunnelOfferDialog] = useState(false);
   const [funnelOfferAmount, setFunnelOfferAmount] = useState('');
   const [enriching, setEnriching] = useState(false);
@@ -588,7 +590,10 @@ export function PropertyDetailSheet({ lead, open, onClose }: PropertyDetailSheet
               <TabsContent value="offers" className="space-y-4 mt-4">
                 <OffersTab
                   lead={lead}
-                  onNewOffer={() => setOfferDialogOpen(true)}
+                  onNewOffer={(prefill?: OfferPrefill) => {
+                    setOfferPrefillData(prefill);
+                    setOfferDialogOpen(true);
+                  }}
                 />
               </TabsContent>
 
@@ -610,13 +615,22 @@ export function PropertyDetailSheet({ lead, open, onClose }: PropertyDetailSheet
 
         <NewOfferDialog
           open={offerDialogOpen}
-          onOpenChange={setOfferDialogOpen}
+          onOpenChange={(open) => {
+            setOfferDialogOpen(open);
+            if (!open) setOfferPrefillData(undefined);
+          }}
           prefill={{
             dominionLeadId: lead.dominionLeadId,
             propertyId: (property as unknown as { propertyId?: string })?.propertyId ?? lead.dominionLeadId,
             leadInstanceId: lead.leadInstanceId,
             address: `${lead.streetAddress ?? ''}${lead.city ? `, ${lead.city}` : ''}`,
             ownerName: lead.ownerName ?? undefined,
+            ...(offerPrefillData && {
+              arvCents: offerPrefillData.arvCents,
+              rehabEstimateCents: offerPrefillData.rehabCents,
+              maoAmountCents: offerPrefillData.maoAmountCents,
+              assignmentFeeCents: offerPrefillData.assignmentFeeCents,
+            }),
           }}
         />
       </SheetContent>
