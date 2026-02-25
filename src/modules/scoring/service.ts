@@ -26,6 +26,7 @@ interface WeightEntry {
 interface DecayConfig {
   function: 'exponential';
   floor: number;
+  aggressive_after_days?: number;
 }
 
 interface ConfidenceConfig {
@@ -123,6 +124,67 @@ export function invalidateConfigCache(): void {
   configLoadedAt = 0;
 }
 
+// ─── Scoring Enhancements (v2.0.0) ─────────────────
+
+/**
+ * TAX_DELINQUENCY events get scaled by dollar amount.
+ * Small/ancient delinquencies ($385 from 2006) contribute almost nothing.
+ * Large recent ones ($12k) contribute meaningfully.
+ */
+export function getEventSeverityMultiplier(eventType: string, rawPayload: unknown): number {
+  if (eventType !== 'TAX_DELINQUENCY') return 1.0;
+
+  try {
+    const payload = typeof rawPayload === 'string' ? JSON.parse(rawPayload) : rawPayload;
+    const amount = (payload as Record<string, unknown>)?.taxDelinquentAmount;
+    const num = typeof amount === 'number' ? amount : parseFloat(String(amount ?? '0'));
+
+    if (isNaN(num) || num <= 0) return 0.5;
+    if (num < 500) return 0.3;
+    if (num < 2000) return 0.6;
+    if (num < 5000) return 1.0;
+    if (num < 15000) return 1.3;
+    return 1.6;
+  } catch {
+    return 0.5;
+  }
+}
+
+/**
+ * Recency boost rewards fresh signals.
+ * Recent signals indicate an active, worsening situation.
+ * Old signals (2+ years) get penalized further beyond time decay.
+ */
+export function getRecencyBoost(daysSince: number): number {
+  if (daysSince < 30) return 1.5;
+  if (daysSince < 90) return 1.3;
+  if (daysSince < 180) return 1.15;
+  if (daysSince < 365) return 1.0;
+  if (daysSince < 730) return 0.8;
+  return 0.6;
+}
+
+/**
+ * Velocity bonus for properties with accelerating distress.
+ * Two signals close together = crisis is escalating.
+ */
+export function getVelocityBonus(events: Array<{ triggerEventDate: Date | null; filingDate?: Date | null; recordedDate?: Date | null; createdAt: Date }>): number {
+  const dated = events
+    .map(e => e.triggerEventDate ?? e.filingDate ?? e.recordedDate ?? e.createdAt)
+    .filter((d): d is Date => d != null)
+    .sort((a, b) => b.getTime() - a.getTime());
+
+  if (dated.length < 2) return 1.0;
+
+  const daysBetweenTopTwo = Math.floor(
+    (dated[0].getTime() - dated[1].getTime()) / (1000 * 60 * 60 * 24),
+  );
+
+  if (daysBetweenTopTwo < 90) return 1.2;
+  if (daysBetweenTopTwo < 180) return 1.1;
+  return 1.0;
+}
+
 // ─── Core Scoring ──────────────────────────────────
 
 /**
@@ -210,7 +272,10 @@ export async function scoreProperty(dominionLeadId: string, options?: { asOf?: D
     const reliability = parseFloat(event.reliabilityScore);
     const severity = weightEntry.severity ?? BUSINESS_RULES.scoring.defaultSeverity;
 
-    const contribution = weightEntry.base_weight * reliability * decay * severity;
+    const amountSeverity = getEventSeverityMultiplier(event.eventType, event.rawEventPayload);
+    const recencyBoost = getRecencyBoost(days);
+
+    const contribution = weightEntry.base_weight * reliability * decay * severity * amountSeverity * recencyBoost;
     totalContribution += contribution;
 
     if (!earliestTrigger || referenceDate < earliestTrigger) {
@@ -222,7 +287,7 @@ export async function scoreProperty(dominionLeadId: string, options?: { asOf?: D
       eventType: event.eventType,
       eventLayer: event.eventLayer,
       baseWeight: weightEntry.base_weight,
-      severityMultiplier: severity,
+      severityMultiplier: severity * amountSeverity,
       reliabilityScore: reliability,
       timeDecay: decay,
       finalContribution: contribution,
@@ -237,7 +302,8 @@ export async function scoreProperty(dominionLeadId: string, options?: { asOf?: D
     ? Math.min(parseFloat(signals.signalDensityScore ?? '0') * BUSINESS_RULES.scoring.densityBonusMultiplier, BUSINESS_RULES.scoring.maxDensityBonus)
     : 0;
 
-  totalContribution *= (1 + accelerationBonus + densityBonus);
+  const velocityBonus = getVelocityBonus(events);
+  totalContribution *= (1 + accelerationBonus + densityBonus) * velocityBonus;
   const motivationScore = Math.min(100, (totalContribution / BUSINESS_RULES.scoring.normalizationDivisor) * 100);
 
   // ── Deal Score (property economics) ──
