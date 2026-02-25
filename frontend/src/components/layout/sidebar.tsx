@@ -1,16 +1,18 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname, useSearchParams } from 'next/navigation';
+import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/lib/auth-context';
 import {
   LayoutDashboard,
-  Target,
   Phone,
   CheckSquare,
   Home,
+  Users,
   DollarSign,
+  Handshake,
+  Package,
   Kanban,
   BarChart3,
   Settings,
@@ -32,27 +34,26 @@ interface NavGroup {
 const navGroups: NavGroup[] = [
   {
     label: 'COMMAND CENTER',
-    items: [{ href: '/', label: 'Dashboard', icon: LayoutDashboard }],
-  },
-  {
-    label: 'WORK',
     items: [
-      { href: '/pipeline', label: 'Pipeline', icon: Target },
+      { href: '/', label: 'Dashboard', icon: LayoutDashboard },
       { href: '/dial-queue', label: 'Dial Queue', icon: Phone },
       { href: '/tasks', label: 'Tasks', icon: CheckSquare },
     ],
   },
   {
-    label: 'INVENTORY',
+    label: 'FUNNEL',
     items: [
       { href: '/prospects', label: 'Prospects', icon: Home },
+      { href: '/leads', label: 'Leads', icon: Users },
+      { href: '/paid-leads', label: 'Paid Leads', icon: DollarSign },
+      { href: '/negotiation', label: 'Negotiation', icon: Handshake },
+      { href: '/disposition', label: 'Disposition', icon: Package },
     ],
   },
   {
     label: 'DEALS',
     items: [
-      { href: '/offers', label: 'Offers', icon: DollarSign },
-      { href: '/pipeline?view=board', label: 'Deal Board', icon: Kanban },
+      { href: '/deal-board', label: 'Deal Board', icon: Kanban },
     ],
   },
   {
@@ -70,21 +71,10 @@ const navGroups: NavGroup[] = [
 
 export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void }) {
   const pathname = usePathname();
-  const searchParams = useSearchParams();
   const { isAdmin } = useAuth();
 
   const isActive = (href: string) => {
     if (href === '/') return pathname === '/';
-    if (href.startsWith('/pipeline')) {
-      const [, search] = href.split('?');
-      if (search) {
-        const params = new URLSearchParams(search);
-        const view = params.get('view');
-        const currentView = searchParams.get('view');
-        return pathname.startsWith('/pipeline') && view === currentView;
-      }
-      return pathname.startsWith('/pipeline') && !searchParams.get('view');
-    }
     return pathname.startsWith(href);
   };
 
