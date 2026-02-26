@@ -3,7 +3,9 @@ import {
   uuid,
   numeric,
   integer,
+  bigint,
   text,
+  jsonb,
   timestamp,
   index,
 } from 'drizzle-orm/pg-core';
@@ -24,8 +26,11 @@ export const outcomeReservoir = pgTable(
     dealClosedAt: timestamp('deal_closed_at', { withTimezone: true }),
 
     assignmentFee: numeric('assignment_fee', { precision: 12, scale: 2 }),
+    buyerPriceCents: bigint('buyer_price_cents', { mode: 'number' }),
     daysToContract: integer('days_to_contract'),
     lostReason: text('lost_reason'),
+
+    signalSnapshot: jsonb('signal_snapshot'),
 
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
   },

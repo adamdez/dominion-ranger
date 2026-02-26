@@ -161,3 +161,33 @@ export function useRunPipelineJob() {
     },
   });
 }
+
+export function useRunAdapter() {
+  return useMutation({
+    mutationFn: async (adapter: 'regrid' | 'spokane_recorder' | 'kootenai_recorder') => {
+      const { data } = await api.post('/api/pipeline/run-adapter', { adapter });
+      return data;
+    },
+    onSuccess: (_, adapter) => {
+      toast.success(`${adapter} pipeline started in background`);
+    },
+    onError: (_, adapter) => {
+      toast.error(`Failed to start ${adapter} pipeline`);
+    },
+  });
+}
+
+export function useRunAllRecorders() {
+  return useMutation({
+    mutationFn: async () => {
+      const { data } = await api.post('/api/pipeline/run-all-recorders', {});
+      return data;
+    },
+    onSuccess: () => {
+      toast.success('County recorders started in background');
+    },
+    onError: () => {
+      toast.error('Failed to start county recorders');
+    },
+  });
+}

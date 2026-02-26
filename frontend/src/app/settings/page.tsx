@@ -16,6 +16,8 @@ import {
   useTogglePipelineEnabled,
   useUpdatePipelineToggles,
   useRunPipelineJob,
+  useRunAdapter,
+  useRunAllRecorders,
 } from '@/hooks/use-pipeline';
 import type { PipelineJobResult } from '@/hooks/use-pipeline';
 import { SCORE_TIERS } from '@/lib/constants';
@@ -35,6 +37,8 @@ export default function SettingsPage() {
   const togglePipelineEnabled = useTogglePipelineEnabled();
   const updatePipelineToggles = useUpdatePipelineToggles();
   const runPipelineJob = useRunPipelineJob();
+  const runAdapter = useRunAdapter();
+  const runAllRecorders = useRunAllRecorders();
 
   if (stats.error) {
     return <ErrorState message="Failed to load settings" onRetry={() => stats.refetch()} />;
@@ -196,6 +200,53 @@ export default function SettingsPage() {
           ) : (
             <p className="text-sm text-muted-foreground">Unable to load pipeline status</p>
           )}
+        </CardContent>
+      </Card>
+
+      {/* Data Source Adapters */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            <Database className="h-4 w-4" />
+            Data Source Adapters
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium">Run County Recorders</p>
+              <p className="text-xs text-muted-foreground">
+                Spokane + Kootenai county recorders — Lis Pendens &amp; Trustee Sale filings
+              </p>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={runAllRecorders.isPending}
+              onClick={() => runAllRecorders.mutate()}
+            >
+              <Play className="mr-1.5 h-3.5 w-3.5" />
+              {runAllRecorders.isPending ? 'Starting…' : 'Run Recorders'}
+            </Button>
+          </div>
+          <Separator />
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium">Run Regrid Import</p>
+              <p className="text-xs text-muted-foreground">
+                Pull parcel data for all active markets (weekly scheduled, manual override here)
+              </p>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={runAdapter.isPending}
+              onClick={() => runAdapter.mutate('regrid')}
+            >
+              <Play className="mr-1.5 h-3.5 w-3.5" />
+              {runAdapter.isPending ? 'Starting…' : 'Run Regrid'}
+            </Button>
+          </div>
         </CardContent>
       </Card>
 

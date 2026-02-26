@@ -53,10 +53,10 @@ interface DealScoreWeights {
   absentee_weight: number;
   mortgage_weight: number;
   equity_thresholds: { low: number; mid: number; high: number };
-  ownership_thresholds: { short_months: number; long_months: number };
+  ownership_thresholds: { short_months: number; long_months: number; very_long_months?: number };
   mortgage_severity: Record<string, number>;
   equity_factors: { high: number; mid: number; low: number; floor: number };
-  ownership_factors: { long: number; short: number; floor: number };
+  ownership_factors: { very_long?: number; long: number; short: number; floor: number };
 }
 
 interface SuppressionConfig {
@@ -389,10 +389,11 @@ function calculateDealScore(property: Property, weights: DealScoreWeights): numb
 
   // Ownership duration factor (long ownership = more motivated to sell)
   const months = property.ownershipDurationMonths ?? 0;
-  const { short_months, long_months } = weights.ownership_thresholds;
+  const { short_months, long_months, very_long_months } = weights.ownership_thresholds;
   const of_ = weights.ownership_factors;
   let ownershipFactor = 0;
-  if (months >= long_months) ownershipFactor = of_.long;
+  if (very_long_months && of_.very_long && months >= very_long_months) ownershipFactor = of_.very_long;
+  else if (months >= long_months) ownershipFactor = of_.long;
   else if (months >= short_months) ownershipFactor = of_.short;
   else ownershipFactor = of_.floor;
   score += ownershipFactor * weights.ownership_weight;
@@ -425,7 +426,36 @@ function resolveEquityMultiplier(equityEstimate: string | null, config: EquityMu
   return config.default_multiplier;
 }
 
+const ENTITY_PATTERNS = [
+  'LLC', 'INC', 'CORP', 'TRUST', 'BANK', 'CREDIT UNION',
+  'COUNTY', 'CITY OF', 'STATE OF', 'FEDERAL', 'HUD',
+  'FANNIE', 'FREDDIE', 'GOVT',
+];
+
 function checkSuppression(property: Property, config: SuppressionConfig | null): string | null {
+  // Entity owner suppression — not wholesalable
+  if (property.ownerName) {
+    const upper = property.ownerName.toUpperCase();
+    for (const pattern of ENTITY_PATTERNS) {
+      if (upper.includes(pattern)) {
+        return `Suppressed: entity owner (${pattern})`;
+      }
+    }
+  }
+
+  // Minimum equity suppression
+  if (property.equityEstimate != null) {
+    const equity = parseFloat(property.equityEstimate);
+    if (!isNaN(equity) && equity < 15000) {
+      return `Suppressed: equity too low ($${equity})`;
+    }
+  }
+
+  // Minimum market value suppression (marketValueCents stored in cents)
+  if (property.marketValueCents != null && property.marketValueCents < 8000000) {
+    return 'Suppressed: value too low';
+  }
+
   if (!config) return null;
 
   if (config.mortgage_statuses?.includes(property.mortgageStatus ?? '')) {

@@ -16,10 +16,10 @@ import { db, closeDatabase } from '../db/connection.js';
 import { scoringModelConfigs } from '../db/schema/index.js';
 import { logger } from '../config/logger.js';
 
-const DEFAULT_VERSION = 'default-v1';
+const CURRENT_VERSION = 'wholesale-v2';
 
-const DEFAULT_CONFIG = {
-  version: DEFAULT_VERSION,
+const WHOLESALE_V2_CONFIG = {
+  version: CURRENT_VERSION,
 
   confirmedWeights: {
     NOTICE_OF_DEFAULT: { base_weight: 0.95, half_life_days: 90 },
@@ -33,6 +33,8 @@ const DEFAULT_CONFIG = {
     MECHANIC_LIEN: { base_weight: 0.6, half_life_days: 90 },
     JUDGMENT_LIEN: { base_weight: 0.7, half_life_days: 90 },
     CODE_ENFORCEMENT: { base_weight: 0.6, half_life_days: 60 },
+    ABSENTEE_HIGH_EQUITY: { base_weight: 0.5, half_life_days: 365 },
+    LONG_OWNERSHIP_HIGH_EQUITY: { base_weight: 0.4, half_life_days: 365 },
   },
 
   predictiveWeights: {
@@ -50,9 +52,9 @@ const DEFAULT_CONFIG = {
 
   decayConfig: { function: 'exponential' as const, floor: 0.05 },
 
-  promotionThreshold: '40.0000',
+  promotionThreshold: '35.0000',
 
-  tierThresholds: { A: 80, B: 60, C: 40 },
+  tierThresholds: { A: 80, B: 60, C: 35 },
 
   confidenceConfig: {
     min_signals_for_high: 5,
@@ -72,12 +74,12 @@ const DEFAULT_CONFIG = {
   },
 
   dealScoreWeights: {
-    equity_weight: 0.35,
-    ownership_weight: 0.25,
-    absentee_weight: 0.15,
-    mortgage_weight: 0.25,
-    equity_thresholds: { low: 25000, mid: 75000, high: 200000 },
-    ownership_thresholds: { short_months: 24, long_months: 120 },
+    equity_weight: 0.30,
+    ownership_weight: 0.30,
+    absentee_weight: 0.30,
+    mortgage_weight: 0.10,
+    equity_thresholds: { low: 30000, mid: 80000, high: 200000 },
+    ownership_thresholds: { short_months: 24, long_months: 120, very_long_months: 240 },
     mortgage_severity: {
       FREE_AND_CLEAR: 0.3,
       CURRENT: 0.2,
@@ -89,10 +91,10 @@ const DEFAULT_CONFIG = {
       UNKNOWN: 0.1,
     },
     equity_factors: { high: 1.0, mid: 0.7, low: 0.4, floor: 0.15 },
-    ownership_factors: { long: 1.0, short: 0.5, floor: 0.2 },
+    ownership_factors: { very_long: 1.2, long: 1.0, short: 0.5, floor: 0.2 },
   },
 
-  compositeWeights: { motivation_weight: 0.65, deal_weight: 0.35 },
+  compositeWeights: { motivation_weight: 0.55, deal_weight: 0.45 },
 
   suppressionConfig: { mortgage_statuses: [] as string[], custom_flags: [] as string[] },
 
@@ -110,17 +112,53 @@ export async function seedScoringModelIfMissing(): Promise<{ created: boolean; v
     return { created: false, version: existing.version };
   }
 
-  await db.insert(scoringModelConfigs).values(DEFAULT_CONFIG);
-  return { created: true, version: DEFAULT_VERSION };
+  await db.insert(scoringModelConfigs).values(WHOLESALE_V2_CONFIG);
+  return { created: true, version: CURRENT_VERSION };
+}
+
+/**
+ * Deactivate all existing active configs and insert the current version.
+ * Used when upgrading scoring model weights (e.g. default-v1 → wholesale-v2).
+ */
+export async function upgradeToCurrentVersion(): Promise<{ upgraded: boolean; from: string | null; to: string }> {
+  const [existing] = await db
+    .select({ version: scoringModelConfigs.version })
+    .from(scoringModelConfigs)
+    .where(eq(scoringModelConfigs.active, true))
+    .limit(1);
+
+  if (existing?.version === CURRENT_VERSION) {
+    return { upgraded: false, from: existing.version, to: CURRENT_VERSION };
+  }
+
+  // Deactivate all active configs
+  await db
+    .update(scoringModelConfigs)
+    .set({ active: false })
+    .where(eq(scoringModelConfigs.active, true));
+
+  await db.insert(scoringModelConfigs).values(WHOLESALE_V2_CONFIG);
+
+  return { upgraded: true, from: existing?.version ?? null, to: CURRENT_VERSION };
 }
 
 async function main(): Promise<void> {
-  const { created, version } = await seedScoringModelIfMissing();
+  const forceUpgrade = process.argv.includes('--upgrade');
 
-  if (created) {
-    logger.info({ version }, 'Created default scoring model config (no active config existed)');
+  if (forceUpgrade) {
+    const { upgraded, from, to } = await upgradeToCurrentVersion();
+    if (upgraded) {
+      logger.info({ from, to }, 'Scoring model upgraded — old config deactivated');
+    } else {
+      logger.info({ to }, 'Already on current scoring model version');
+    }
   } else {
-    logger.info({ version }, 'Active scoring model config already exists');
+    const { created, version } = await seedScoringModelIfMissing();
+    if (created) {
+      logger.info({ version }, 'Created scoring model config (no active config existed)');
+    } else {
+      logger.info({ version }, 'Active scoring model config already exists — use --upgrade to replace');
+    }
   }
 
   await closeDatabase();

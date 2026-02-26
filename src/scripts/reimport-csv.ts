@@ -583,6 +583,38 @@ async function runImport(
         });
       }
 
+      // Synthetic: absentee + high equity = strong wholesale signal
+      if (isAbsentee && estEquityDollar != null && estEquityDollar > 50000) {
+        const { date, freshness } = resolveDate();
+        newEvents.push({
+          eventId: generateId(),
+          dominionLeadId,
+          eventType: 'ABSENTEE_HIGH_EQUITY' as EventType,
+          eventLayer: EventLayer.PREDICTIVE as EventLayerType,
+          triggerEventDate: date,
+          sourceName: 'csv_derived',
+          reliabilityScore: '0.70',
+          rawEventPayload: { reason: 'absentee_high_equity', equity: estEquityDollar, source: 'csv_derived' },
+          freshnessCategory: freshness,
+        });
+      }
+
+      // Synthetic: long ownership (15+ years) + high equity
+      if (ownershipMonths != null && ownershipMonths > 180 && estEquityDollar != null && estEquityDollar > 50000) {
+        const { date, freshness } = resolveDate();
+        newEvents.push({
+          eventId: generateId(),
+          dominionLeadId,
+          eventType: 'LONG_OWNERSHIP_HIGH_EQUITY' as EventType,
+          eventLayer: EventLayer.PREDICTIVE as EventLayerType,
+          triggerEventDate: date,
+          sourceName: 'csv_derived',
+          reliabilityScore: '0.70',
+          rawEventPayload: { reason: 'long_ownership_high_equity', ownershipMonths, equity: estEquityDollar, source: 'csv_derived' },
+          freshnessCategory: freshness,
+        });
+      }
+
       for (const evt of newEvents) {
         const fingerprint = generateEventFingerprint({
           dominionLeadId: evt.dominionLeadId,

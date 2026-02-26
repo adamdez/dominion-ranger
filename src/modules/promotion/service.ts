@@ -10,6 +10,7 @@ import { generateId } from '../../lib/index.js';
 import { domainEvents } from '../../events/bus.js';
 import { logger } from '../../config/logger.js';
 import { BUSINESS_RULES } from '../../config/business-rules.js';
+import { resolveContacts } from '../enrichment/contact-resolver.js';
 import { EventLayer, UrgencyLevel, MarketingTier } from '../../db/schema/constants.js';
 import type { ScoringResult } from '../scoring/index.js';
 
@@ -132,6 +133,11 @@ export async function evaluateForPromotion(
     dominionLeadId,
     compositeScore: scoringResult.compositeScore,
     marketingTier: tier,
+  });
+
+  // Auto skip trace — fire and forget, don't block promotion
+  resolveContacts(dominionLeadId, 'basic').catch((err) => {
+    logger.warn({ err, dominionLeadId }, 'Auto skip trace failed (non-blocking)');
   });
 
   return promotion;

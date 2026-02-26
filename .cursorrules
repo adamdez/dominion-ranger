@@ -1,0 +1,1 @@
+CRITICAL: NEVER run `npx drizzle-kit push` or `drizzle-kit push`. It drops and recreates all database tables, destroying ALL data. This has happened multiple times. For schema changes, create a new SQL migration file in src/db/migrations/ with IF NOT EXISTS guards and run it with `npx tsx src/scripts/run-migration.ts <filename>`.

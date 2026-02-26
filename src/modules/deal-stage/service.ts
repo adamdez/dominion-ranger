@@ -1,9 +1,10 @@
 import { eq, sql } from 'drizzle-orm';
 import { db } from '../../db/connection.js';
-import { leadInstances, DealStage } from '../../db/schema/index.js';
+import { leadInstances, outcomeReservoir, DealStage } from '../../db/schema/index.js';
 import type { DealStageValue } from '../../db/schema/constants.js';
 import { NotFoundError, ValidationError } from '../../lib/errors.js';
 import { logActivity } from '../analytics/activity-logger.js';
+import { getLatestScore } from '../scoring/service.js';
 import { logger } from '../../config/logger.js';
 
 const VALID_DEAL_TRANSITIONS: Record<string, string[]> = {
@@ -63,5 +64,52 @@ export async function transitionDealStage(
     },
   }).catch(err => logger.error({ err }, 'Failed to log deal stage activity'));
 
+  // Snapshot scoring data on deal close for future weight recalibration
+  if (newStage === DealStage.CLOSED_WON || newStage === DealStage.CLOSED_LOST) {
+    snapshotScoringOnClose(lead.dominionLeadId, newStage).catch(err =>
+      logger.error({ err, dominionLeadId: lead.dominionLeadId }, 'Failed to snapshot scoring on deal close'),
+    );
+  }
+
   return { leadInstanceId, dealStage: newStage };
+}
+
+async function snapshotScoringOnClose(dominionLeadId: string, stage: string): Promise<void> {
+  const latestScore = await getLatestScore(dominionLeadId);
+  if (!latestScore) {
+    logger.warn({ dominionLeadId }, 'No scoring record found for deal close snapshot');
+    return;
+  }
+
+  const snapshot = {
+    compositeScore: latestScore.compositeScore,
+    motivationScore: latestScore.motivationScore,
+    dealScore: latestScore.dealScore,
+    confidenceScore: latestScore.confidenceScore,
+    modelVersion: latestScore.scoreModelVersion,
+    signalContributions: latestScore.signalContributions,
+    scoreInputsSnapshot: latestScore.scoreInputsSnapshot,
+    snapshotAt: new Date().toISOString(),
+    dealOutcome: stage,
+  };
+
+  await db
+    .insert(outcomeReservoir)
+    .values({
+      dominionLeadId,
+      outcomeStatus: stage === DealStage.CLOSED_WON ? 'CLOSED' : 'DEAD',
+      dealClosedAt: new Date(),
+      signalSnapshot: snapshot,
+    })
+    .onConflictDoUpdate({
+      target: outcomeReservoir.dominionLeadId,
+      set: {
+        outcomeStatus: stage === DealStage.CLOSED_WON ? 'CLOSED' : 'DEAD',
+        dealClosedAt: new Date(),
+        signalSnapshot: snapshot,
+        updatedAt: new Date(),
+      },
+    });
+
+  logger.info({ dominionLeadId, stage }, 'Scoring snapshot saved to outcome_reservoir');
 }

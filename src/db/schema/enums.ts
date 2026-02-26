@@ -27,6 +27,8 @@ export const eventTypeEnum = pgEnum('event_type', [
   'PREDICTIVE_ABSENTEE_DISTRESS',
   'PREDICTIVE_MARKET_STRESS',
   'SHERIFF_SALE',
+  'ABSENTEE_HIGH_EQUITY',
+  'LONG_OWNERSHIP_HIGH_EQUITY',
 ]);
 
 export const eventLayerEnum = pgEnum('event_layer', [

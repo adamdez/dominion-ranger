@@ -152,4 +152,50 @@ export async function pipelineRoutes(app: FastifyInstance): Promise<void> {
       });
     },
   );
+
+  // ─── Adapter Pipeline Triggers ──────────────────
+
+  app.post(
+    '/api/pipeline/run-adapter',
+    { preHandler: [requireRole('pipeline.run')] },
+    async (request, reply) => {
+      const body = z.object({
+        adapter: z.enum(['regrid', 'spokane_recorder', 'kootenai_recorder']),
+        maxRecords: z.number().optional(),
+      }).parse(request.body);
+
+      const { runAdapterPipeline } = await import('../../ingestion/pipeline.js');
+      const { initializeAdapters } = await import('../../ingestion/adapters/registry.js');
+      initializeAdapters();
+
+      runAdapterPipeline(body.adapter, { maxRecords: body.maxRecords ?? 50000 })
+        .then((stats) => logger.info({ stats }, `Manual ${body.adapter} pipeline completed`))
+        .catch((err) => logger.error({ err }, `Manual ${body.adapter} pipeline failed`));
+
+      return reply.send({
+        status: 'started',
+        adapter: body.adapter,
+        message: `${body.adapter} pipeline started in background`,
+      });
+    },
+  );
+
+  app.post(
+    '/api/pipeline/run-all-recorders',
+    { preHandler: [requireRole('pipeline.run')] },
+    async (_request, reply) => {
+      const { runAdapterPipeline } = await import('../../ingestion/pipeline.js');
+      const { initializeAdapters } = await import('../../ingestion/adapters/registry.js');
+      initializeAdapters();
+
+      const adapters = ['spokane_recorder', 'kootenai_recorder'];
+      for (const name of adapters) {
+        runAdapterPipeline(name)
+          .then((stats) => logger.info({ stats, adapter: name }, 'Manual recorder run completed'))
+          .catch((err) => logger.error({ err, adapter: name }, 'Manual recorder run failed'));
+      }
+
+      return reply.send({ status: 'started', adapters, message: 'All county recorders started' });
+    },
+  );
 }

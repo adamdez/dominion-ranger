@@ -1,5 +1,14 @@
 # Dominion Ranger — Architecture
 
+## ⚠️ DANGEROUS COMMANDS — NEVER RUN
+
+- `npx drizzle-kit push` — Drops and recreates ALL tables, destroying ALL data
+- `npx drizzle-kit drop` — Drops tables
+
+### SAFE alternatives for schema changes
+1. Write a SQL migration file in `src/db/migrations/` with `IF NOT EXISTS` guards
+2. Run: `npx tsx src/scripts/run-migration.ts <filename.sql>`
+
 ## System Overview
 
 Dominion Ranger is a deterministic acquisition operating system for real estate distress detection and lead intelligence. It ingests distress signals from multiple data sources, scores properties using a config-driven tri-score model, promotes high-scoring leads through a threshold engine, and manages the acquisition lifecycle through a stateful workflow with compliance gating.

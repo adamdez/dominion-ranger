@@ -5,9 +5,19 @@ import { autoImportNewFiles } from './auto-import.js';
 import { incrementalScore } from './incremental-scoring.js';
 import { autoPromote } from './auto-promotion.js';
 import { fullRescore } from './full-rescore.js';
+import { runAdapterPipeline } from '../ingestion/pipeline.js';
+import { initializeAdapters } from '../ingestion/adapters/registry.js';
 
 const activeTasks: ReturnType<typeof cron.schedule>[] = [];
 const runningJobs = new Set<string>();
+let adaptersInitialized = false;
+
+async function ensureAdapters(): Promise<void> {
+  if (!adaptersInitialized) {
+    initializeAdapters();
+    adaptersInitialized = true;
+  }
+}
 
 async function guardedRun(jobName: string, fn: () => Promise<unknown>): Promise<void> {
   if (runningJobs.has(jobName)) {
@@ -26,6 +36,8 @@ async function guardedRun(jobName: string, fn: () => Promise<unknown>): Promise<
     scoring: toggles.autoScoring,
     promotion: toggles.autoPromotion,
     rescore: toggles.nightlyRescore,
+    recorders: toggles.autoImport,
+    regrid: toggles.autoImport,
   };
 
   if (toggleMap[jobName] === false) {
@@ -41,6 +53,31 @@ async function guardedRun(jobName: string, fn: () => Promise<unknown>): Promise<
     logger.error({ err, jobName }, 'Pipeline job failed');
   } finally {
     runningJobs.delete(jobName);
+  }
+}
+
+async function runCountyRecorders(): Promise<void> {
+  await ensureAdapters();
+
+  const adapters = ['spokane_recorder', 'kootenai_recorder'];
+  for (const name of adapters) {
+    try {
+      const stats = await runAdapterPipeline(name);
+      logger.info({ adapter: name, ...stats }, 'County recorder pipeline completed');
+    } catch (err) {
+      logger.error({ err, adapter: name }, 'County recorder pipeline failed');
+    }
+  }
+}
+
+async function runRegridIngestion(): Promise<void> {
+  await ensureAdapters();
+
+  try {
+    const stats = await runAdapterPipeline('regrid', { limit: 1000, maxRecords: 100000 });
+    logger.info({ ...stats }, 'Regrid ingestion pipeline completed');
+  } catch (err) {
+    logger.error({ err }, 'Regrid ingestion pipeline failed');
   }
 }
 
@@ -73,8 +110,22 @@ export function startScheduler(): void {
     }),
   );
 
+  // Daily at 6 AM: run county recorder adapters for fresh pre-foreclosure signals
+  activeTasks.push(
+    cron.schedule('0 6 * * *', () => {
+      guardedRun('recorders', runCountyRecorders);
+    }),
+  );
+
+  // Weekly Sunday 3 AM: Regrid parcel data refresh
+  activeTasks.push(
+    cron.schedule('0 3 * * 0', () => {
+      guardedRun('regrid', runRegridIngestion);
+    }),
+  );
+
   logger.info(
-    { jobs: ['import@*/6h', 'scoring@hourly', 'promotion@hourly:05', 'rescore@2am'] },
+    { jobs: ['import@*/6h', 'scoring@hourly', 'promotion@hourly:05', 'rescore@2am', 'recorders@6am', 'regrid@sun3am'] },
     'Pipeline scheduler started',
   );
 }
