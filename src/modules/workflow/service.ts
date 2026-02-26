@@ -3,7 +3,7 @@ import { db } from '../../db/connection.js';
 import { leadInstances, properties, LeadStatus } from '../../db/schema/index.js';
 import type { LeadInstance } from '../../db/schema/index.js';
 import { generateId } from '../../lib/index.js';
-import { checkDnc, checkLitigator, logAudit } from '../compliance/index.js';
+import { checkDnc, checkLitigator, checkOptOut, logAudit } from '../compliance/index.js';
 import { logActivity } from '../analytics/activity-logger.js';
 import { logger } from '../../config/logger.js';
 import { NotFoundError, ValidationError, ConcurrencyError, ComplianceError } from '../../lib/errors.js';
@@ -213,7 +213,9 @@ export async function runComplianceGating(leadInstanceId: string): Promise<LeadI
 
   const litigatorResult = await checkLitigator(property?.ownerName ?? '', current.dominionLeadId);
 
-  const complianceCleared = !dncResult.isOnDnc && !litigatorResult.isLitigator;
+  const optOutResult = await checkOptOut(current.dominionLeadId);
+
+  const complianceCleared = !dncResult.isOnDnc && !litigatorResult.isLitigator && !optOutResult.isOptedOut;
   const nextStatus: LeadStatusType = complianceCleared ? LeadStatus.DIAL_READY : LeadStatus.DEAD;
 
   const [updated] = await db
@@ -237,12 +239,16 @@ export async function runComplianceGating(leadInstanceId: string): Promise<LeadI
   if (!updated) throw new ConcurrencyError('lead_instance', leadInstanceId);
 
   if (!complianceCleared) {
-    const reason = dncResult.isOnDnc ? 'DNC' : 'LITIGATOR';
+    const reasons = [];
+    if (dncResult.isOnDnc) reasons.push('DNC');
+    if (litigatorResult.isLitigator) reasons.push('LITIGATOR');
+    if (optOutResult.isOptedOut) reasons.push('OPT_OUT');
+    const reason = reasons.join(', ');
     logger.warn({ leadInstanceId, reason }, 'Lead blocked by compliance');
     await logAudit({
       dominionLeadId: current.dominionLeadId,
       actionType: 'workflow.compliance_blocked',
-      metadata: { leadInstanceId, reason, dncResult, litigatorResult },
+      metadata: { leadInstanceId, reason, dncResult, litigatorResult, optOutResult },
     });
   }
 
@@ -253,7 +259,12 @@ export async function runComplianceGating(leadInstanceId: string): Promise<LeadI
       activityType: 'COMPLIANCE_CHECKED',
       channel: 'OUTBOUND_COLD',
       outcome: complianceCleared ? undefined : 'DO_NOT_CALL',
-      meta: { complianceCleared, dnc: dncResult.isOnDnc, litigator: litigatorResult.isLitigator },
+      meta: {
+        complianceCleared,
+        dnc: dncResult.isOnDnc,
+        litigator: litigatorResult.isLitigator,
+        optOut: optOutResult.isOptedOut,
+      },
     });
   } catch (err: unknown) {
     logger.error({ err, leadInstanceId }, 'Failed to log compliance activity');

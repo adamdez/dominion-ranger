@@ -1,9 +1,9 @@
 /**
  * Contact resolution API routes.
  *
- * POST /api/properties/:dominionLeadId/resolve-contacts  — single property
- * POST /api/contacts/bulk-resolve                        — bulk skip trace
- * POST /api/properties/:dominionLeadId/contacts          — add manual contact
+ * POST /api/properties/:id/resolve-contacts  — single property
+ * POST /api/contacts/bulk-resolve           — bulk skip trace
+ * POST /api/properties/:id/contacts          — add manual contact
  */
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
@@ -31,12 +31,12 @@ const manualContactBody = z.object({
 
 export async function contactRoutes(app: FastifyInstance): Promise<void> {
 
-  // POST /api/properties/:dominionLeadId/resolve-contacts
-  app.post<{ Params: { dominionLeadId: string } }>(
-    '/api/properties/:dominionLeadId/resolve-contacts',
+  // POST /api/properties/:id/resolve-contacts
+  app.post<{ Params: { id: string } }>(
+    '/api/properties/:id/resolve-contacts',
     { preHandler: [requireRole('pipeline.run')] },
     async (request, reply) => {
-      const { dominionLeadId } = request.params;
+      const { id: dominionLeadId } = request.params;
       const { tier } = resolveBody.parse(request.body);
 
       logger.info({ dominionLeadId, tier }, 'API: resolve-contacts endpoint called');
@@ -112,12 +112,12 @@ export async function contactRoutes(app: FastifyInstance): Promise<void> {
     },
   );
 
-  // POST /api/properties/:dominionLeadId/contacts — Add manual contact
-  app.post<{ Params: { dominionLeadId: string } }>(
-    '/api/properties/:dominionLeadId/contacts',
+  // POST /api/properties/:id/contacts — Add manual contact
+  app.post<{ Params: { id: string } }>(
+    '/api/properties/:id/contacts',
     { preHandler: [requireRole('properties.read')] },
     async (request, reply) => {
-      const { dominionLeadId } = request.params;
+      const { id: dominionLeadId } = request.params;
       const data = manualContactBody.parse(request.body);
 
       if (!data.phone && !data.email) {

@@ -188,3 +188,58 @@ export async function checkLitigator(
   });
   return { ownerName, isLitigator: false, checkedAt, source: 'db_check' };
 }
+
+// ─── Opt-Out Check (Charter Section VIII) ──────────
+
+export interface OptOutCheckResult {
+  dominionLeadId: string;
+  isOptedOut: boolean;
+  checkedAt: Date;
+  source: string;
+}
+
+/**
+ * Check if a property/lead has opted out of contact.
+ *
+ * Charter Section VIII: Opt-out enforcement before dial eligibility.
+ * No exceptions.
+ *
+ * Checks:
+ * 1. property.opt_out_flag — agent-set or system-set flag
+ */
+export async function checkOptOut(
+  dominionLeadId?: string,
+): Promise<OptOutCheckResult> {
+  const checkedAt = new Date();
+
+  if (!dominionLeadId) {
+    await logAudit({
+      dominionLeadId: undefined,
+      actionType: 'compliance.opt_out_check',
+      metadata: { result: false, source: 'no_lead_id' },
+    });
+    return { dominionLeadId: '', isOptedOut: false, checkedAt, source: 'no_lead_id' };
+  }
+
+  const [property] = await db
+    .select({ optOutFlag: properties.optOutFlag })
+    .from(properties)
+    .where(eq(properties.dominionLeadId, dominionLeadId))
+    .limit(1);
+
+  if (property?.optOutFlag === true) {
+    await logAudit({
+      dominionLeadId,
+      actionType: 'compliance.opt_out_check',
+      metadata: { result: true, source: 'property_flag' },
+    });
+    return { dominionLeadId, isOptedOut: true, checkedAt, source: 'property_flag' };
+  }
+
+  await logAudit({
+    dominionLeadId,
+    actionType: 'compliance.opt_out_check',
+    metadata: { result: false, source: 'db_check' },
+  });
+  return { dominionLeadId, isOptedOut: false, checkedAt, source: 'db_check' };
+}
