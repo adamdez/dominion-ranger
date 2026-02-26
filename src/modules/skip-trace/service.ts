@@ -71,6 +71,7 @@ async function tracerFySkipTrace(property: {
   ownerLast: string | null;
   ownerName: string | null;
   mailAddress?: string | null;
+  mailingAddress?: string | null;
   mailCity?: string | null;
   mailState?: string | null;
   mailZip?: string | null;
@@ -98,50 +99,35 @@ async function tracerFySkipTrace(property: {
     }
   }
 
-  // For absentee owners, use mailing address (where the owner lives)
-  // Fall back to property address if no mailing address
-  const isAbsentee =
-    property.absenteeOwner === true ||
-    property.absenteeOwner === 'Yes' ||
-    property.absenteeOwner === 'Y';
-  const useMailAddress = isAbsentee && property.mailAddress;
+  // Determine mailing address — where the owner actually lives, separate from property address
+  const mailStreet = property.mailAddress ?? property.mailingAddress ?? '';
+  const mailCity = property.mailCity ?? '';
+  const mailState = property.mailState ?? '';
+  const mailZip = property.mailZip ?? '';
 
-  const traceStreet = useMailAddress
-    ? (property.mailAddress ?? property.streetAddress ?? '')
-    : (property.streetAddress ?? '');
-  const traceCity = useMailAddress
-    ? (property.mailCity ?? property.city ?? '')
-    : (property.city ?? '');
-  const traceState = useMailAddress
-    ? (property.mailState ?? property.state ?? '')
-    : (property.state ?? '');
-  const traceZip = useMailAddress
-    ? (property.mailZip ?? property.zip ?? '')
-    : (property.zip ?? '');
-
-  const header = 'dominion_lead_id,address,city,state,zip,first_name,last_name';
+  const header = 'dominion_lead_id,address,city,state,zip,first_name,last_name,mail_address,mail_city,mail_state,mail_zip';
   const row = [
     csvEscape(property.dominionLeadId),
-    csvEscape(traceStreet),
-    csvEscape(traceCity),
-    csvEscape(traceState),
-    csvEscape(traceZip),
+    csvEscape(property.streetAddress ?? ''),
+    csvEscape(property.city ?? ''),
+    csvEscape(property.state ?? ''),
+    csvEscape(property.zip ?? ''),
     csvEscape(first),
     csvEscape(last),
+    csvEscape(mailStreet),
+    csvEscape(mailCity),
+    csvEscape(mailState),
+    csvEscape(mailZip),
   ].join(',');
   const csvContent = `${header}\n${row}`;
 
   logger.info(
     {
       dominionLeadId: property.dominionLeadId,
-      addressType: useMailAddress ? 'mailing' : 'property',
-      traceStreet,
-      traceCity,
-      traceState,
-      traceZip,
+      address: property.streetAddress,
+      mailAddress: mailStreet || '(none)',
       ownerFirst: first,
       ownerLast: last,
-      csvRowPreview: row.substring(0, 200),
     },
     'tracerFySkipTrace: CSV built, submitting to Tracerfy API',
   );
@@ -154,6 +140,10 @@ async function tracerFySkipTrace(property: {
   formData.append('zip_column', 'zip');
   formData.append('first_name_column', 'first_name');
   formData.append('last_name_column', 'last_name');
+  formData.append('mail_address_column', 'mail_address');
+  formData.append('mail_city_column', 'mail_city');
+  formData.append('mail_state_column', 'mail_state');
+  formData.append('mail_zip_column', 'mail_zip');
   formData.append('trace_type', 'normal');
 
   logger.info(
