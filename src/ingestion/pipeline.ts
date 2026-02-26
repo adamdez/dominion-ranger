@@ -18,7 +18,6 @@ export interface PipelineStats {
   propertiesScored: number;
   leadsPromoted: number;
   sentinelDispatched: number;
-  skippedExisting: number;
   skippedInvalid?: number;
   errors: number;
   durationMs: number;
@@ -58,7 +57,6 @@ async function runAdapterPipelineInternal(adapterName: string, options?: Record<
     propertiesScored: 0,
     leadsPromoted: 0,
     sentinelDispatched: 0,
-    skippedExisting: 0,
     skippedInvalid: 0,
     errors: 0,
     durationMs: 0,
@@ -86,9 +84,8 @@ async function runAdapterPipelineInternal(adapterName: string, options?: Record<
 
   logger.info(
     {
-      totalRows: stats.recordsProcessed + stats.skippedExisting + (stats.skippedInvalid ?? 0),
+      totalRows: stats.recordsProcessed + (stats.skippedInvalid ?? 0),
       imported: stats.propertiesCreated + stats.propertiesUpdated,
-      skippedExisting: stats.skippedExisting,
       skippedInvalid: stats.skippedInvalid ?? 0,
       errors: stats.errors,
     },
@@ -107,9 +104,10 @@ async function runAdapterPipelineInternal(adapterName: string, options?: Record<
 /**
  * Process a single normalized record through the full pipeline.
  *
- * Always upserts property (findOrCreateProperty) and attempts event ingestion.
- * Event fingerprint dedup handles duplicates. Only re-scores when something changed.
- * Atomic operations throughout:
+ * Reimports supported: existing properties updated via upsert, new events ingested (deduped).
+ * No skip-existing — adapters may return existing properties with NEW distress events.
+ *
+ * Atomic operations:
  *   - Property identity via ON CONFLICT DO UPDATE (no SELECT-then-INSERT)
  *   - Event dedup via fingerprint ON CONFLICT DO NOTHING (no SELECT-then-INSERT)
  */
@@ -119,7 +117,7 @@ export async function processRecord(
 ): Promise<void> {
   const s = stats ?? createEmptyStats();
 
-  // Skip rows with no real address — these are junk data
+  // Skip rows with no real address — junk data
   const street = record.property.streetAddress ?? '';
   const city = record.property.city ?? '';
   const isJunkAddress =
@@ -132,11 +130,7 @@ export async function processRecord(
 
   if (isJunkAddress) {
     logger.debug(
-      {
-        rawAddress: street,
-        rawCity: city,
-        ownerName: record.property.ownerName ?? 'unknown',
-      },
+      { rawAddress: street, rawCity: city, ownerName: record.property.ownerName ?? 'unknown' },
       'Skipping CSV row with missing/invalid address',
     );
     s.skippedInvalid = (s.skippedInvalid ?? 0) + 1;
@@ -146,11 +140,8 @@ export async function processRecord(
   s.recordsProcessed++;
 
   const { property, created } = await findOrCreateProperty(record.property);
-  if (created) {
-    s.propertiesCreated++;
-  } else {
-    s.propertiesUpdated++;
-  }
+  if (created) s.propertiesCreated++;
+  else s.propertiesUpdated++;
 
   let newEventsIngested = false;
   for (const eventInput of record.events) {
@@ -158,7 +149,6 @@ export async function processRecord(
       ...eventInput,
       dominionLeadId: property.dominionLeadId,
     });
-
     if (event) {
       s.eventsIngested++;
       newEventsIngested = true;
@@ -167,18 +157,12 @@ export async function processRecord(
     }
   }
 
-  // No new data — skip scoring (truly no-op reimport)
-  if (!newEventsIngested && !created) {
-    s.skippedExisting++;
-    return;
-  }
+  // No new data — skip scoring (no-op reimport, saves DB/CPU)
+  if (!newEventsIngested && !created) return;
 
   await recalculateSignalAccumulation(property.dominionLeadId);
-
   await scoreProperty(property.dominionLeadId);
   s.propertiesScored++;
-
-  // Promotion removed — funnel management is manual
 }
 
 /**
@@ -213,7 +197,6 @@ function createEmptyStats(): PipelineStats {
     propertiesScored: 0,
     leadsPromoted: 0,
     sentinelDispatched: 0,
-    skippedExisting: 0,
     skippedInvalid: 0,
     errors: 0,
     durationMs: 0,

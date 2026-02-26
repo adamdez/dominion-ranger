@@ -25,7 +25,7 @@ import { createInterface } from 'node:readline';
 import { join } from 'node:path';
 import pg from 'pg';
 import { drizzle } from 'drizzle-orm/node-postgres';
-import { and, sql } from 'drizzle-orm';
+import { sql } from 'drizzle-orm';
 import * as schema from '../db/schema/index.js';
 import type { DistressEvent } from '../db/schema/index.js';
 import { EventLayer } from '../db/schema/constants.js';
@@ -233,25 +233,11 @@ async function runImport(
   let eventsCreated = 0;
   let errors = 0;
   let skipped = 0;
-  let skippedExisting = 0;
   let dryRunCount = 0;
   const dominionLeadIds: string[] = [];
   const dryRunPreview: Array<Record<string, unknown>> = [];
 
   const startTime = Date.now();
-
-  // Pre-fetch existing (apn, county) for O(1) skip lookup
-  const existingApnCounty = new Set(
-    (await db
-      .select({ apn: properties.apn, county: properties.county })
-      .from(properties)
-      .where(and(
-        sql`${properties.apn} IS NOT NULL`,
-        sql`${properties.county} IS NOT NULL`,
-      )))
-      .map((r) => `${r.apn}|${r.county}`),
-  );
-  console.log(`   Existing properties: ${existingApnCounty.size} (will skip these)\n`);
 
   for await (const line of rl) {
     lineNum++;
@@ -306,12 +292,6 @@ async function runImport(
       if (!dryRun) console.warn(`  Row ${lineNum}: No APN found, using synthetic ID: ${apn}`);
     }
     if (!apn && !address) { skipped++; continue; }
-
-    // Early exit: skip if property already exists (avoids upsert + event creation)
-    if (apn && county && existingApnCounty.has(`${apn}|${county}`)) {
-      skippedExisting++;
-      continue;
-    }
 
     const ownerRaw = get(values, mapping, 'owner') || '';
     const { first: ownerFirst, last: ownerLast } = parseOwnerName(ownerRaw);
@@ -480,12 +460,8 @@ async function runImport(
       dominionLeadIds.push(dominionLeadId);
       const isNew = dominionLeadId === candidateId;
 
-      if (isNew) {
-        created++;
-        if (apn && county) existingApnCounty.add(`${apn}|${county}`);
-      } else {
-        updated++;
-      }
+      if (isNew) created++;
+      else updated++;
 
       // ── Create distress events (only for actual distress flags) ──
       type EventType = DistressEvent['eventType'];
@@ -714,7 +690,6 @@ async function runImport(
   console.log(`   Updated: ${updated}`);
   console.log(`   Created: ${created}`);
   console.log(`   Events:  ${eventsCreated}`);
-  console.log(`   Skipped (existing): ${skippedExisting}`);
   console.log(`   Skipped (invalid address): ${skipped}`);
   console.log(`   Errors:  ${errors}`);
   console.log('\n   Run scoring with: npx tsx src/scripts/backfill-scoring.ts\n');
