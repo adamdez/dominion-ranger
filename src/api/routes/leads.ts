@@ -23,6 +23,7 @@ import { logAudit } from '../../modules/compliance/index.js';
 import { logDisposition, getDispositions } from '../../modules/dispositions/index.js';
 import { createTaskFromDisposition } from '../../modules/disposition-tasks/index.js';
 import { transitionDealStage } from '../../modules/deal-stage/index.js';
+import { getNurtureCadenceProgress } from '../../modules/cadence/nurture-service.js';
 import { requireRole } from '../middleware/auth.js';
 import { leadsListQuery, claimLeadBody, transitionLeadBody, dialQueueQuery } from '../schemas/leads.js';
 import { transitionDealStageBody } from '../schemas/deal-stage.js';
@@ -289,6 +290,7 @@ export async function leadRoutes(app: FastifyInstance): Promise<void> {
           assignedTo: leadInstances.assignedTo,
           complianceCleared: leadInstances.complianceCleared,
           version: leadInstances.version,
+          funnelStage: leadInstances.funnelStage,
           createdAt: leadInstances.createdAt,
           updatedAt: leadInstances.updatedAt,
           notes: leadInstances.notes,
@@ -330,6 +332,17 @@ export async function leadRoutes(app: FastifyInstance): Promise<void> {
         .where(eq(distressEvents.dominionLeadId, row.dominionLeadId));
 
       return { ...row, eventCount: eventCount.count };
+    },
+  );
+
+  // GET /api/leads/:leadInstanceId/nurture-progress — Nurture cadence progress for a lead in nurture stage
+  app.get<{ Params: { leadInstanceId: string } }>(
+    '/api/leads/:leadInstanceId/nurture-progress',
+    { preHandler: [requireRole('properties.read')] },
+    async (request, reply) => {
+      const { leadInstanceId } = request.params;
+      const progress = await getNurtureCadenceProgress(leadInstanceId);
+      return reply.send(progress);
     },
   );
 

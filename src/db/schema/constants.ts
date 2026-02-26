@@ -109,6 +109,11 @@ export const TaskType = {
   SEND_OFFER: 'SEND_OFFER',
   SITE_VISIT: 'SITE_VISIT',
   GENERAL: 'GENERAL',
+  // Nurture cadence task types
+  SEND_MAILER: 'SEND_MAILER',
+  SEND_EMAIL: 'SEND_EMAIL',
+  SEND_SMS: 'SEND_SMS',
+  NURTURE_CALL: 'NURTURE_CALL',
 } as const;
 
 export type TaskTypeValue = (typeof TaskType)[keyof typeof TaskType];

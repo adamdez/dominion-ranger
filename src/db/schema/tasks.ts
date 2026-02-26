@@ -22,6 +22,10 @@ export const taskTypeEnum = pgEnum('task_type', [
   'SEND_OFFER',
   'SITE_VISIT',
   'GENERAL',
+  'SEND_MAILER',
+  'SEND_EMAIL',
+  'SEND_SMS',
+  'NURTURE_CALL',
 ]);
 
 export const tasks = pgTable(

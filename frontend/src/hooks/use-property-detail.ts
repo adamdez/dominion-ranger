@@ -116,6 +116,33 @@ export function usePropertyTasks(dominionLeadId: string | null) {
   });
 }
 
+export interface NurtureProgress {
+  totalSteps: number;
+  completedSteps: number;
+  pendingSteps: number;
+  cancelledSteps: number;
+  nextDueDate: string | null;
+  percentComplete: number;
+  channels: { mail: number; email: number; sms: number; call: number };
+}
+
+export function useNurtureProgress(leadInstanceId: string | null) {
+  return useQuery({
+    queryKey: ['nurture-progress', leadInstanceId],
+    queryFn: async (): Promise<NurtureProgress | null> => {
+      try {
+        const { data } = await api.get<NurtureProgress>(
+          `/api/leads/${leadInstanceId}/nurture-progress`,
+        );
+        return data;
+      } catch {
+        return null;
+      }
+    },
+    enabled: !!leadInstanceId,
+  });
+}
+
 export function usePropertyTags(leadInstanceId: string | null) {
   return useQuery({
     queryKey: ['property-tags', leadInstanceId],

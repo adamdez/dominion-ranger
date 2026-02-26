@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { CheckCircle, Phone, FileText, Calendar, Trash2, Plus } from 'lucide-react';
+import { CheckCircle, Phone, FileText, Calendar, Trash2, Plus, Mail, Mailbox, MessageSquare } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -20,6 +20,10 @@ const TASK_ICONS: Record<string, React.ElementType> = {
   GENERAL: Calendar,
   RESEARCH: Calendar,
   SITE_VISIT: Calendar,
+  SEND_MAILER: Mailbox,
+  SEND_EMAIL: Mail,
+  SEND_SMS: MessageSquare,
+  NURTURE_CALL: Phone,
 };
 
 function formatDueDate(dueAt: string | Date | null): string {

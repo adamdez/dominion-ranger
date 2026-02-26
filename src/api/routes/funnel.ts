@@ -3,6 +3,7 @@ import { sql, eq, and, asc, desc } from 'drizzle-orm';
 import { db } from '../../db/connection.js';
 import { leadInstances, properties } from '../../db/schema/index.js';
 import { logActivity } from '../../modules/analytics/activity-logger.js';
+import { enrollInNurtureCadence, unenrollFromNurtureCadence } from '../../modules/cadence/nurture-service.js';
 import { requireRole } from '../middleware/auth.js';
 import { logger } from '../../config/logger.js';
 import { z } from 'zod';
@@ -68,6 +69,7 @@ export async function funnelRoutes(app: FastifyInstance): Promise<void> {
           leadInstanceId: leadInstances.leadInstanceId,
           dominionLeadId: leadInstances.dominionLeadId,
           funnelStage: leadInstances.funnelStage,
+          assignedTo: leadInstances.assignedTo,
         })
         .from(leadInstances)
         .where(eq(leadInstances.leadInstanceId, leadInstanceId))
@@ -101,6 +103,20 @@ export async function funnelRoutes(app: FastifyInstance): Promise<void> {
           updatedAt: new Date(),
         })
         .where(eq(leadInstances.leadInstanceId, leadInstanceId));
+
+      // Nurture cadence: enroll when moving TO nurture, unenroll when moving FROM nurture
+      if (targetStage === 'nurture' && currentStage !== 'nurture') {
+        enrollInNurtureCadence({
+          leadInstanceId,
+          dominionLeadId: lead.dominionLeadId,
+          assignedTo: lead.assignedTo,
+        }).catch((err) => logger.warn({ err, leadInstanceId }, 'Failed to enroll in nurture cadence'));
+      }
+      if (currentStage === 'nurture' && targetStage !== 'nurture') {
+        unenrollFromNurtureCadence(leadInstanceId).catch((err) =>
+          logger.warn({ err, leadInstanceId }, 'Failed to unenroll from nurture cadence'),
+        );
+      }
 
       logActivity({
         dominionLeadId: lead.dominionLeadId,
@@ -168,6 +184,13 @@ export async function funnelRoutes(app: FastifyInstance): Promise<void> {
           updatedAt: new Date(),
         })
         .where(eq(leadInstances.leadInstanceId, leadInstanceId));
+
+      // Unenroll from nurture cadence when declining from nurture
+      if (currentStage === 'nurture') {
+        unenrollFromNurtureCadence(leadInstanceId).catch((err) =>
+          logger.warn({ err, leadInstanceId }, 'Failed to unenroll from nurture cadence'),
+        );
+      }
 
       logActivity({
         dominionLeadId: lead.dominionLeadId,

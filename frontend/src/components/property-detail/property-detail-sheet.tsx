@@ -35,6 +35,7 @@ import {
   useLeadHistory,
   usePropertyTasks,
   usePropertyTags,
+  useNurtureProgress,
 } from '@/hooks/use-property-detail';
 import type { PropertyContact, TimelineItem } from '@/hooks/use-property-detail';
 import { ScoreBreakdownTooltip, EVENT_LABELS } from '@/components/scoring/score-breakdown-tooltip';
@@ -48,7 +49,7 @@ import {
   UserPlus, Shield, Phone, MessageSquare, Send, FileText,
   CheckCircle, XCircle, AlertTriangle, SearchCheck, Zap,
   Mail, MapPin, Home, Calendar, TrendingUp, ArrowRight,
-  ClipboardCheck, DollarSign, HeartHandshake,
+  ClipboardCheck, DollarSign, HeartHandshake, Sprout, Mailbox,
 } from 'lucide-react';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel,
@@ -118,6 +119,8 @@ export function PropertyDetailSheet({ lead, open, onClose }: PropertyDetailSheet
   const history = useLeadHistory(lead?.leadInstanceId ?? null);
   const tasks = usePropertyTasks(lead?.dominionLeadId ?? null);
   const tags = usePropertyTags(lead?.leadInstanceId ?? null);
+  const isNurture = ((lead as LeadWithProperty & { funnelStage?: string })?.funnelStage) === 'nurture';
+  const nurtureProgress = useNurtureProgress(isNurture ? (lead?.leadInstanceId ?? null) : null);
   const auditQuery = useLeadAudit(lead?.dominionLeadId ?? null);
 
   if (!lead) return null;
@@ -340,6 +343,30 @@ export function PropertyDetailSheet({ lead, open, onClose }: PropertyDetailSheet
                     </div>
                   </div>
                 </div>
+
+                {/* Nurture Cadence — shown when lead is in nurture funnel stage */}
+                {isNurture && (
+                  <>
+                    <Separator />
+                    <NurtureCadenceSection
+                      lead={lead}
+                      progress={nurtureProgress.data}
+                      onReactivate={() => {
+                        funnelAdvance.mutate(
+                          { leadInstanceId: lead.leadInstanceId, targetStage: 'lead' },
+                          { onSuccess: () => { toast.success('Reactivated to Leads'); queryClient.invalidateQueries({ queryKey: ['nurture-progress', lead.leadInstanceId] }); onClose(); } },
+                        );
+                      }}
+                      onMoveToDead={() => {
+                        funnelDecline.mutate(
+                          { leadInstanceId: lead.leadInstanceId },
+                          { onSuccess: () => { toast.success('Moved to Dead'); onClose(); } },
+                        );
+                      }}
+                      loading={funnelAdvance.isPending || funnelDecline.isPending}
+                    />
+                  </>
+                )}
 
                 <Separator />
 
@@ -1127,6 +1154,68 @@ function TimelineEntry({ item }: { item: TimelineItem }) {
       <span className="text-xs text-muted-foreground whitespace-nowrap">
         {formatDistanceToNow(new Date(item.timestamp), { addSuffix: true })}
       </span>
+    </div>
+  );
+}
+
+function NurtureCadenceSection({
+  lead,
+  progress,
+  onReactivate,
+  onMoveToDead,
+  loading,
+}: {
+  lead: LeadWithProperty;
+  progress: { totalSteps: number; completedSteps: number; percentComplete: number; nextDueDate: string | null; channels: { mail: number; email: number; sms: number; call: number } } | null | undefined;
+  onReactivate: () => void;
+  onMoveToDead: () => void;
+  loading: boolean;
+}) {
+  const nextDue = progress?.nextDueDate ? formatDistanceToNow(new Date(progress.nextDueDate), { addSuffix: true }) : '—';
+
+  return (
+    <div className="space-y-3">
+      <h4 className="text-sm font-semibold text-muted-foreground flex items-center gap-2">
+        <Sprout className="h-4 w-4 text-emerald-500" />
+        Nurture Cadence
+      </h4>
+      <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-4 space-y-3">
+        {progress ? (
+          <>
+            <div>
+              <div className="flex justify-between text-xs mb-1">
+                <span className="text-muted-foreground">Progress</span>
+                <span className="font-medium">{progress.percentComplete}% ({progress.completedSteps}/{progress.totalSteps})</span>
+              </div>
+              <div className="h-2 rounded-full bg-muted overflow-hidden">
+                <div
+                  className="h-full rounded-full bg-emerald-500 transition-all"
+                  style={{ width: `${progress.percentComplete}%` }}
+                />
+              </div>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Next touch: {nextDue}
+            </p>
+            <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+              <span><Mailbox className="inline h-3 w-3 mr-1" />{progress.channels.mail} Mail</span>
+              <span><Mail className="inline h-3 w-3 mr-1" />{progress.channels.email} Email</span>
+              <span><MessageSquare className="inline h-3 w-3 mr-1" />{progress.channels.sms} SMS</span>
+              <span><Phone className="inline h-3 w-3 mr-1" />{progress.channels.call} Calls</span>
+            </div>
+            <div className="flex gap-2 pt-2">
+              <Button size="sm" variant="outline" disabled={loading} onClick={onReactivate}>
+                Reactivate to Leads
+              </Button>
+              <Button size="sm" variant="ghost" className="text-destructive" disabled={loading} onClick={onMoveToDead}>
+                Move to Dead
+              </Button>
+            </div>
+          </>
+        ) : (
+          <p className="text-xs text-muted-foreground">Loading nurture progress…</p>
+        )}
+      </div>
     </div>
   );
 }

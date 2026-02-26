@@ -65,6 +65,11 @@ export const TASK_TYPES = {
   SEND_OFFER: { label: 'Send Offer', color: 'bg-orange-100 text-orange-800' },
   SITE_VISIT: { label: 'Site Visit', color: 'bg-green-100 text-green-800' },
   GENERAL: { label: 'General', color: 'bg-gray-100 text-gray-800' },
+  // Nurture cadence
+  SEND_MAILER: { label: 'Send Mailer', color: 'bg-amber-100 text-amber-800' },
+  SEND_EMAIL: { label: 'Send Email', color: 'bg-cyan-100 text-cyan-800' },
+  SEND_SMS: { label: 'Send SMS', color: 'bg-emerald-100 text-emerald-800' },
+  NURTURE_CALL: { label: 'Nurture Call', color: 'bg-teal-100 text-teal-800' },
 } as const;
 
 export type ScoreTier = keyof typeof SCORE_TIERS;
