@@ -417,7 +417,6 @@ export default function ProspectsPage() {
                     Last Event <SortIcon field="last_event" />
                   </button>
                 </TableHead>
-                <TableHead className="text-xs font-medium">Status</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -561,16 +560,6 @@ function ProspectRow({
         {row.lastEventDate
           ? new Date(row.lastEventDate).toLocaleDateString()
           : '—'}
-      </TableCell>
-      <TableCell>
-        {row.leadInstanceId ? (
-          <Badge
-            variant="outline"
-            className="border-emerald-500/30 bg-emerald-500/10 text-emerald-400 text-xs"
-          >
-            Promoted
-          </Badge>
-        ) : null}
       </TableCell>
     </TableRow>
   );

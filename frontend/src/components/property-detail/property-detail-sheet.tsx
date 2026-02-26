@@ -915,7 +915,7 @@ function StatusActions({
   loading: boolean;
 }) {
   const actions: Record<string, { label: string; icon: React.ReactNode; action: () => void }[]> = {
-    PROMOTED: [{ label: 'Claim Lead', icon: <UserPlus className="mr-1.5 h-3.5 w-3.5" />, action: onClaim }],
+    PROMOTED: [{ label: loading ? 'Claiming...' : 'Claim Lead', icon: loading ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <UserPlus className="mr-1.5 h-3.5 w-3.5" />, action: onClaim }],
     ASSIGNED: [{ label: 'Run Compliance', icon: <Shield className="mr-1.5 h-3.5 w-3.5" />, action: onCompliance }],
     DIAL_READY: [{ label: 'Start Dialing', icon: <Phone className="mr-1.5 h-3.5 w-3.5" />, action: () => onTransition('DIALING') }],
     DIALING: [{ label: 'Mark Contacted', icon: <MessageSquare className="mr-1.5 h-3.5 w-3.5" />, action: () => onTransition('CONTACTED') }],
