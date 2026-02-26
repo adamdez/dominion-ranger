@@ -77,6 +77,15 @@ export function FunnelDragProvider({ children }: { children: ReactNode }) {
         );
         if (result.promotedInstances?.[0]?.leadInstanceId) {
           const newId = result.promotedInstances[0].leadInstanceId;
+
+          // Auto-claim: assign the lead to the current user
+          try {
+            await api.post(`/api/leads/${newId}/claim`);
+          } catch (claimErr) {
+            // Lead may have been auto-assigned by promote, that's OK
+            console.warn('Auto-claim after promote failed (may already be assigned):', claimErr);
+          }
+
           if (targetStage !== 'lead') {
             await advanceFunnel(newId, targetStage);
           }
@@ -93,6 +102,7 @@ export function FunnelDragProvider({ children }: { children: ReactNode }) {
       qc.invalidateQueries({ queryKey: ['prospects'] });
       qc.invalidateQueries({ queryKey: ['leads'] });
       qc.invalidateQueries({ queryKey: ['leadStats'] });
+      qc.invalidateQueries({ queryKey: ['myLeads'] });
       toast.success(`Moved to ${STAGE_LABELS[targetStage] ?? targetStage}`);
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message
@@ -112,6 +122,12 @@ export function FunnelDragProvider({ children }: { children: ReactNode }) {
         );
         const newId = result.promotedInstances?.[0]?.leadInstanceId;
         if (newId) {
+          // Auto-claim
+          try {
+            await api.post(`/api/leads/${newId}/claim`);
+          } catch (claimErr) {
+            console.warn('Auto-claim after promote failed:', claimErr);
+          }
           await advanceFunnel(newId, 'lead');
           await advanceFunnel(newId, targetStage, { offerAmountCents: amountCents });
         }
@@ -122,6 +138,8 @@ export function FunnelDragProvider({ children }: { children: ReactNode }) {
       qc.invalidateQueries({ queryKey: ['funnelStats'] });
       qc.invalidateQueries({ queryKey: ['prospects'] });
       qc.invalidateQueries({ queryKey: ['leads'] });
+      qc.invalidateQueries({ queryKey: ['leadStats'] });
+      qc.invalidateQueries({ queryKey: ['myLeads'] });
       toast.success(`Moved to ${STAGE_LABELS[targetStage] ?? targetStage}`);
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Failed to advance';

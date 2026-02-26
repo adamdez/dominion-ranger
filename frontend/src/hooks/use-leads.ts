@@ -84,11 +84,12 @@ export function useClaimLead() {
       queryClient.invalidateQueries({ queryKey: ['funnel'] });
       queryClient.invalidateQueries({ queryKey: ['prospects'] });
     },
-    onError: (error: { response?: { status: number } }) => {
-      if (error.response?.status === 409) {
+    onError: (error: { response?: { status: number; data?: { message?: string } } }) => {
+      const msg = error.response?.data?.message;
+      if (error.response?.status === 409 || (msg && msg.includes('already claimed'))) {
         toast.error('Lead already claimed by another user');
       } else {
-        toast.error('Failed to claim lead');
+        toast.error(msg ?? 'Failed to claim lead');
       }
     },
   });

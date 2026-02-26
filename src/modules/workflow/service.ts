@@ -104,6 +104,14 @@ export async function claimLead(input: {
     .returning();
 
   if (result.length === 0) {
+    const [existing] = await db
+      .select({ assignedTo: leadInstances.assignedTo })
+      .from(leadInstances)
+      .where(eq(leadInstances.leadInstanceId, input.leadInstanceId));
+
+    if (existing?.assignedTo) {
+      throw new ValidationError('Lead already claimed by another user');
+    }
     throw new ConcurrencyError('lead_instance', input.leadInstanceId);
   }
 

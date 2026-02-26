@@ -347,12 +347,27 @@ export async function leadRoutes(app: FastifyInstance): Promise<void> {
   );
 
   // POST /api/leads/:leadInstanceId/claim — Claim a promoted lead
-  app.post<{ Params: { leadInstanceId: string }; Body: { expectedVersion: number } }>(
+  app.post<{ Params: { leadInstanceId: string }; Body: { expectedVersion?: number } }>(
     '/api/leads/:leadInstanceId/claim',
     { preHandler: [requireRole('workflow.write')] },
-    async (request) => {
+    async (request, reply) => {
       const { leadInstanceId } = request.params;
-      const { expectedVersion } = claimLeadBody.parse(request.body);
+      const body = claimLeadBody.parse(request.body ?? {});
+      let expectedVersion = body.expectedVersion;
+
+      // If no version provided (e.g. drag-drop auto-claim), fetch current version
+      if (expectedVersion === undefined || expectedVersion === null) {
+        const [current] = await db
+          .select({ version: leadInstances.version })
+          .from(leadInstances)
+          .where(eq(leadInstances.leadInstanceId, leadInstanceId));
+
+        if (!current) {
+          return reply.code(404).send({ error: 'NOT_FOUND', message: 'Lead not found' });
+        }
+        expectedVersion = current.version;
+      }
+
       const user = (request as unknown as Record<string, { userId: string }>).user;
 
       const instance = await claimLead({

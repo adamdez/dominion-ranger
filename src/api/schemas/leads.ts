@@ -18,7 +18,7 @@ export const leadsListQuery = z.object({
 });
 
 export const claimLeadBody = z.object({
-  expectedVersion: z.number().int().min(1),
+  expectedVersion: z.number().int().min(1).optional(),
 });
 
 export const transitionLeadBody = z.object({
