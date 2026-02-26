@@ -1,9 +1,6 @@
-import { and, eq, sql } from 'drizzle-orm';
 import type { NormalizedRecord } from './adapters/interface.js';
 import { getAllIngestionAdapters } from './adapters/registry.js';
 import { findOrCreateProperty } from '../modules/properties/service.js';
-import { db } from '../db/connection.js';
-import { properties } from '../db/schema/index.js';
 import { ingestDistressEvent } from '../modules/distress-events/service.js';
 import { recalculateSignalAccumulation } from '../modules/signals/service.js';
 import { scoreProperty } from '../modules/scoring/service.js';
@@ -67,25 +64,13 @@ async function runAdapterPipelineInternal(adapterName: string, options?: Record<
     durationMs: 0,
   };
 
-  // Pre-fetch existing (apn, county) for O(1) skip lookup
-  const existingApnCounty = new Set(
-    (await db
-      .select({ apn: properties.apn, county: properties.county })
-      .from(properties)
-      .where(and(
-        sql`${properties.apn} IS NOT NULL`,
-        sql`${properties.county} IS NOT NULL`,
-      )))
-      .map((r) => `${r.apn}|${r.county}`),
-  );
-
   logger.info({ adapter: adapterName }, 'Pipeline run started');
 
   try {
     for await (const batch of adapter.fetchRecords(options)) {
       for (const record of batch) {
         try {
-          await processRecord(record, stats, existingApnCounty);
+          await processRecord(record, stats);
         } catch (err) {
           stats.errors++;
           logger.error({ err, adapter: adapterName }, 'Error processing record');
@@ -122,7 +107,8 @@ async function runAdapterPipelineInternal(adapterName: string, options?: Record<
 /**
  * Process a single normalized record through the full pipeline.
  *
- * Early exit: skip entirely if property already exists (apn+county match).
+ * Always upserts property (findOrCreateProperty) and attempts event ingestion.
+ * Event fingerprint dedup handles duplicates. Only re-scores when something changed.
  * Atomic operations throughout:
  *   - Property identity via ON CONFLICT DO UPDATE (no SELECT-then-INSERT)
  *   - Event dedup via fingerprint ON CONFLICT DO NOTHING (no SELECT-then-INSERT)
@@ -130,7 +116,6 @@ async function runAdapterPipelineInternal(adapterName: string, options?: Record<
 export async function processRecord(
   record: NormalizedRecord,
   stats?: PipelineStats,
-  existingApnCounty?: Set<string>,
 ): Promise<void> {
   const s = stats ?? createEmptyStats();
 
@@ -142,8 +127,8 @@ export async function processRecord(
     street.toLowerCase() === 'unknown' ||
     street.toLowerCase() === 'n/a' ||
     street.trim() === '' ||
-    city.toLowerCase() === 'unknown' ||
-    city.trim() === '';
+    (city ?? '').toLowerCase() === 'unknown' ||
+    (city ?? '').trim() === '';
 
   if (isJunkAddress) {
     logger.debug(
@@ -158,20 +143,11 @@ export async function processRecord(
     return;
   }
 
-  // Early exit: skip if property already exists (avoids normalization, events, scoring)
-  const apn = record.property.apn;
-  const county = record.property.county;
-  if (apn && county && existingApnCounty?.has(`${apn}|${county}`)) {
-    s.skippedExisting++;
-    return;
-  }
-
   s.recordsProcessed++;
 
   const { property, created } = await findOrCreateProperty(record.property);
   if (created) {
     s.propertiesCreated++;
-    if (apn && county) existingApnCounty?.add(`${apn}|${county}`);
   } else {
     s.propertiesUpdated++;
   }
@@ -191,11 +167,15 @@ export async function processRecord(
     }
   }
 
-  if (!newEventsIngested) return;
+  // No new data — skip scoring (truly no-op reimport)
+  if (!newEventsIngested && !created) {
+    s.skippedExisting++;
+    return;
+  }
 
   await recalculateSignalAccumulation(property.dominionLeadId);
 
-  const scoringResult = await scoreProperty(property.dominionLeadId);
+  await scoreProperty(property.dominionLeadId);
   s.propertiesScored++;
 
   // Promotion removed — funnel management is manual
@@ -239,3 +219,4 @@ function createEmptyStats(): PipelineStats {
     durationMs: 0,
   };
 }
+

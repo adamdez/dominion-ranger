@@ -1,3 +1,12 @@
+═══════════════════════════════════════════════════════════════
+STOP — READ BEFORE WRITING ANY CODE
+═══════════════════════════════════════════════════════════════
+NEVER run `npx drizzle-kit push` — it DROPS ALL TABLES and destroys all data.
+NEVER run `npx drizzle-kit generate` against production.
+For schema changes: write SQL migration with IF NOT EXISTS guards.
+Apply with: npx tsx src/scripts/run-migration.ts <filename>
+═══════════════════════════════════════════════════════════════
+
 # DOMINION RANGER — CURSOR AGENT RULES
 # Governing Document: Dominion Charter v2.3
 # Phase: 1 — Hardened Core Infrastructure
