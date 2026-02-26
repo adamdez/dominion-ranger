@@ -12,8 +12,8 @@
     "start": "node dist/index.js",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
-    "db:push": "echo 'BLOCKED: drizzle-kit push destroys data. Use migrations instead. See ARCHITECTURE.md' && exit 1",
-    "drizzle:push": "echo 'BLOCKED: drizzle-kit push destroys data. Use migrations instead. See ARCHITECTURE.md' && exit 1",
+    "db:push": "echo 'BLOCKED: drizzle-kit push destroys data. Use migrations instead.' && exit 1",
+    "drizzle:push": "echo 'BLOCKED: drizzle-kit push destroys data. Use migrations instead.' && exit 1",
     "predrizzle-kit": "echo 'BLOCKED: drizzle-kit commands must be reviewed. Never use push.' && exit 1",
     "drizzle-kit": "drizzle-kit",
     "db:studio": "drizzle-kit studio",
@@ -33,7 +33,11 @@
     "system:score": "tsx src/scripts/recover-system.ts --score",
     "system:import": "tsx src/scripts/recover-system.ts --import",
     "system:recover": "tsx src/scripts/recover-system.ts --full",
-    "clean:redis-jobs": "tsx src/scripts/clean-redis-jobs.ts"
+    "clean:redis-jobs": "tsx src/scripts/clean-redis-jobs.ts",
+    "db:backup": "tsx src/scripts/backup-database.ts",
+    "db:backup:data": "tsx src/scripts/backup-database.ts --data-only",
+    "db:backup:core": "tsx src/scripts/backup-database.ts --tables=properties,distress_events,scoring_records,lead_instances,promoted_leads,scoring_model_configs",
+    "db:restore": "tsx src/scripts/restore-database.ts"
   },
   "dependencies": {
     "@fastify/cookie": "^11.0.2",

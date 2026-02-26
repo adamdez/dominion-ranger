@@ -3,7 +3,7 @@
  * Usage: npx tsx src/scripts/run-migration.ts <filename.sql>
  */
 import 'dotenv/config';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { db } from '../db/connection.js';
 import { sql } from 'drizzle-orm';
@@ -14,7 +14,10 @@ if (!fileName) {
   process.exit(1);
 }
 
-const filePath = join('src', 'db', 'migrations', fileName);
+// Consolidated migrations/ is source of truth; fall back to legacy src/db/migrations
+const migrationsPath = join('migrations', fileName);
+const legacyPath = join('src', 'db', 'migrations', fileName);
+const filePath = existsSync(migrationsPath) ? migrationsPath : legacyPath;
 const sqlContent = readFileSync(filePath, 'utf-8');
 
 console.log(`Running migration: ${filePath}`);

@@ -937,4 +937,121 @@ CREATE TRIGGER activity_log_no_delete
   BEFORE DELETE ON activity_log
   FOR EACH ROW EXECUTE FUNCTION prevent_append_only_mutation();
 
+-- ╔══════════════════════════════════════════════════════════════════════════╗
+-- ║  ADDITIVE MIGRATIONS (0017–0027) — ensure baseline stays current         ║
+-- ╚══════════════════════════════════════════════════════════════════════════╝
+
+-- 0018: offers status check constraint
+ALTER TABLE offers DROP CONSTRAINT IF EXISTS offers_status_check;
+ALTER TABLE offers ADD CONSTRAINT offers_status_check
+  CHECK (status IN ('draft', 'sent', 'viewed', 'countered', 'accepted', 'rejected', 'expired', 'withdrawn'));
+
+-- 0020: notifications table
+CREATE TABLE IF NOT EXISTS notifications (
+  notification_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id VARCHAR(128),
+  title VARCHAR(256) NOT NULL,
+  body TEXT,
+  type VARCHAR(64) NOT NULL DEFAULT 'INFO',
+  read_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_notifications_user_id ON notifications(user_id);
+CREATE INDEX IF NOT EXISTS idx_notifications_created_at ON notifications(created_at DESC);
+
+-- 0020: error_log columns
+ALTER TABLE error_log ADD COLUMN IF NOT EXISTS error_message TEXT;
+ALTER TABLE error_log ADD COLUMN IF NOT EXISTS error_stack TEXT;
+
+-- 0021: Regrid property columns
+ALTER TABLE properties ADD COLUMN IF NOT EXISTS zoning TEXT;
+ALTER TABLE properties ADD COLUMN IF NOT EXISTS land_use TEXT;
+ALTER TABLE properties ADD COLUMN IF NOT EXISTS legal_description TEXT;
+ALTER TABLE properties ADD COLUMN IF NOT EXISTS acreage NUMERIC(10,4);
+ALTER TABLE properties ADD COLUMN IF NOT EXISTS regrid_data JSONB;
+ALTER TABLE properties ADD COLUMN IF NOT EXISTS regrid_enriched_at TIMESTAMPTZ;
+
+-- 0022: Enrichment and property attribute columns
+ALTER TABLE properties ADD COLUMN IF NOT EXISTS enrichment_data JSONB;
+ALTER TABLE properties ADD COLUMN IF NOT EXISTS enriched_at TIMESTAMPTZ;
+ALTER TABLE properties ADD COLUMN IF NOT EXISTS bedrooms INTEGER;
+ALTER TABLE properties ADD COLUMN IF NOT EXISTS bathrooms NUMERIC(3,1);
+ALTER TABLE properties ADD COLUMN IF NOT EXISTS sqft INTEGER;
+ALTER TABLE properties ADD COLUMN IF NOT EXISTS year_built INTEGER;
+ALTER TABLE properties ADD COLUMN IF NOT EXISTS lot_sqft INTEGER;
+ALTER TABLE properties ADD COLUMN IF NOT EXISTS last_sale_date DATE;
+ALTER TABLE properties ADD COLUMN IF NOT EXISTS last_sale_price_cents BIGINT;
+ALTER TABLE properties ADD COLUMN IF NOT EXISTS assessed_value_cents BIGINT;
+ALTER TABLE properties ADD COLUMN IF NOT EXISTS market_value_cents BIGINT;
+
+-- 0023: Property detail columns (PropertyRadar CSV)
+ALTER TABLE properties ADD COLUMN IF NOT EXISTS mail_address TEXT;
+ALTER TABLE properties ADD COLUMN IF NOT EXISTS mail_city TEXT;
+ALTER TABLE properties ADD COLUMN IF NOT EXISTS mail_state TEXT;
+ALTER TABLE properties ADD COLUMN IF NOT EXISTS mail_zip TEXT;
+ALTER TABLE properties ADD COLUMN IF NOT EXISTS mail_vacant BOOLEAN;
+ALTER TABLE properties ADD COLUMN IF NOT EXISTS purchase_date DATE;
+ALTER TABLE properties ADD COLUMN IF NOT EXISTS purchase_amount_cents BIGINT;
+ALTER TABLE properties ADD COLUMN IF NOT EXISTS purchase_seller TEXT;
+ALTER TABLE properties ADD COLUMN IF NOT EXISTS tax_per_year_cents BIGINT;
+ALTER TABLE properties ADD COLUMN IF NOT EXISTS est_tax_percent NUMERIC(5,2);
+ALTER TABLE properties ADD COLUMN IF NOT EXISTS tax_delinquent_cents BIGINT;
+ALTER TABLE properties ADD COLUMN IF NOT EXISTS est_equity_percent NUMERIC(5,2);
+ALTER TABLE properties ADD COLUMN IF NOT EXISTS est_open_loans_cents BIGINT;
+ALTER TABLE properties ADD COLUMN IF NOT EXISTS cltv_percent NUMERIC(5,2);
+ALTER TABLE properties ADD COLUMN IF NOT EXISTS est_open_loans_count INTEGER;
+ALTER TABLE properties ADD COLUMN IF NOT EXISTS first_loan_purpose TEXT;
+ALTER TABLE properties ADD COLUMN IF NOT EXISTS first_loan_type TEXT;
+ALTER TABLE properties ADD COLUMN IF NOT EXISTS first_loan_date DATE;
+ALTER TABLE properties ADD COLUMN IF NOT EXISTS first_loan_amount_cents BIGINT;
+ALTER TABLE properties ADD COLUMN IF NOT EXISTS hud_rent INTEGER;
+ALTER TABLE properties ADD COLUMN IF NOT EXISTS property_type TEXT;
+
+-- 0024: users reset token columns
+ALTER TABLE users ADD COLUMN IF NOT EXISTS reset_token TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS reset_token_expires TIMESTAMPTZ;
+
+-- 0025: outcome_reservoir scoring snapshot columns
+ALTER TABLE outcome_reservoir ADD COLUMN IF NOT EXISTS signal_snapshot JSONB;
+ALTER TABLE outcome_reservoir ADD COLUMN IF NOT EXISTS buyer_price_cents BIGINT;
+
+-- 0025: event_type enum values (ABSENTEE_HIGH_EQUITY, LONG_OWNERSHIP_HIGH_EQUITY)
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_enum e JOIN pg_type t ON e.enumtypid = t.oid WHERE t.typname = 'event_type' AND e.enumlabel = 'ABSENTEE_HIGH_EQUITY') THEN
+    ALTER TYPE event_type ADD VALUE 'ABSENTEE_HIGH_EQUITY';
+  END IF;
+END $$;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_enum e JOIN pg_type t ON e.enumtypid = t.oid WHERE t.typname = 'event_type' AND e.enumlabel = 'LONG_OWNERSHIP_HIGH_EQUITY') THEN
+    ALTER TYPE event_type ADD VALUE 'LONG_OWNERSHIP_HIGH_EQUITY';
+  END IF;
+END $$;
+
+-- 0026: nurture funnel stage
+ALTER TABLE lead_instances DROP CONSTRAINT IF EXISTS lead_instances_funnel_stage_check;
+ALTER TABLE lead_instances ADD CONSTRAINT lead_instances_funnel_stage_check
+  CHECK (funnel_stage IN ('prospect', 'lead', 'paid_lead', 'negotiation', 'disposition', 'declined', 'nurture'));
+
+-- 0027: task_type enum values (nurture cadence)
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_enum e JOIN pg_type t ON e.enumtypid = t.oid WHERE t.typname = 'task_type' AND e.enumlabel = 'SEND_MAILER') THEN
+    ALTER TYPE task_type ADD VALUE 'SEND_MAILER';
+  END IF;
+END $$;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_enum e JOIN pg_type t ON e.enumtypid = t.oid WHERE t.typname = 'task_type' AND e.enumlabel = 'SEND_EMAIL') THEN
+    ALTER TYPE task_type ADD VALUE 'SEND_EMAIL';
+  END IF;
+END $$;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_enum e JOIN pg_type t ON e.enumtypid = t.oid WHERE t.typname = 'task_type' AND e.enumlabel = 'SEND_SMS') THEN
+    ALTER TYPE task_type ADD VALUE 'SEND_SMS';
+  END IF;
+END $$;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_enum e JOIN pg_type t ON e.enumtypid = t.oid WHERE t.typname = 'task_type' AND e.enumlabel = 'NURTURE_CALL') THEN
+    ALTER TYPE task_type ADD VALUE 'NURTURE_CALL';
+  END IF;
+END $$;
+
 COMMIT;

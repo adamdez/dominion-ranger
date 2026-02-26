@@ -3,7 +3,7 @@ import 'dotenv/config';
 
 export default defineConfig({
   schema: './src/db/schema/index.ts',
-  out: './src/db/migrations',
+  out: './migrations',  // Baseline is the source of truth
   dialect: 'postgresql',
   dbCredentials: {
     url: process.env.DATABASE_URL!,
