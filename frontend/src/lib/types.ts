@@ -178,7 +178,7 @@ export interface RankedLead {
 
 // ─── Funnel ──────────────────────────────────────────
 
-export type FunnelStage = 'prospect' | 'lead' | 'paid_lead' | 'negotiation' | 'disposition' | 'declined';
+export type FunnelStage = 'prospect' | 'lead' | 'paid_lead' | 'negotiation' | 'disposition' | 'declined' | 'nurture';
 
 export interface FunnelLead {
   leadInstanceId: string;
@@ -217,6 +217,7 @@ export interface FunnelStats {
   negotiation: number;
   disposition: number;
   declined: number;
+  nurture: number;
 }
 
 // ─── Prospects ───────────────────────────────────────

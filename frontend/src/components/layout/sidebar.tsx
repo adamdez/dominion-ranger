@@ -15,6 +15,7 @@ import {
   UserCheck,
   DollarSign,
   Handshake,
+  HeartHandshake,
   Package,
   Kanban,
   BarChart3,
@@ -55,6 +56,7 @@ const navGroups: NavGroup[] = [
       { href: '/paid-leads', label: 'Paid Leads', icon: DollarSign, funnelStage: 'paid_lead' },
       { href: '/negotiation', label: 'Negotiation', icon: Handshake, funnelStage: 'negotiation' },
       { href: '/disposition', label: 'Disposition', icon: Package, funnelStage: 'disposition' },
+      { href: '/nurture', label: 'Nurture', icon: HeartHandshake, funnelStage: 'nurture' },
     ],
   },
   {

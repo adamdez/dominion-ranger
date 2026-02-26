@@ -137,7 +137,7 @@ export async function exportRoutes(app: FastifyInstance): Promise<void> {
     { preHandler: [requireRole('properties.read')] },
     async (request, reply) => {
       const { stage } = request.params;
-      const validStages = ['lead', 'paid_lead', 'negotiation', 'disposition'] as const;
+      const validStages = ['lead', 'paid_lead', 'negotiation', 'disposition', 'nurture'] as const;
       if (!validStages.includes(stage as typeof validStages[number])) {
         return reply.code(400).send({ error: 'INVALID_STAGE', message: `Invalid funnel stage: ${stage}` });
       }

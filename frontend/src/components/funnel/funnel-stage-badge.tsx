@@ -10,6 +10,7 @@ const STAGE_CONFIG: Record<FunnelStage, { label: string; className: string }> = 
   negotiation: { label: 'Negotiation', className: 'border-amber-500/30 bg-amber-500/10 text-amber-400' },
   disposition: { label: 'Disposition', className: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-400' },
   declined: { label: 'Declined', className: 'border-red-500/30 bg-red-500/10 text-red-400' },
+  nurture: { label: 'Nurture', className: 'border-teal-500/30 bg-teal-500/10 text-teal-400' },
 };
 
 export function FunnelStageBadge({ stage, declinedCount }: { stage: FunnelStage; declinedCount?: number }) {

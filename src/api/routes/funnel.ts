@@ -7,14 +7,16 @@ import { requireRole } from '../middleware/auth.js';
 import { logger } from '../../config/logger.js';
 import { z } from 'zod';
 
-type FunnelStage = 'prospect' | 'lead' | 'paid_lead' | 'negotiation' | 'disposition' | 'declined';
+type FunnelStage = 'prospect' | 'lead' | 'paid_lead' | 'negotiation' | 'disposition' | 'declined' | 'nurture';
 
 const VALID_TRANSITIONS: Record<string, string[]> = {
   prospect: ['lead', 'paid_lead'],
-  lead: ['negotiation'],
-  paid_lead: ['negotiation'],
-  negotiation: ['disposition'],
-  declined: ['lead'],
+  lead: ['negotiation', 'nurture'],
+  paid_lead: ['negotiation', 'nurture'],
+  negotiation: ['disposition', 'nurture'],
+  disposition: ['nurture'],
+  declined: ['lead', 'nurture'],
+  nurture: ['lead', 'declined'],
 };
 
 const STAGE_LABELS: Record<string, string> = {
@@ -24,11 +26,12 @@ const STAGE_LABELS: Record<string, string> = {
   negotiation: 'Negotiation',
   disposition: 'Disposition',
   declined: 'Declined',
+  nurture: 'Nurture',
 };
 
 const advanceBody = z.object({
   leadInstanceId: z.string().uuid(),
-  targetStage: z.enum(['lead', 'paid_lead', 'negotiation', 'disposition']),
+  targetStage: z.enum(['lead', 'paid_lead', 'negotiation', 'disposition', 'nurture']),
   offerAmountCents: z.number().int().positive().optional(),
   notes: z.string().optional(),
 });
@@ -226,6 +229,7 @@ export async function funnelRoutes(app: FastifyInstance): Promise<void> {
         negotiation: stageMap['negotiation'] ?? 0,
         disposition: stageMap['disposition'] ?? 0,
         declined: stageMap['declined'] ?? 0,
+        nurture: stageMap['nurture'] ?? 0,
       };
     },
   );
@@ -236,7 +240,7 @@ export async function funnelRoutes(app: FastifyInstance): Promise<void> {
     { preHandler: [requireRole('properties.read')] },
     async (request, reply) => {
       const { stage } = request.params;
-      const validStages = ['prospect', 'lead', 'paid_lead', 'negotiation', 'disposition', 'declined'];
+      const validStages = ['prospect', 'lead', 'paid_lead', 'negotiation', 'disposition', 'declined', 'nurture'];
       if (!validStages.includes(stage)) {
         return reply.code(400).send({ error: 'INVALID_STAGE', message: `Invalid funnel stage: ${stage}` });
       }

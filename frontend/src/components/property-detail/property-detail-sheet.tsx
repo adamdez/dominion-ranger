@@ -48,7 +48,7 @@ import {
   UserPlus, Shield, Phone, MessageSquare, Send, FileText,
   CheckCircle, XCircle, AlertTriangle, SearchCheck, Zap,
   Mail, MapPin, Home, Calendar, TrendingUp, ArrowRight,
-  ClipboardCheck, DollarSign,
+  ClipboardCheck, DollarSign, HeartHandshake,
 } from 'lucide-react';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel,
@@ -1156,9 +1156,11 @@ function FunnelActionBar({
     negotiation: { forward: { label: 'Mark Accepted', stage: 'disposition' }, canDecline: true },
     disposition: { forward: undefined, canDecline: false },
     declined: { forward: { label: 'Re-engage', stage: 'lead' }, canDecline: false },
+    nurture: { forward: { label: 'Move to Leads', stage: 'lead' }, canDecline: true },
   };
 
   const config = actions[funnelStage] ?? actions.prospect;
+  const canMoveToNurture = funnelStage !== 'nurture' && funnelStage !== 'prospect';
 
   return (
     <div className="mx-6 mb-2 rounded-md border border-border bg-muted/30 px-4 py-2 flex items-center justify-between">
@@ -1170,6 +1172,12 @@ function FunnelActionBar({
         {config.forward && (
           <Button size="sm" disabled={loading} onClick={() => onAdvance(config.forward!.stage)}>
             {config.forward.label}
+          </Button>
+        )}
+        {canMoveToNurture && (
+          <Button size="sm" variant="outline" disabled={loading} onClick={() => onAdvance('nurture')} className="gap-1">
+            <HeartHandshake className="h-3.5 w-3.5" />
+            Move to Nurture
           </Button>
         )}
         {config.canDecline && (

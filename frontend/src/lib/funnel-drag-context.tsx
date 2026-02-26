@@ -41,6 +41,7 @@ const STAGE_LABELS: Record<string, string> = {
   negotiation: 'Negotiation',
   disposition: 'Disposition',
   declined: 'Declined',
+  nurture: 'Nurture',
 };
 
 export function FunnelDragProvider({ children }: { children: ReactNode }) {
