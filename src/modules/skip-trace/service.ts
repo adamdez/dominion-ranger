@@ -17,6 +17,8 @@ import { logger } from '../../config/logger.js';
 import { env } from '../../config/env.js';
 import { NotFoundError } from '../../lib/errors.js';
 import { logActivity } from '../analytics/activity-logger.js';
+import { domainEvents } from '../../events/bus.js';
+import { normalizeTracerfyQueuesResponse } from '../../lib/tracerfy-queues.js';
 
 const TRACERFY_BASE_URL = 'https://tracerfy.com/v1/api';
 const TRACERFY_API_KEY = env.TRACERFY_API_KEY ?? '';
@@ -223,8 +225,15 @@ async function tracerFySkipTrace(property: {
       headers: { Authorization: `Bearer ${TRACERFY_API_KEY}` },
     });
     const pollStatus = queuesRes.status;
-    const queues = await queuesRes.json() as Array<{ id: number; pending: boolean; credits_deducted?: number }>;
-    const ourQueue = queues.find(q => q.id === queueId);
+    let parsed: unknown;
+    try {
+      parsed = await queuesRes.json();
+    } catch (err) {
+      logger.error({ err }, 'Tracerfy /queues/: Failed to parse response as JSON');
+      throw new Error('Tracerfy /queues/: Invalid JSON response');
+    }
+    const queues = normalizeTracerfyQueuesResponse(parsed);
+    const ourQueue = queues.find((q) => q.id === queueId) as { id: number; pending: boolean; credits_deducted?: number } | undefined;
 
     if (attempt % 5 === 0 || (ourQueue && !ourQueue.pending)) {
       logger.info(
@@ -550,6 +559,11 @@ export async function skipTraceProperty(
     { dominionLeadId, tier, success: result.success, source: result.source, costCents: result.costCents },
     result.success ? 'Skip trace completed' : 'Skip trace failed',
   );
+
+  domainEvents.emit('skip_trace.completed', {
+    dominionLeadId,
+    success: result.success,
+  });
 
   return result;
 }

@@ -41,6 +41,14 @@ const envSchema = z.object({
 
   // Auto-pipeline (disabled by default — enable explicitly)
   AUTO_PIPELINE_ENABLED: z.coerce.boolean().default(false),
+  // Repeatable ingestion jobs (scheduleIngestionJobs + startScheduler). Requires AUTO_PIPELINE_ENABLED=true.
+  INGESTION_SCHEDULER_ENABLED: z.coerce.boolean().default(false),
+
+  // Call-Ready Auto Queue (wholesaling)
+  CALL_READY_ENABLED: z.coerce.boolean().default(false),
+  CALL_READY_SCORE_THRESHOLD: z.coerce.number().default(40),
+  CALL_READY_COOLDOWN_HOURS: z.coerce.number().default(24),
+  CALL_READY_CLAIM_OWNED_ONLY: z.coerce.boolean().default(false),
 });
 
 function loadEnv() {

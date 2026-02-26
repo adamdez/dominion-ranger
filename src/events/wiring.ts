@@ -64,7 +64,7 @@ export function wireEventHandlers(): void {
     }
   });
 
-  // ─── Scoring Completed → activity log ───────────
+  // ─── Scoring Completed → activity log + call-ready auto queue ──
   domainEvents.on('scoring.completed', async ({ dominionLeadId, scoreId, compositeScore }) => {
     await logAudit({
       dominionLeadId,
@@ -81,6 +81,24 @@ export function wireEventHandlers(): void {
       });
     } catch (err: unknown) {
       logger.error({ err, dominionLeadId }, 'Failed to log scoring activity');
+    }
+
+    try {
+      const { evaluateAndEnqueueCallReady } = await import('../modules/call-ready/service.js');
+      await evaluateAndEnqueueCallReady(dominionLeadId, 'scoring');
+    } catch (err: unknown) {
+      logger.error({ err, dominionLeadId }, 'Call-ready evaluation failed after scoring');
+    }
+  });
+
+  // ─── Skip Trace Completed → call-ready auto queue ──
+  domainEvents.on('skip_trace.completed', async ({ dominionLeadId, success }) => {
+    if (!success) return;
+    try {
+      const { evaluateAndEnqueueCallReady } = await import('../modules/call-ready/service.js');
+      await evaluateAndEnqueueCallReady(dominionLeadId, 'skip_trace');
+    } catch (err: unknown) {
+      logger.error({ err, dominionLeadId }, 'Call-ready evaluation failed after skip trace');
     }
   });
 

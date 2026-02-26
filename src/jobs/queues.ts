@@ -4,22 +4,38 @@ import { env } from '../config/env.js';
 import { logger } from '../config/logger.js';
 import { runAdapterPipeline } from '../ingestion/pipeline.js';
 
+/** Queue names — used by queues, workers, and scripts. Do not change. */
+export const QUEUE_NAMES = {
+  ingestion: 'ranger-ingestion',
+  scoring: 'ranger-scoring',
+  sentinel: 'ranger-sentinel',
+} as const;
+
+const PIPELINE_DISABLED_MSG =
+  'Queue unavailable — AUTO_PIPELINE_ENABLED is false. Enable pipeline to use BullMQ queues.';
+
 let _connection: IORedis | null = null;
 let _ingestionQueue: Queue | null = null;
 let _scoringQueue: Queue | null = null;
 let _sentinelQueue: Queue | null = null;
 
 function getConnection(): ConnectionOptions {
+  if (!env.AUTO_PIPELINE_ENABLED) {
+    throw new Error(PIPELINE_DISABLED_MSG);
+  }
   if (!_connection) {
     _connection = new IORedis(env.REDIS_URL, { maxRetriesPerRequest: null });
   }
   return _connection as unknown as ConnectionOptions;
 }
 
-/** Scheduled ingestion runs per adapter */
+/** Scheduled ingestion runs per adapter. Throws when AUTO_PIPELINE_ENABLED=false. */
 export function getIngestionQueue(): Queue {
+  if (!env.AUTO_PIPELINE_ENABLED) {
+    throw new Error(PIPELINE_DISABLED_MSG);
+  }
   if (!_ingestionQueue) {
-    _ingestionQueue = new Queue('ranger-ingestion', {
+    _ingestionQueue = new Queue(QUEUE_NAMES.ingestion, {
       connection: getConnection(),
       defaultJobOptions: {
         removeOnComplete: { count: 100 },
@@ -32,10 +48,13 @@ export function getIngestionQueue(): Queue {
   return _ingestionQueue;
 }
 
-/** Batch scoring recalculations */
+/** Batch scoring recalculations. Throws when AUTO_PIPELINE_ENABLED=false. */
 export function getScoringQueue(): Queue {
+  if (!env.AUTO_PIPELINE_ENABLED) {
+    throw new Error(PIPELINE_DISABLED_MSG);
+  }
   if (!_scoringQueue) {
-    _scoringQueue = new Queue('ranger-scoring', {
+    _scoringQueue = new Queue(QUEUE_NAMES.scoring, {
       connection: getConnection(),
       defaultJobOptions: {
         removeOnComplete: { count: 500 },
@@ -48,10 +67,13 @@ export function getScoringQueue(): Queue {
   return _scoringQueue;
 }
 
-/** Sentinel webhook retries */
+/** Sentinel webhook retries. Throws when AUTO_PIPELINE_ENABLED=false. */
 export function getSentinelQueue(): Queue {
+  if (!env.AUTO_PIPELINE_ENABLED) {
+    throw new Error(PIPELINE_DISABLED_MSG);
+  }
   if (!_sentinelQueue) {
-    _sentinelQueue = new Queue('ranger-sentinel', {
+    _sentinelQueue = new Queue(QUEUE_NAMES.sentinel, {
       connection: getConnection(),
       defaultJobOptions: {
         removeOnComplete: { count: 200 },
@@ -116,7 +138,15 @@ function scheduleWithSetInterval(): void {
   }, 24 * 60 * 60 * 1000);
 }
 
+/** Schedules repeatable ingestion jobs. Requires AUTO_PIPELINE_ENABLED=true AND INGESTION_SCHEDULER_ENABLED=true. */
 export async function scheduleIngestionJobs(): Promise<void> {
+  if (!env.AUTO_PIPELINE_ENABLED || !env.INGESTION_SCHEDULER_ENABLED) {
+    logger.info(
+      { AUTO_PIPELINE_ENABLED: env.AUTO_PIPELINE_ENABLED, INGESTION_SCHEDULER_ENABLED: env.INGESTION_SCHEDULER_ENABLED },
+      'scheduleIngestionJobs skipped',
+    );
+    return;
+  }
   try {
     const queue = getIngestionQueue();
 
@@ -155,7 +185,10 @@ export async function scheduleIngestionJobs(): Promise<void> {
   }
 }
 
-/** Lazy connection getter for consumers that need raw Redis (e.g. worker). */
+/** Lazy connection getter for consumers that need raw Redis (e.g. worker). Throws when AUTO_PIPELINE_ENABLED=false. */
 export function getRedisConnection(): IORedis {
+  if (!env.AUTO_PIPELINE_ENABLED) {
+    throw new Error(PIPELINE_DISABLED_MSG);
+  }
   return _connection ?? (getConnection() as unknown as IORedis);
 }

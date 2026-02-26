@@ -83,8 +83,11 @@ async function runRegridIngestion(): Promise<void> {
 }
 
 export function startScheduler(): void {
-  if (!env.AUTO_PIPELINE_ENABLED) {
-    logger.info('Scheduler disabled (AUTO_PIPELINE_ENABLED=false)');
+  if (!env.AUTO_PIPELINE_ENABLED || !env.INGESTION_SCHEDULER_ENABLED) {
+    logger.info(
+      { AUTO_PIPELINE_ENABLED: env.AUTO_PIPELINE_ENABLED, INGESTION_SCHEDULER_ENABLED: env.INGESTION_SCHEDULER_ENABLED },
+      'Scheduler disabled',
+    );
     return;
   }
 

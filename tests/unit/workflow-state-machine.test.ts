@@ -15,7 +15,7 @@ type LeadStatus =
   | 'CLOSED' | 'DEAD';
 
 const VALID_TRANSITIONS: Record<string, LeadStatus[]> = {
-  PROMOTED:            ['ASSIGNED', 'DEAD'],
+  PROMOTED:            ['ASSIGNED', 'COMPLIANCE_PENDING', 'DEAD'],
   ASSIGNED:            ['COMPLIANCE_PENDING', 'DEAD'],
   COMPLIANCE_PENDING:  ['DIAL_READY', 'DEAD'],
   DIAL_READY:          ['DIALING', 'DEAD'],
@@ -35,6 +35,7 @@ describe('Workflow State Machine', () => {
   describe('Valid transitions', () => {
     const validPairs: [LeadStatus, LeadStatus][] = [
       ['PROMOTED', 'ASSIGNED'],
+      ['PROMOTED', 'COMPLIANCE_PENDING'],
       ['PROMOTED', 'DEAD'],
       ['ASSIGNED', 'COMPLIANCE_PENDING'],
       ['COMPLIANCE_PENDING', 'DIAL_READY'],

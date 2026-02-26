@@ -13,7 +13,7 @@ import { NotFoundError, ValidationError, ConcurrencyError, ComplianceError } fro
 type LeadStatusType = LeadInstance['status'];
 
 const VALID_TRANSITIONS: Record<string, LeadStatusType[]> = {
-  [LeadStatus.PROMOTED]:            [LeadStatus.ASSIGNED, LeadStatus.DEAD],
+  [LeadStatus.PROMOTED]:            [LeadStatus.ASSIGNED, LeadStatus.COMPLIANCE_PENDING, LeadStatus.DEAD],
   [LeadStatus.ASSIGNED]:            [LeadStatus.COMPLIANCE_PENDING, LeadStatus.DEAD],
   [LeadStatus.COMPLIANCE_PENDING]:  [LeadStatus.DIAL_READY, LeadStatus.DEAD],
   [LeadStatus.DIAL_READY]:          [LeadStatus.DIALING, LeadStatus.DEAD],
@@ -169,9 +169,9 @@ export async function runComplianceGating(leadInstanceId: string): Promise<LeadI
 
   if (!instance) throw new NotFoundError('LeadInstance', leadInstanceId);
 
-  // Phase 1: transition to COMPLIANCE_PENDING
+  // Phase 1: transition to COMPLIANCE_PENDING (from ASSIGNED or PROMOTED for auto-queue)
   let current = instance;
-  if (current.status === LeadStatus.ASSIGNED) {
+  if (current.status === LeadStatus.ASSIGNED || current.status === LeadStatus.PROMOTED) {
     if (!isValidTransition(current.status, LeadStatus.COMPLIANCE_PENDING)) {
       throw new ValidationError(`Cannot run compliance from status ${current.status}`);
     }

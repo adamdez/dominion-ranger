@@ -122,12 +122,12 @@ function createWorkers(): void {
  */
 export async function startWorkers(): Promise<void> {
   if (!env.AUTO_PIPELINE_ENABLED) {
-    logger.info('Workers disabled (AUTO_PIPELINE_ENABLED=false)');
+    logger.info('Workers not started (AUTO_PIPELINE_ENABLED=false)');
     return;
   }
   createWorkers();
   initializeAdapters();
-  logger.info('All BullMQ workers started');
+  logger.info('BullMQ workers started (ingestion, scoring, sentinel)');
 }
 
 /**

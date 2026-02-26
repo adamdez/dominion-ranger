@@ -13,6 +13,7 @@ export interface DomainEvents {
   'distress_event.ingested': { eventId: string; dominionLeadId: string; eventType: string; eventLayer: string };
   'scoring.completed': { dominionLeadId: string; scoreId: string; compositeScore: number };
   'lead.promoted': { promotionId: string; dominionLeadId: string; compositeScore: number; marketingTier: string };
+  'skip_trace.completed': { dominionLeadId: string; success: boolean };
   'sentinel.exported': { dominionLeadId: string; promotionId: string };
   'sentinel.status_received': { dominionLeadId: string; status: string };
   'audit.logged': { logId: string; actionType: string };

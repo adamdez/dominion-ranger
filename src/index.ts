@@ -14,6 +14,8 @@ async function main(): Promise<void> {
   logger.info('║   DOMINION RANGER — Intelligence Engine  ║');
   logger.info('║   Signal → Score → Rank → Promote        ║');
   logger.info('╚══════════════════════════════════════════╝');
+  logger.info(`Pipeline enabled: ${env.AUTO_PIPELINE_ENABLED}`);
+  logger.info(`Scheduler enabled: ${env.AUTO_PIPELINE_ENABLED && env.INGESTION_SCHEDULER_ENABLED}`);
 
   // Step 1: Verify database connection
   const dbOk = await checkDatabaseConnection();
@@ -33,20 +35,18 @@ async function main(): Promise<void> {
   // Step 4: Wire domain event handlers
   wireEventHandlers();
 
-  // Step 5–7: Workers, scheduler, and ingestion jobs — ONLY when auto-pipeline enabled
+  // Step 5–7: Workers when auto-pipeline enabled; scheduler/repeatables only when both flags true
   if (env.AUTO_PIPELINE_ENABLED) {
-    logger.info('Auto-pipeline ENABLED — starting scheduler, worker, and ingestion jobs');
     await startWorkers();
-    try {
-      await scheduleIngestionJobs();
-      logger.info('Ingestion jobs scheduled');
-    } catch (err) {
-      logger.warn({ err }, 'Could not schedule BullMQ jobs (Redis may be unavailable)');
+
+    if (env.INGESTION_SCHEDULER_ENABLED) {
+      try {
+        await scheduleIngestionJobs();
+        startScheduler();
+      } catch (err) {
+        logger.warn({ err }, 'Could not schedule BullMQ jobs (Redis may be unavailable)');
+      }
     }
-    startScheduler();
-    logger.info('Pipeline scheduler started');
-  } else {
-    logger.info('Auto-pipeline DISABLED — server will only handle API requests');
   }
 
   // Step 8: Start API server
@@ -57,7 +57,9 @@ async function main(): Promise<void> {
     logger.info({ signal }, 'Shutdown signal received');
 
     if (env.AUTO_PIPELINE_ENABLED) {
-      stopScheduler();
+      if (env.INGESTION_SCHEDULER_ENABLED) {
+        stopScheduler();
+      }
       await stopWorkers();
     }
     await app.close();

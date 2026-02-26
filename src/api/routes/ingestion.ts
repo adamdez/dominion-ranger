@@ -1,5 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { eq, desc } from 'drizzle-orm';
+import { env } from '../../config/env.js';
 import { getIngestionQueue } from '../../jobs/queues.js';
 import { db } from '../../db/connection.js';
 import { marketConfigs, adapterRunHistory } from '../../db/schema/index.js';
@@ -18,7 +19,13 @@ export async function ingestionRoutes(app: FastifyInstance): Promise<void> {
   }>(
     '/api/ingestion/run',
     { preHandler: [requireRole('pipeline.run')] },
-    async (request) => {
+    async (request, reply) => {
+      if (!env.AUTO_PIPELINE_ENABLED) {
+        return reply.code(503).send({
+          error: 'PIPELINE_DISABLED',
+          message: 'Auto-pipeline is disabled. Set AUTO_PIPELINE_ENABLED=true to use queue-based ingestion.',
+        });
+      }
       const body = ingestionRunBody.parse(request.body);
       const { adapter, options } = body ?? {};
       const adapterName = adapter ?? '__all__';

@@ -26,6 +26,7 @@ import { properties } from '../../db/schema/index.js';
 import { eq, isNull, or, and, sql } from 'drizzle-orm';
 import { logger } from '../../config/logger.js';
 import { env } from '../../config/env.js';
+import { normalizeTracerfyQueuesResponse } from '../../lib/tracerfy-queues.js';
 
 // ─── Configuration ──────────────────────────────────
 
@@ -268,8 +269,9 @@ async function submitTrace(csvContent: string, traceType: 'normal' | 'enhanced' 
 async function pollForCompletion(queueId: number): Promise<TracerFyQueueResult> {
   for (let attempt = 0; attempt < MAX_POLL_ATTEMPTS; attempt++) {
     // Use /queues/ to check pending status — it shows all queues with metadata
-    const queues = await tracerFyRequest<TracerFyQueueResult[]>('/queues/');
-    const ourQueue = queues.find((q) => q.id === queueId);
+    const raw = await tracerFyRequest<unknown>('/queues/');
+    const queues = normalizeTracerfyQueuesResponse(raw);
+    const ourQueue = queues.find((q) => q.id === queueId) as TracerFyQueueResult | undefined;
 
     if (ourQueue && !ourQueue.pending) {
       logger.info(
