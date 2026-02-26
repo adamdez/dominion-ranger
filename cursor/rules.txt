@@ -1,3 +1,13 @@
+═══════════════════════════════════════════════════════════════
+STOP — READ BEFORE WRITING ANY CODE
+═══════════════════════════════════════════════════════════════
+NEVER run `npx drizzle-kit push` — it DROPS ALL TABLES and destroys all data.
+NEVER run `npx drizzle-kit generate` against production.
+For schema changes: write SQL migration with IF NOT EXISTS guards.
+Apply with: npx tsx src/scripts/run-migration.ts <filename>
+See .cursor/rules/database-safety.mdc
+═══════════════════════════════════════════════════════════════
+
 ETERNAL CHARTER v2.3
 Infrastructure-First. Speed-Optimized. Rewrite-Proof.
 Effective: February 21, 2026

@@ -70,8 +70,8 @@ jobs:
           cache: npm
 
       - run: npm ci
-      - name: Push schema to test database
-        run: npx drizzle-kit push --force
+      - name: Apply baseline migration
+        run: psql $DATABASE_URL -f migrations/0001_baseline.sql
       - name: Verify schema tables exist
         run: npx tsx scripts/ci-verify-schema.ts
       - name: Seed test database
@@ -124,6 +124,8 @@ jobs:
           cache: npm
 
       - run: npm ci
+      - name: Guard against production (drizzle-kit push protection)
+        run: npx tsx scripts/guard-drizzle-push.ts
       - name: Run migrations
         run: npx drizzle-kit migrate
       - name: Verify no pending changes

@@ -1,1 +1,27 @@
-CRITICAL: NEVER run `npx drizzle-kit push` or `drizzle-kit push`. It drops and recreates all database tables, destroying ALL data. This has happened multiple times. For schema changes, create a new SQL migration file in src/db/migrations/ with IF NOT EXISTS guards and run it with `npx tsx src/scripts/run-migration.ts <filename>`.
+CRITICAL RULES — VIOLATING THESE WILL DESTROY PRODUCTION DATA:
+
+1. NEVER run `npx drizzle-kit push`, `drizzle-kit push`, or any drizzle-kit push variant.
+   It drops ALL tables and recreates them, wiping every property, event, score, and lead.
+   This has happened 3+ times already. There is NO recovery except full reimport.
+   CI runs scripts/guard-drizzle-push.ts before migrations — blocks if DATABASE_URL points to Neon.
+
+2. NEVER run `npx drizzle-kit generate` against production DATABASE_URL.
+   For schema changes: write a SQL migration file in src/db/migrations/ with IF NOT EXISTS guards.
+   Apply with: npx tsx src/scripts/run-migration.ts <filename>
+
+3. The baseline migration is migrations/0001_baseline.sql — this is the single source of truth.
+   CI uses this file to set up test databases. Keep it in sync with any new migrations.
+
+4. Domain boundaries are sacred:
+   - Signal domain: writes raw_signals, distress_events. Never touches scoring or workflow.
+   - Scoring domain: reads events, writes scoring_records. Never touches workflow.
+   - Promotion domain: reads scoring_records, writes promoted_leads/lead_instances. Never modifies events.
+   - Workflow domain: manages lead_instances. Never modifies scoring_records.
+
+5. Append-only tables: distress_events, scoring_records, activity_log
+   Database triggers prevent UPDATE/DELETE. Do not try to work around them.
+
+6. All property upserts use ON CONFLICT DO UPDATE on (apn, county).
+   Never use SELECT-then-INSERT patterns.
+
+7. AUTO_PIPELINE_ENABLED defaults to false. Don't enable it without explicit instruction.
