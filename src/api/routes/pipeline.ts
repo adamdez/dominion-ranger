@@ -3,7 +3,6 @@ import { z } from 'zod';
 import { requireRole } from '../middleware/auth.js';
 import { autoImportNewFiles } from '../../jobs/auto-import.js';
 import { incrementalScore } from '../../jobs/incremental-scoring.js';
-import { autoPromote } from '../../jobs/auto-promotion.js';
 import { fullRescore } from '../../jobs/full-rescore.js';
 import {
   getPipelineToggles,
@@ -24,13 +23,12 @@ export async function pipelineRoutes(app: FastifyInstance): Promise<void> {
     '/api/pipeline/status',
     { preHandler: [requireRole('pipeline.run')] },
     async () => {
-      const [enabled, toggles, lastImport, lastScoring, lastPromotion, lastRescore] =
+      const [enabled, toggles, lastImport, lastScoring, lastRescore] =
         await Promise.all([
           isPipelineEnabled(),
           getPipelineToggles(),
           getLastJobResult('import'),
           getLastJobResult('scoring'),
-          getLastJobResult('promotion'),
           getLastJobResult('rescore'),
         ]);
 
@@ -40,7 +38,6 @@ export async function pipelineRoutes(app: FastifyInstance): Promise<void> {
         lastRuns: {
           import: lastImport,
           scoring: lastScoring,
-          promotion: lastPromotion,
           rescore: lastRescore,
         },
       };
@@ -114,23 +111,6 @@ export async function pipelineRoutes(app: FastifyInstance): Promise<void> {
         logger.error({ err }, 'Manual scoring trigger failed');
         return reply.code(500).send({
           error: 'SCORING_FAILED',
-          message: err instanceof Error ? err.message : 'Unknown error',
-        });
-      }
-    },
-  );
-
-  app.post(
-    '/api/system/run-promotion',
-    { preHandler: [requireRole('pipeline.run')] },
-    async (_request, reply) => {
-      try {
-        const result = await autoPromote();
-        return reply.send({ status: 'completed', ...result });
-      } catch (err: unknown) {
-        logger.error({ err }, 'Manual promotion trigger failed');
-        return reply.code(500).send({
-          error: 'PROMOTION_FAILED',
           message: err instanceof Error ? err.message : 'Unknown error',
         });
       }

@@ -4,7 +4,6 @@ import { env } from '../config/env.js';
 import { logger } from '../config/logger.js';
 import { runAdapterPipeline, runFullIngestion } from '../ingestion/pipeline.js';
 import { scoreProperty } from '../modules/scoring/service.js';
-import { evaluateForPromotion } from '../modules/promotion/service.js';
 import { dispatchToSentinel } from '../modules/sentinel/service.js';
 import { getPropertyById } from '../modules/properties/service.js';
 import type { IngestionJobData, ScoringJobData, SentinelDispatchJobData } from './queues.js';
@@ -47,13 +46,10 @@ const scoringWorker = new Worker<ScoringJobData>(
 
     const result = await scoreProperty(dominionLeadId);
 
-    // Auto-evaluate for promotion after scoring
-    const promotion = await evaluateForPromotion(dominionLeadId, result);
-
     return {
       dominionLeadId,
       compositeScore: result.compositeScore,
-      promoted: !!promotion,
+      promoted: false,
     };
   },
   {

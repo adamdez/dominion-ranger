@@ -38,6 +38,9 @@ const envSchema = z.object({
 
   // Public URL for webhooks (validated at runtime, not on startup)
   BASE_URL: z.string().optional().transform(v => (v && v.trim() ? v.trim() : undefined)),
+
+  // Auto-pipeline (disabled by default — enable explicitly)
+  AUTO_PIPELINE_ENABLED: z.coerce.boolean().default(false),
 });
 
 function loadEnv() {

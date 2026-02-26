@@ -229,7 +229,7 @@ export async function prospectRoutes(app: FastifyInstance): Promise<void> {
 
           const instance = await createLeadInstance({
             dominionLeadId: prop.dominionLeadId,
-            promotionId: prop.dominionLeadId,
+            promotionId: null,
           });
 
           promotedInstances.push({

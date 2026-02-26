@@ -34,21 +34,24 @@ function isValidTransition(from: LeadStatusType, to: LeadStatusType): boolean {
 // ─── Core Operations ───────────────────────────────
 
 /**
- * Create a lead instance from a promotion.
+ * Create a lead instance (from promotion or manual add to funnel).
  * Charter: One active lead_instance per property.
  *
  * Uses atomic INSERT ... SELECT ... WHERE NOT EXISTS to prevent race conditions.
  * Two concurrent promotions for the same property will only create one instance.
+ *
+ * promotionId is optional — null for manual funnel adds (no promoted_leads record).
  */
 export async function createLeadInstance(input: {
   dominionLeadId: string;
-  promotionId: string;
+  promotionId?: string | null;
 }): Promise<LeadInstance> {
   const leadInstanceId = generateId();
+  const promotionId = input.promotionId ?? null;
 
   const result = await db.execute<LeadInstance>(sql`
     INSERT INTO lead_instances (lead_instance_id, dominion_lead_id, promotion_id, status, version)
-    SELECT ${leadInstanceId}, ${input.dominionLeadId}, ${input.promotionId}, ${LeadStatus.PROMOTED}, 1
+    SELECT ${leadInstanceId}, ${input.dominionLeadId}, ${promotionId}, ${LeadStatus.PROMOTED}, 1
     WHERE NOT EXISTS (
       SELECT 1 FROM lead_instances
       WHERE dominion_lead_id = ${input.dominionLeadId}

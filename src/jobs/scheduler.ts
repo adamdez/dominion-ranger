@@ -1,5 +1,6 @@
 import cron from 'node-cron';
 import { logger } from '../config/logger.js';
+import { env } from '../config/env.js';
 import { isPipelineEnabled, getPipelineToggles } from './pipeline-settings.js';
 import { autoImportNewFiles } from './auto-import.js';
 import { incrementalScore } from './incremental-scoring.js';
@@ -82,6 +83,11 @@ async function runRegridIngestion(): Promise<void> {
 }
 
 export function startScheduler(): void {
+  if (!env.AUTO_PIPELINE_ENABLED) {
+    logger.info('Scheduler disabled (AUTO_PIPELINE_ENABLED=false)');
+    return;
+  }
+
   // Every 6 hours: check for new CSV files and auto-import
   activeTasks.push(
     cron.schedule('0 */6 * * *', () => {
@@ -93,13 +99,6 @@ export function startScheduler(): void {
   activeTasks.push(
     cron.schedule('0 * * * *', () => {
       guardedRun('scoring', incrementalScore);
-    }),
-  );
-
-  // Every hour (at :05): promote newly qualified leads
-  activeTasks.push(
-    cron.schedule('5 * * * *', () => {
-      guardedRun('promotion', autoPromote);
     }),
   );
 
@@ -125,7 +124,7 @@ export function startScheduler(): void {
   );
 
   logger.info(
-    { jobs: ['import@*/6h', 'scoring@hourly', 'promotion@hourly:05', 'rescore@2am', 'recorders@6am', 'regrid@sun3am'] },
+    { jobs: ['import@*/6h', 'scoring@hourly', 'rescore@2am', 'recorders@6am', 'regrid@sun3am'] },
     'Pipeline scheduler started',
   );
 }

@@ -1,11 +1,12 @@
+import { and, eq, sql } from 'drizzle-orm';
 import type { NormalizedRecord } from './adapters/interface.js';
 import { getAllIngestionAdapters } from './adapters/registry.js';
 import { findOrCreateProperty } from '../modules/properties/service.js';
+import { db } from '../db/connection.js';
+import { properties } from '../db/schema/index.js';
 import { ingestDistressEvent } from '../modules/distress-events/service.js';
 import { recalculateSignalAccumulation } from '../modules/signals/service.js';
 import { scoreProperty } from '../modules/scoring/service.js';
-import { evaluateForPromotion } from '../modules/promotion/service.js';
-import { dispatchToSentinel } from '../modules/sentinel/service.js';
 import { logAudit } from '../modules/compliance/service.js';
 import { withRunLogging } from './run-logger.js';
 import { logger } from '../config/logger.js';
@@ -20,6 +21,7 @@ export interface PipelineStats {
   propertiesScored: number;
   leadsPromoted: number;
   sentinelDispatched: number;
+  skippedExisting: number;
   errors: number;
   durationMs: number;
 }
@@ -58,9 +60,22 @@ async function runAdapterPipelineInternal(adapterName: string, options?: Record<
     propertiesScored: 0,
     leadsPromoted: 0,
     sentinelDispatched: 0,
+    skippedExisting: 0,
     errors: 0,
     durationMs: 0,
   };
+
+  // Pre-fetch existing (apn, county) for O(1) skip lookup
+  const existingApnCounty = new Set(
+    (await db
+      .select({ apn: properties.apn, county: properties.county })
+      .from(properties)
+      .where(and(
+        sql`${properties.apn} IS NOT NULL`,
+        sql`${properties.county} IS NOT NULL`,
+      )))
+      .map((r) => `${r.apn}|${r.county}`),
+  );
 
   logger.info({ adapter: adapterName }, 'Pipeline run started');
 
@@ -68,7 +83,7 @@ async function runAdapterPipelineInternal(adapterName: string, options?: Record<
     for await (const batch of adapter.fetchRecords(options)) {
       for (const record of batch) {
         try {
-          await processRecord(record, stats);
+          await processRecord(record, stats, existingApnCounty);
         } catch (err) {
           stats.errors++;
           logger.error({ err, adapter: adapterName }, 'Error processing record');
@@ -82,6 +97,16 @@ async function runAdapterPipelineInternal(adapterName: string, options?: Record<
 
   stats.durationMs = Date.now() - startTime;
 
+  logger.info(
+    {
+      total: stats.recordsProcessed + stats.skippedExisting,
+      newProperties: stats.propertiesCreated + stats.propertiesUpdated,
+      skippedExisting: stats.skippedExisting,
+      errors: stats.errors,
+    },
+    'Import complete — skipped existing properties',
+  );
+
   await logAudit({
     actionType: 'pipeline.run_completed',
     metadata: stats as unknown as Record<string, unknown>,
@@ -94,18 +119,32 @@ async function runAdapterPipelineInternal(adapterName: string, options?: Record<
 /**
  * Process a single normalized record through the full pipeline.
  *
+ * Early exit: skip entirely if property already exists (apn+county match).
  * Atomic operations throughout:
  *   - Property identity via ON CONFLICT DO UPDATE (no SELECT-then-INSERT)
  *   - Event dedup via fingerprint ON CONFLICT DO NOTHING (no SELECT-then-INSERT)
  */
-export async function processRecord(record: NormalizedRecord, stats?: PipelineStats): Promise<void> {
+export async function processRecord(
+  record: NormalizedRecord,
+  stats?: PipelineStats,
+  existingApnCounty?: Set<string>,
+): Promise<void> {
   const s = stats ?? createEmptyStats();
+
+  // Early exit: skip if property already exists (avoids normalization, events, scoring)
+  const apn = record.property.apn;
+  const county = record.property.county;
+  if (apn && county && existingApnCounty?.has(`${apn}|${county}`)) {
+    s.skippedExisting++;
+    return;
+  }
 
   s.recordsProcessed++;
 
   const { property, created } = await findOrCreateProperty(record.property);
   if (created) {
     s.propertiesCreated++;
+    if (apn && county) existingApnCounty?.add(`${apn}|${county}`);
   } else {
     s.propertiesUpdated++;
   }
@@ -132,15 +171,7 @@ export async function processRecord(record: NormalizedRecord, stats?: PipelineSt
   const scoringResult = await scoreProperty(property.dominionLeadId);
   s.propertiesScored++;
 
-  const promotion = await evaluateForPromotion(property.dominionLeadId, scoringResult);
-  if (promotion) {
-    s.leadsPromoted++;
-
-    const dispatched = await dispatchToSentinel(promotion, property);
-    if (dispatched) {
-      s.sentinelDispatched++;
-    }
-  }
+  // Promotion removed — funnel management is manual
 }
 
 /**
@@ -175,6 +206,7 @@ function createEmptyStats(): PipelineStats {
     propertiesScored: 0,
     leadsPromoted: 0,
     sentinelDispatched: 0,
+    skippedExisting: 0,
     errors: 0,
     durationMs: 0,
   };

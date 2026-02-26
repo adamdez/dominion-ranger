@@ -1,5 +1,6 @@
 import { domainEvents } from './bus.js';
 import { logger } from '../config/logger.js';
+import { env } from '../config/env.js';
 import { logAudit } from '../modules/compliance/index.js';
 import { createLeadInstance } from '../modules/workflow/index.js';
 import { logActivity } from '../modules/analytics/activity-logger.js';
@@ -45,6 +46,10 @@ export function wireEventHandlers(): void {
       metadata: { eventId, eventType, eventLayer },
     });
 
+    if (!env.AUTO_PIPELINE_ENABLED) {
+      logger.debug({ dominionLeadId }, 'auto_pipeline disabled via env — skipping scoring enqueue');
+      return;
+    }
     if (await isFeatureEnabled('auto_pipeline')) {
       await enqueueForScoring(dominionLeadId);
     } else {

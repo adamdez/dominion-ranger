@@ -1,5 +1,6 @@
 import 'dotenv/config';
 import { logger } from './config/logger.js';
+import { env } from './config/env.js';
 import { checkDatabaseConnection, closeDatabase } from './db/connection.js';
 import { startServer } from './api/server.js';
 import { initializeAdapters } from './ingestion/adapters/registry.js';
@@ -35,19 +36,19 @@ async function main(): Promise<void> {
   // Step 5: Start BullMQ workers
   await startWorkers();
 
-  // Step 6: Schedule recurring jobs
-  try {
-    await scheduleIngestionJobs();
-    logger.info('Ingestion jobs scheduled');
-  } catch (err) {
-    // Redis may not be available in all environments
-    logger.warn({ err }, 'Could not schedule BullMQ jobs (Redis may be unavailable)');
-  }
-
-  // Step 7: Start pipeline scheduler (node-cron)
-  if (process.env.ENABLE_SCHEDULER !== 'false') {
+  // Step 6 & 7: Schedule jobs and scheduler — only when auto-pipeline enabled
+  if (env.AUTO_PIPELINE_ENABLED) {
+    logger.info('Auto-pipeline enabled — starting scheduler and ingestion jobs');
+    try {
+      await scheduleIngestionJobs();
+      logger.info('Ingestion jobs scheduled');
+    } catch (err) {
+      logger.warn({ err }, 'Could not schedule BullMQ jobs (Redis may be unavailable)');
+    }
     startScheduler();
     logger.info('Pipeline scheduler started');
+  } else {
+    logger.info('Auto-pipeline disabled — server will only handle API requests');
   }
 
   // Step 8: Start API server
@@ -57,7 +58,9 @@ async function main(): Promise<void> {
   const shutdown = async (signal: string) => {
     logger.info({ signal }, 'Shutdown signal received');
 
-    stopScheduler();
+    if (env.AUTO_PIPELINE_ENABLED) {
+      stopScheduler();
+    }
     await app.close();
     await closeDatabase();
 
