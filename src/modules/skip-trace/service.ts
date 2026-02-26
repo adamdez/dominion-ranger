@@ -77,6 +77,7 @@ async function tracerFySkipTrace(property: {
   absenteeOwner?: boolean | string | null;
 }): Promise<SkipTraceResult> {
   if (!TRACERFY_API_KEY) {
+    logger.error('tracerFySkipTrace: TRACERFY_API_KEY is not set in env!');
     return {
       success: false, tier: 'STANDARD', source: 'TRACERFY',
       rawResponse: {}, costCents: 0,
@@ -118,17 +119,6 @@ async function tracerFySkipTrace(property: {
     ? (property.mailZip ?? property.zip ?? '')
     : (property.zip ?? '');
 
-  logger.info(
-    {
-      dominionLeadId: property.dominionLeadId,
-      addressType: useMailAddress ? 'mailing' : 'property',
-      street: traceStreet,
-      city: traceCity,
-      state: traceState,
-    },
-    'Tracerfy skip trace: using address',
-  );
-
   const header = 'dominion_lead_id,address,city,state,zip,first_name,last_name';
   const row = [
     csvEscape(property.dominionLeadId),
@@ -141,6 +131,21 @@ async function tracerFySkipTrace(property: {
   ].join(',');
   const csvContent = `${header}\n${row}`;
 
+  logger.info(
+    {
+      dominionLeadId: property.dominionLeadId,
+      addressType: useMailAddress ? 'mailing' : 'property',
+      traceStreet,
+      traceCity,
+      traceState,
+      traceZip,
+      ownerFirst: first,
+      ownerLast: last,
+      csvRowPreview: row.substring(0, 200),
+    },
+    'tracerFySkipTrace: CSV built, submitting to Tracerfy API',
+  );
+
   const formData = new FormData();
   formData.append('csv_file', new Blob([csvContent], { type: 'text/csv' }), 'skip_trace.csv');
   formData.append('address_column', 'address');
@@ -151,23 +156,74 @@ async function tracerFySkipTrace(property: {
   formData.append('last_name_column', 'last_name');
   formData.append('trace_type', 'normal');
 
+  logger.info(
+    {
+      url: `${TRACERFY_BASE_URL}/trace/`,
+      method: 'POST',
+      hasApiKey: !!TRACERFY_API_KEY,
+      csvLength: csvContent.length,
+    },
+    'tracerFySkipTrace: submitting to Tracerfy',
+  );
+
   const submitRes = await fetch(`${TRACERFY_BASE_URL}/trace/`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${TRACERFY_API_KEY}` },
     body: formData,
   });
 
+  const responseStatus = submitRes.status;
+  const responseText = await submitRes.text();
+
+  logger.info(
+    {
+      status: responseStatus,
+      bodyPreview: responseText.substring(0, 500),
+    },
+    'tracerFySkipTrace: Tracerfy submission response',
+  );
+
   if (!submitRes.ok) {
-    const body = await submitRes.text();
+    logger.error(
+      {
+        status: responseStatus,
+        body: responseText,
+      },
+      'tracerFySkipTrace: Tracerfy API returned non-OK status',
+    );
     return {
       success: false, tier: 'STANDARD', source: 'TRACERFY',
-      rawResponse: { httpStatus: submitRes.status, body },
+      rawResponse: { httpStatus: submitRes.status, body: responseText },
       costCents: 0, error: `Tracerfy API error: ${submitRes.status}`,
     };
   }
 
-  const submitData = await submitRes.json() as { queue_id: number };
+  let submitData: { queue_id: number };
+  try {
+    submitData = JSON.parse(responseText) as { queue_id: number };
+  } catch (parseErr) {
+    logger.error(
+      {
+        responseText: responseText.substring(0, 500),
+      },
+      'tracerFySkipTrace: Failed to parse Tracerfy response as JSON',
+    );
+    return {
+      success: false, tier: 'STANDARD', source: 'TRACERFY',
+      rawResponse: {}, costCents: 0,
+      error: 'Invalid JSON response from Tracerfy',
+    };
+  }
+
   const queueId = submitData.queue_id;
+
+  logger.info(
+    {
+      queueId,
+      rawKeys: Object.keys(submitData),
+    },
+    'tracerFySkipTrace: submission parsed, starting poll',
+  );
 
   // Poll for completion (every 3s, max 3 min for single record)
   for (let attempt = 0; attempt < 60; attempt++) {
@@ -176,11 +232,26 @@ async function tracerFySkipTrace(property: {
     const queuesRes = await fetch(`${TRACERFY_BASE_URL}/queues/`, {
       headers: { Authorization: `Bearer ${TRACERFY_API_KEY}` },
     });
-    if (!queuesRes.ok) continue;
-
+    const pollStatus = queuesRes.status;
     const queues = await queuesRes.json() as Array<{ id: number; pending: boolean; credits_deducted?: number }>;
     const ourQueue = queues.find(q => q.id === queueId);
+
+    if (attempt % 5 === 0 || (ourQueue && !ourQueue.pending)) {
+      logger.info(
+        {
+          attempt,
+          pollStatus,
+          queueStatus: ourQueue ? (ourQueue.pending ? 'pending' : 'complete') : 'not_found',
+          creditsDeducted: ourQueue?.credits_deducted ?? 'unknown',
+        },
+        `tracerFySkipTrace: poll attempt ${attempt}`,
+      );
+    }
+
+    if (!queuesRes.ok) continue;
     if (!ourQueue || ourQueue.pending) continue;
+
+    logger.info({ attempt, queueId }, 'tracerFySkipTrace: queue COMPLETE');
 
     // Fetch results
     const resultRes = await fetch(`${TRACERFY_BASE_URL}/queue/${queueId}`, {
@@ -190,6 +261,16 @@ async function tracerFySkipTrace(property: {
 
     const records = await resultRes.json() as Array<Record<string, string>>;
     const record = records[0];
+
+    logger.info(
+      {
+        queueId,
+        totalRecords: records.length,
+        firstRecordKeys: record ? Object.keys(record) : 'no records',
+      },
+      'tracerFySkipTrace: results fetched',
+    );
+
     if (!record) {
       return {
         success: false, tier: 'STANDARD', source: 'TRACERFY',
@@ -216,6 +297,29 @@ async function tracerFySkipTrace(property: {
       .filter((e): e is string => !!e && e.includes('@'));
 
     const mailParts = [record.mail_address, record.mail_city, record.mail_state, record.mail_zip].filter(Boolean);
+    const mailingAddress = mailParts.length > 0 ? mailParts.join(', ') : null;
+
+    logger.info(
+      {
+        dominionLeadId: property.dominionLeadId,
+        phonesExtracted: phones.length,
+        phoneNumbers: phones.map(p => p.number).join(', '),
+        emailsExtracted: emails.length,
+        emails: emails.join(', '),
+        mailingAddress: mailingAddress ?? 'none',
+      },
+      'tracerFySkipTrace: contact data extracted',
+    );
+
+    if (phones.length === 0 && emails.length === 0) {
+      logger.warn(
+        {
+          dominionLeadId: property.dominionLeadId,
+          rawRecord: JSON.stringify(record).substring(0, 1000),
+        },
+        'tracerFySkipTrace: NO phones or emails found in Tracerfy response',
+      );
+    }
 
     return {
       success: phones.length > 0 || emails.length > 0,
@@ -230,7 +334,7 @@ async function tracerFySkipTrace(property: {
       email: emails[0] ?? null,
       email2: emails[1] ?? null,
       email3: emails[2] ?? null,
-      mailingAddress: mailParts.length > 0 ? mailParts.join(', ') : null,
+      mailingAddress,
       rawResponse: record as unknown as Record<string, unknown>,
       costCents: (ourQueue.credits_deducted ?? 1) * 2, // Tracerfy = $0.02/record
       allPhones: phones as Array<{ number: string; type: string }>,
@@ -238,6 +342,7 @@ async function tracerFySkipTrace(property: {
     };
   }
 
+  logger.warn({ queueId }, 'tracerFySkipTrace: polling timed out after 60 attempts');
   return {
     success: false, tier: 'STANDARD', source: 'TRACERFY',
     rawResponse: { queueId, timeout: true }, costCents: 0,
@@ -283,18 +388,44 @@ export async function skipTraceProperty(
   dominionLeadId: string,
   tier: 'STANDARD' | 'ADVANCED',
 ): Promise<SkipTraceResult> {
+  logger.info({ dominionLeadId, tier }, '>>> skipTraceProperty called');
+
   const [property] = await db
     .select()
     .from(properties)
     .where(eq(properties.dominionLeadId, dominionLeadId));
 
-  if (!property) throw new NotFoundError('Property', dominionLeadId);
+  if (!property) {
+    logger.error({ dominionLeadId }, 'skipTraceProperty: property not found in DB');
+    throw new NotFoundError('Property', dominionLeadId);
+  }
 
-  logger.info({ dominionLeadId, tier }, 'Skip trace requested');
+  logger.info(
+    {
+      dominionLeadId,
+      ownerName: property.ownerName,
+      streetAddress: property.streetAddress,
+      mailAddress: property.mailAddress ?? null,
+      absenteeOwner: property.absenteeOwner,
+    },
+    'skipTraceProperty: property loaded, calling tracerFySkipTrace',
+  );
 
   const result = tier === 'STANDARD'
     ? await tracerFySkipTrace(property)
     : await reiSkipTrace(property);
+
+  logger.info(
+    {
+      dominionLeadId,
+      success: result.success,
+      phonesFound: result.allPhones?.length ?? (result.phone ? 1 : 0),
+      emailsFound: result.allEmails?.length ?? (result.email ? 1 : 0),
+      costCents: result.costCents,
+      error: result.error ?? 'none',
+    },
+    'skipTraceProperty: tracerFySkipTrace returned',
+  );
 
   if (result.success) {
     const updates: Record<string, unknown> = {

@@ -26,6 +26,8 @@ export async function skipTraceRoutes(app: FastifyInstance): Promise<void> {
       const { dominionLeadId } = request.params;
       const { tier } = skipTraceBody.parse(request.body);
 
+      logger.info({ dominionLeadId, tier }, 'API: skip-trace endpoint called');
+
       try {
         const result = await skipTraceProperty(dominionLeadId, tier);
 

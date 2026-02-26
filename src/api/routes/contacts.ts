@@ -39,6 +39,8 @@ export async function contactRoutes(app: FastifyInstance): Promise<void> {
       const { dominionLeadId } = request.params;
       const { tier } = resolveBody.parse(request.body);
 
+      logger.info({ dominionLeadId, tier }, 'API: resolve-contacts endpoint called');
+
       try {
         const result = await resolveContacts(dominionLeadId, tier);
         return reply.send(result);

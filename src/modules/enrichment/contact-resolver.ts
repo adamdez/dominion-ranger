@@ -53,12 +53,38 @@ export async function resolveContacts(
   dominionLeadId: string,
   tier: ContactTier = 'basic',
 ): Promise<ContactResolutionResult> {
+  logger.info(
+    {
+      dominionLeadId,
+      tier,
+      action: 'CONTACT_RESOLVE_START',
+    },
+    'Contact resolution starting',
+  );
+
   const [property] = await db
     .select()
     .from(properties)
     .where(eq(properties.dominionLeadId, dominionLeadId));
 
-  if (!property) throw new NotFoundError('Property', dominionLeadId);
+  if (!property) {
+    logger.error({ dominionLeadId }, 'Contact resolution: property not found');
+    throw new NotFoundError('Property', dominionLeadId);
+  }
+
+  logger.info(
+    {
+      dominionLeadId,
+      ownerName: property.ownerName,
+      streetAddress: property.streetAddress,
+      mailAddress: property.mailAddress ?? (property as { mailingAddress?: string }).mailingAddress ?? null,
+      absenteeOwner: property.absenteeOwner,
+      city: property.city,
+      state: property.state,
+      zip: property.zip,
+    },
+    'Contact resolution: property data loaded',
+  );
 
   const existingContacts = await db
     .select()
@@ -95,8 +121,23 @@ export async function resolveContacts(
   // Tier: basic or deep — Tracerfy skip trace (primary provider)
   if (tier === 'basic' || tier === 'deep') {
     try {
+      logger.info({ dominionLeadId, tier }, 'Contact resolution: calling Tracerfy via skipTraceProperty');
       const { skipTraceProperty } = await import('../skip-trace/service.js');
       const tracerResult = await skipTraceProperty(dominionLeadId, 'STANDARD');
+
+      logger.info(
+        {
+          dominionLeadId,
+          success: tracerResult.success,
+          source: tracerResult.source,
+          costCents: tracerResult.costCents,
+          phone: tracerResult.phone ?? null,
+          allPhonesCount: tracerResult.allPhones?.length ?? 0,
+          allEmailsCount: tracerResult.allEmails?.length ?? 0,
+          error: tracerResult.error ?? null,
+        },
+        'Contact resolution: Tracerfy result',
+      );
 
       if (tracerResult.success) {
         result.costCents += tracerResult.costCents;
@@ -144,8 +185,17 @@ export async function resolveContacts(
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Unknown error';
+      const stack = err instanceof Error ? err.stack : undefined;
       result.errors.push(`Tracerfy skip trace failed: ${msg}`);
-      logger.error({ err, dominionLeadId }, 'Tracerfy skip trace error in contact resolver');
+      logger.error(
+        {
+          err,
+          dominionLeadId,
+          errorMessage: msg,
+          stack,
+        },
+        'Tracerfy skip trace EXCEPTION in contact resolver',
+      );
     }
   }
 
