@@ -4,40 +4,82 @@ import { env } from '../config/env.js';
 import { logger } from '../config/logger.js';
 import { runAdapterPipeline } from '../ingestion/pipeline.js';
 
-const connection = new IORedis(env.REDIS_URL, { maxRetriesPerRequest: null }) as unknown as ConnectionOptions;
+let _connection: IORedis | null = null;
+let _ingestionQueue: Queue | null = null;
+let _scoringQueue: Queue | null = null;
+let _sentinelQueue: Queue | null = null;
 
-// ─── Queue Definitions ─────────────────────────────
+function getConnection(): ConnectionOptions {
+  if (!_connection) {
+    _connection = new IORedis(env.REDIS_URL, { maxRetriesPerRequest: null });
+  }
+  return _connection as unknown as ConnectionOptions;
+}
 
 /** Scheduled ingestion runs per adapter */
-export const ingestionQueue = new Queue('ranger-ingestion', {
-  connection,
-  defaultJobOptions: {
-    removeOnComplete: { count: 100 },
-    removeOnFail: { count: 500 },
-    attempts: 3,
-    backoff: { type: 'exponential', delay: 5_000 },
-  },
-});
+export function getIngestionQueue(): Queue {
+  if (!_ingestionQueue) {
+    _ingestionQueue = new Queue('ranger-ingestion', {
+      connection: getConnection(),
+      defaultJobOptions: {
+        removeOnComplete: { count: 100 },
+        removeOnFail: { count: 500 },
+        attempts: 3,
+        backoff: { type: 'exponential', delay: 5_000 },
+      },
+    });
+  }
+  return _ingestionQueue;
+}
 
-/** Batch scoring recalculations (e.g., when model config changes) */
-export const scoringQueue = new Queue('ranger-scoring', {
-  connection,
-  defaultJobOptions: {
-    removeOnComplete: { count: 500 },
-    removeOnFail: { count: 500 },
-    attempts: 2,
-    backoff: { type: 'exponential', delay: 3_000 },
-  },
-});
+/** Batch scoring recalculations */
+export function getScoringQueue(): Queue {
+  if (!_scoringQueue) {
+    _scoringQueue = new Queue('ranger-scoring', {
+      connection: getConnection(),
+      defaultJobOptions: {
+        removeOnComplete: { count: 500 },
+        removeOnFail: { count: 500 },
+        attempts: 2,
+        backoff: { type: 'exponential', delay: 3_000 },
+      },
+    });
+  }
+  return _scoringQueue;
+}
 
 /** Sentinel webhook retries */
-export const sentinelQueue = new Queue('ranger-sentinel', {
-  connection,
-  defaultJobOptions: {
-    removeOnComplete: { count: 200 },
-    removeOnFail: { count: 500 },
-    attempts: 5,
-    backoff: { type: 'exponential', delay: 10_000 },
+export function getSentinelQueue(): Queue {
+  if (!_sentinelQueue) {
+    _sentinelQueue = new Queue('ranger-sentinel', {
+      connection: getConnection(),
+      defaultJobOptions: {
+        removeOnComplete: { count: 200 },
+        removeOnFail: { count: 500 },
+        attempts: 5,
+        backoff: { type: 'exponential', delay: 10_000 },
+      },
+    });
+  }
+  return _sentinelQueue;
+}
+
+// Backward-compatible exports — proxies that lazy-init on first property access
+export const ingestionQueue = new Proxy({} as Queue, {
+  get(_, prop) {
+    return (getIngestionQueue() as unknown as Record<string, unknown>)[prop as string];
+  },
+});
+
+export const scoringQueue = new Proxy({} as Queue, {
+  get(_, prop) {
+    return (getScoringQueue() as unknown as Record<string, unknown>)[prop as string];
+  },
+});
+
+export const sentinelQueue = new Proxy({} as Queue, {
+  get(_, prop) {
+    return (getSentinelQueue() as unknown as Record<string, unknown>)[prop as string];
   },
 });
 
@@ -60,10 +102,6 @@ export interface SentinelDispatchJobData {
 
 // ─── Schedule Helpers ──────────────────────────────
 
-/**
- * Schedule recurring ingestion runs.
- * Uses BullMQ when Redis is available, setInterval fallback when not.
- */
 function scheduleWithSetInterval(): void {
   logger.warn('Using setInterval fallback for adapter scheduling');
   setInterval(() => {
@@ -80,49 +118,36 @@ function scheduleWithSetInterval(): void {
 
 export async function scheduleIngestionJobs(): Promise<void> {
   try {
-    await ingestionQueue.upsertJobScheduler(
+    const queue = getIngestionQueue();
+
+    await queue.upsertJobScheduler(
       'daily-full-ingestion',
       { every: 6 * 60 * 60 * 1000 },
-      {
-        name: 'full-ingestion',
-        data: { adapterName: '__all__' } satisfies IngestionJobData,
-      },
+      { name: 'full-ingestion', data: { adapterName: '__all__' } satisfies IngestionJobData },
     );
 
-    await ingestionQueue.upsertJobScheduler(
+    await queue.upsertJobScheduler(
       'regrid-daily',
       { every: 24 * 60 * 60 * 1000 },
-      {
-        name: 'regrid-ingestion',
-        data: { adapterName: 'regrid' } satisfies IngestionJobData,
-      },
+      { name: 'regrid-ingestion', data: { adapterName: 'regrid' } satisfies IngestionJobData },
     );
 
-    await ingestionQueue.upsertJobScheduler(
+    await queue.upsertJobScheduler(
       'recorder-6h',
       { every: 6 * 60 * 60 * 1000 },
-      {
-        name: 'recorder-ingestion',
-        data: { adapterName: 'spokane_recorder' } satisfies IngestionJobData,
-      },
+      { name: 'recorder-ingestion', data: { adapterName: 'spokane_recorder' } satisfies IngestionJobData },
     );
 
-    await ingestionQueue.upsertJobScheduler(
+    await queue.upsertJobScheduler(
       'kootenai-recorder-6h',
       { every: 6 * 60 * 60 * 1000 },
-      {
-        name: 'kootenai-recorder-ingestion',
-        data: { adapterName: 'kootenai_recorder' } satisfies IngestionJobData,
-      },
+      { name: 'kootenai-recorder-ingestion', data: { adapterName: 'kootenai_recorder' } satisfies IngestionJobData },
     );
 
-    await ingestionQueue.upsertJobScheduler(
+    await queue.upsertJobScheduler(
       'sheriff-daily',
       { every: 24 * 60 * 60 * 1000 },
-      {
-        name: 'sheriff-sale-ingestion',
-        data: { adapterName: 'sheriff_sale' } satisfies IngestionJobData,
-      },
+      { name: 'sheriff-sale-ingestion', data: { adapterName: 'sheriff_sale' } satisfies IngestionJobData },
     );
   } catch (err) {
     logger.warn({ err }, 'BullMQ scheduling failed — using setInterval fallback');
@@ -130,4 +155,7 @@ export async function scheduleIngestionJobs(): Promise<void> {
   }
 }
 
-export { connection as redisConnection };
+/** Lazy connection getter for consumers that need raw Redis (e.g. worker). */
+export function getRedisConnection(): IORedis {
+  return _connection ?? (getConnection() as unknown as IORedis);
+}

@@ -32,7 +32,8 @@
     "system:seed-config": "tsx src/scripts/recover-system.ts --seed-config",
     "system:score": "tsx src/scripts/recover-system.ts --score",
     "system:import": "tsx src/scripts/recover-system.ts --import",
-    "system:recover": "tsx src/scripts/recover-system.ts --full"
+    "system:recover": "tsx src/scripts/recover-system.ts --full",
+    "clean:redis-jobs": "tsx src/scripts/clean-redis-jobs.ts"
   },
   "dependencies": {
     "@fastify/cookie": "^11.0.2",

@@ -4,17 +4,24 @@ import { env } from '../config/env.js';
 import { logAudit } from '../modules/compliance/index.js';
 import { createLeadInstance } from '../modules/workflow/index.js';
 import { logActivity } from '../modules/analytics/activity-logger.js';
-import { scoringQueue } from '../jobs/queues.js';
 import { isFeatureEnabled } from '../modules/feature-flags/index.js';
 
 async function enqueueForScoring(dominionLeadId: string): Promise<void> {
+  if (!env.AUTO_PIPELINE_ENABLED) {
+    return; // Don't even touch the queue
+  }
   try {
-    await scoringQueue.add('score-property', {
-      dominionLeadId,
-      reason: 'event_ingested' as const,
-    }, {
-      jobId: `score-${dominionLeadId}`,
-    });
+    const { getScoringQueue } = await import('../jobs/queues.js');
+    await getScoringQueue().add(
+      'score-property',
+      {
+        dominionLeadId,
+        reason: 'event_ingested' as const,
+      },
+      {
+        jobId: `score-${dominionLeadId}`,
+      },
+    );
     logger.debug({ dominionLeadId }, 'Enqueued scoring job (BullMQ)');
   } catch (err: unknown) {
     logger.error({ err, dominionLeadId }, 'Failed to enqueue scoring job — Redis may be unavailable');

@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { eq, desc } from 'drizzle-orm';
-import { ingestionQueue } from '../../jobs/queues.js';
+import { getIngestionQueue } from '../../jobs/queues.js';
 import { db } from '../../db/connection.js';
 import { marketConfigs, adapterRunHistory } from '../../db/schema/index.js';
 import { getAllIngestionAdapters, getAllEnrichmentAdapters } from '../../ingestion/adapters/index.js';
@@ -23,7 +23,7 @@ export async function ingestionRoutes(app: FastifyInstance): Promise<void> {
       const { adapter, options } = body ?? {};
       const adapterName = adapter ?? '__all__';
 
-      const job = await ingestionQueue.add('ingestion-run', {
+      const job = await getIngestionQueue().add('ingestion-run', {
         adapterName,
         options,
       });
