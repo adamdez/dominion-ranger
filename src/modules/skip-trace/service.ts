@@ -33,10 +33,13 @@ export interface SkipTraceResult {
   phone3Type?: string | null;
   email?: string | null;
   email2?: string | null;
+  email3?: string | null;
   mailingAddress?: string | null;
   rawResponse: Record<string, unknown>;
   costCents: number;
   error?: string;
+  allPhones?: Array<{ number: string; type: string }>;
+  allEmails?: string[];
 }
 
 function cleanPhone(raw: string | undefined | null): string | null {
@@ -67,6 +70,11 @@ async function tracerFySkipTrace(property: {
   ownerFirst: string | null;
   ownerLast: string | null;
   ownerName: string | null;
+  mailAddress?: string | null;
+  mailCity?: string | null;
+  mailState?: string | null;
+  mailZip?: string | null;
+  absenteeOwner?: boolean | string | null;
 }): Promise<SkipTraceResult> {
   if (!TRACERFY_API_KEY) {
     return {
@@ -89,13 +97,45 @@ async function tracerFySkipTrace(property: {
     }
   }
 
+  // For absentee owners, use mailing address (where the owner lives)
+  // Fall back to property address if no mailing address
+  const isAbsentee =
+    property.absenteeOwner === true ||
+    property.absenteeOwner === 'Yes' ||
+    property.absenteeOwner === 'Y';
+  const useMailAddress = isAbsentee && property.mailAddress;
+
+  const traceStreet = useMailAddress
+    ? (property.mailAddress ?? property.streetAddress ?? '')
+    : (property.streetAddress ?? '');
+  const traceCity = useMailAddress
+    ? (property.mailCity ?? property.city ?? '')
+    : (property.city ?? '');
+  const traceState = useMailAddress
+    ? (property.mailState ?? property.state ?? '')
+    : (property.state ?? '');
+  const traceZip = useMailAddress
+    ? (property.mailZip ?? property.zip ?? '')
+    : (property.zip ?? '');
+
+  logger.info(
+    {
+      dominionLeadId: property.dominionLeadId,
+      addressType: useMailAddress ? 'mailing' : 'property',
+      street: traceStreet,
+      city: traceCity,
+      state: traceState,
+    },
+    'Tracerfy skip trace: using address',
+  );
+
   const header = 'dominion_lead_id,address,city,state,zip,first_name,last_name';
   const row = [
     csvEscape(property.dominionLeadId),
-    csvEscape(property.streetAddress ?? ''),
-    csvEscape(property.city ?? ''),
-    csvEscape(property.state ?? ''),
-    csvEscape(property.zip ?? ''),
+    csvEscape(traceStreet),
+    csvEscape(traceCity),
+    csvEscape(traceState),
+    csvEscape(traceZip),
     csvEscape(first),
     csvEscape(last),
   ].join(',');
@@ -129,9 +169,9 @@ async function tracerFySkipTrace(property: {
   const submitData = await submitRes.json() as { queue_id: number };
   const queueId = submitData.queue_id;
 
-  // Poll for completion (max 5 min for a single record)
-  for (let attempt = 0; attempt < 30; attempt++) {
-    await new Promise(r => setTimeout(r, 10_000));
+  // Poll for completion (every 3s, max 3 min for single record)
+  for (let attempt = 0; attempt < 60; attempt++) {
+    await new Promise(r => setTimeout(r, 3_000));
 
     const queuesRes = await fetch(`${TRACERFY_BASE_URL}/queues/`, {
       headers: { Authorization: `Bearer ${TRACERFY_API_KEY}` },
@@ -153,18 +193,20 @@ async function tracerFySkipTrace(property: {
     if (!record) {
       return {
         success: false, tier: 'STANDARD', source: 'TRACERFY',
-        rawResponse: { queueId, records: [] }, costCents: 10,
+        rawResponse: { queueId, records: [] }, costCents: (ourQueue.credits_deducted ?? 1) * 2,
         error: 'No results returned from Tracerfy',
       };
     }
 
     const phones = [
-      { raw: record.primary_phone, type: record.primary_phone_type },
+      { raw: record.primary_phone, type: record.primary_phone_type ?? 'UNKNOWN' },
       { raw: record.mobile_1, type: 'MOBILE' },
       { raw: record.mobile_2, type: 'MOBILE' },
       { raw: record.mobile_3, type: 'MOBILE' },
+      { raw: record.mobile_4, type: 'MOBILE' },
       { raw: record.landline_1, type: 'LANDLINE' },
       { raw: record.landline_2, type: 'LANDLINE' },
+      { raw: record.landline_3, type: 'LANDLINE' },
     ]
       .map(p => ({ number: cleanPhone(p.raw), type: p.type ?? 'UNKNOWN' }))
       .filter(p => p.number);
@@ -187,9 +229,12 @@ async function tracerFySkipTrace(property: {
       phone3Type: phones[2]?.type ?? null,
       email: emails[0] ?? null,
       email2: emails[1] ?? null,
+      email3: emails[2] ?? null,
       mailingAddress: mailParts.length > 0 ? mailParts.join(', ') : null,
       rawResponse: record as unknown as Record<string, unknown>,
-      costCents: (ourQueue.credits_deducted ?? 1) * 10,
+      costCents: (ourQueue.credits_deducted ?? 1) * 2, // Tracerfy = $0.02/record
+      allPhones: phones as Array<{ number: string; type: string }>,
+      allEmails: emails,
     };
   }
 
@@ -295,11 +340,21 @@ export async function skipTraceProperty(
       rawData: Record<string, unknown>;
     }> = [];
 
-    const phones = [
-      { phone: result.phone, type: result.phoneType, primary: true },
-      { phone: result.phone2, type: result.phone2Type, primary: false },
-      { phone: result.phone3, type: result.phone3Type, primary: false },
-    ].filter(p => p.phone && !existingPhones.has(p.phone));
+    // Use allPhones if available (Tracerfy returns up to 8), otherwise fall back to individual fields
+    const phoneList =
+      result.allPhones && result.allPhones.length > 0
+        ? result.allPhones.map((p, i) => ({
+            phone: p.number,
+            type: p.type,
+            primary: i === 0,
+          }))
+        : [
+            { phone: result.phone, type: result.phoneType, primary: true },
+            { phone: result.phone2, type: result.phone2Type, primary: false },
+            { phone: result.phone3, type: result.phone3Type, primary: false },
+          ];
+
+    const phones = phoneList.filter(p => p.phone && !existingPhones.has(p.phone));
 
     for (const p of phones) {
       contactRows.push({
@@ -316,21 +371,29 @@ export async function skipTraceProperty(
       });
     }
 
-    const emails = [result.email, result.email2]
-      .filter((e): e is string => !!e && !existingEmails.has(e.toLowerCase()));
+    const emailList =
+      result.allEmails && result.allEmails.length > 0
+        ? result.allEmails
+        : ([result.email, result.email2, result.email3].filter(Boolean) as string[]);
+
+    const emails = emailList.filter(
+      (e): e is string => !!e && !existingEmails.has(e.toLowerCase()),
+    );
     if (emails.length > 0 && phones.length === 0) {
-      contactRows.push({
-        dominionLeadId,
-        contactName: property.ownerName,
-        contactType: 'OWNER',
-        phone: null,
-        phoneType: null,
-        email: emails[0] ?? null,
-        source: result.source,
-        isPrimary: existingPhones.size === 0 && existingEmails.size === 0,
-        isOwnerMatch: true,
-        rawData: result.rawResponse,
-      });
+      for (let i = 0; i < emails.length; i++) {
+        contactRows.push({
+          dominionLeadId,
+          contactName: property.ownerName,
+          contactType: 'OWNER',
+          phone: null,
+          phoneType: null,
+          email: emails[i] ?? null,
+          source: result.source,
+          isPrimary: existingPhones.size === 0 && existingEmails.size === 0 && i === 0,
+          isOwnerMatch: true,
+          rawData: result.rawResponse,
+        });
+      }
     } else {
       // Attach emails to existing phone-based contact rows
       for (let i = 0; i < Math.min(emails.length, contactRows.length); i++) {
@@ -356,8 +419,8 @@ export async function skipTraceProperty(
       tier: result.tier,
       source: result.source,
       success: result.success,
-      phonesFound: [result.phone, result.phone2, result.phone3].filter(Boolean).length,
-      emailsFound: [result.email, result.email2].filter(Boolean).length,
+      phonesFound: result.allPhones?.length ?? [result.phone, result.phone2, result.phone3].filter(Boolean).length,
+      emailsFound: result.allEmails?.length ?? [result.email, result.email2, result.email3].filter(Boolean).length,
       error: result.error,
     },
   }).catch(err => logger.error({ err }, 'Failed to log skip trace activity'));

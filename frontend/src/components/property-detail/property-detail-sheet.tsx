@@ -47,7 +47,7 @@ import { DEAL_STAGES, VALID_DEAL_TRANSITIONS } from '@/lib/constants';
 import { format, formatDistanceToNow } from 'date-fns';
 import {
   UserPlus, Shield, Phone, MessageSquare, Send, FileText,
-  CheckCircle, XCircle, AlertTriangle, SearchCheck, Zap,
+  CheckCircle, XCircle, AlertTriangle, SearchCheck,
   Mail, MapPin, Home, Calendar, TrendingUp, ArrowRight,
   ClipboardCheck, DollarSign, HeartHandshake, Sprout, Mailbox,
 } from 'lucide-react';
@@ -592,17 +592,7 @@ export function PropertyDetailSheet({ lead, open, onClose }: PropertyDetailSheet
                         })}
                       >
                         <SearchCheck className="mr-1.5 h-3.5 w-3.5" />
-                        {resolveContactsMutation.isPending ? 'Tracing...' : 'Skip Trace ($0.01)'}
-                      </Button>
-                      <Button
-                        size="sm" variant="outline"
-                        disabled={resolveContactsMutation.isPending || skipTraceMutation.isPending}
-                        onClick={() => resolveContactsMutation.mutate({
-                          dominionLeadId: lead.dominionLeadId, tier: 'deep',
-                        })}
-                      >
-                        <Zap className="mr-1.5 h-3.5 w-3.5" />
-                        Deep Skip Trace
+                        {resolveContactsMutation.isPending ? 'Tracing...' : 'Skip Trace'}
                       </Button>
                       <Button
                         size="sm" variant="outline"
@@ -665,7 +655,7 @@ export function PropertyDetailSheet({ lead, open, onClose }: PropertyDetailSheet
                           (resolveContactsMutation.data?.contacts?.length ?? 0) === 0 ? (
                             <>
                               <p className="text-sm font-medium">No contacts found.</p>
-                              <p className="text-xs text-muted-foreground">Try Deep Skip Trace for a more thorough search.</p>
+                              <p className="text-xs text-muted-foreground">Try running Skip Trace again, or add contacts manually.</p>
                             </>
                           ) : (
                             <>

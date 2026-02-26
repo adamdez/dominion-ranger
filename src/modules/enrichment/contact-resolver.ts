@@ -4,14 +4,10 @@
  * Resolves phone/email contacts for properties using a tiered strategy:
  *
  *   Tier 'free'  — Only data already in the system (property record, existing contacts)
- *   Tier 'basic' — BatchData skip trace ($0.01/record)
- *   Tier 'deep'  — Tracerfy + REISkip (more expensive, for high-value targets)
+ *   Tier 'basic' — Tracerfy skip trace ($0.02/record) — primary provider
+ *   Tier 'deep'  — Tracerfy first, then BatchData fallback if no phones ($0.02-0.03/record)
  *
- * Resolution order (by cost):
- *   1. Existing property_contacts + property record (free)
- *   2. BatchData skip trace ($0.01)
- *   3. Tracerfy standard trace ($0.10-0.15)
- *   4. REISkip advanced trace ($0.40-0.75, manual trigger only)
+ * Tracerfy is primary: pay-as-you-go $0.02/record, 70-95% accuracy, up to 8 phones + 3 emails.
  */
 
 import { eq } from 'drizzle-orm';
@@ -96,125 +92,37 @@ export async function resolveContacts(
     errors: [],
   };
 
-  // Tier: basic — BatchData skip trace
+  // Tier: basic or deep — Tracerfy skip trace (primary provider)
   if (tier === 'basic' || tier === 'deep') {
     try {
-      const ownerName =
-        property.ownerName ??
-        (property as { owner_name?: string }).owner_name ??
-        '';
-      const parsed = parseOwnerName(ownerName);
-
-      if (!parsed) {
-        logger.info(
-          { ownerName: property.ownerName },
-          'Cannot skip trace entity/trust owner',
-        );
-        result.errors.push('Cannot skip trace entity/trust owner');
-      } else {
-        const firstName =
-          property.ownerFirst ??
-          (property as { owner_first?: string }).owner_first ??
-          parsed.first;
-        const lastName =
-          property.ownerLast ??
-          (property as { owner_last?: string }).owner_last ??
-          parsed.last;
-
-        // Prefer mailing address (more likely to reach owner), fall back to property address
-        let street =
-          property.mailAddress ??
-          (property as { mail_address?: string }).mail_address ??
-          property.streetAddress ??
-          '';
-        let city =
-          property.mailCity ??
-          (property as { mail_city?: string }).mail_city ??
-          property.city ??
-          '';
-        let state =
-          property.mailState ??
-          (property as { mail_state?: string }).mail_state ??
-          property.state ??
-          '';
-        let zip =
-          property.mailZip ??
-          (property as { mail_zip?: string }).mail_zip ??
-          property.zip ??
-          '';
-
-        if (!street && property.mailingAddress) {
-          const mailParts = property.mailingAddress
-            .split(',')
-            .map((p) => p.trim());
-          if (mailParts.length >= 3) {
-            street = mailParts[0];
-            city = mailParts[1] ?? city;
-            state = mailParts[2] ?? state;
-            zip = mailParts[3] ?? zip;
-          }
-        }
-        if (!street) {
-          street = property.streetAddress ?? '';
-        }
-
-        if (!street) {
-          result.errors.push('No street address available for skip trace');
-        } else {
-          const batchResult = await batchDataSkipTrace({
-            firstName,
-            lastName,
-            street,
-            city,
-            state,
-            zip,
-          });
-
-          if (batchResult.success) {
-            const newContacts = await insertPersonContacts(
-              dominionLeadId,
-              batchResult.persons,
-              'batchdata',
-              existingPhones,
-              existingEmails,
-            );
-            result.newContactsAdded += newContacts.length;
-            result.contacts.push(...newContacts);
-            result.costCents += 1; // $0.01
-          } else if (batchResult.error) {
-            result.errors.push(`BatchData: ${batchResult.error}`);
-          }
-        }
-      }
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Unknown error';
-      result.errors.push(`BatchData skip trace failed: ${msg}`);
-      logger.error({ err, dominionLeadId }, 'BatchData skip trace error in contact resolver');
-      // Don't throw — return whatever contacts we already have; UI shows "Skip trace failed"
-    }
-  }
-
-  // Tier: deep — Tracerfy + REISkip
-  if (tier === 'deep') {
-    try {
       const { skipTraceProperty } = await import('../skip-trace/service.js');
-
-      // Try standard (Tracerfy) first
       const tracerResult = await skipTraceProperty(dominionLeadId, 'STANDARD');
+
       if (tracerResult.success) {
         result.costCents += tracerResult.costCents;
-        // Contacts were already inserted by skipTraceProperty; refresh list
+
+        // Refresh contacts from DB (skipTraceProperty already inserts them)
         const refreshedContacts = await db
           .select()
           .from(propertyContacts)
           .where(eq(propertyContacts.dominionLeadId, dominionLeadId));
 
+        // Find new contacts not in original existing set
         const newFromTracer = refreshedContacts.filter(
-          (c) => !existingPhones.has(c.phone) || !existingEmails.has(c.email?.toLowerCase() ?? ''),
+          (c) =>
+            (c.phone && !existingPhones.has(c.phone)) ||
+            (c.email && !existingEmails.has(c.email.toLowerCase() ?? '')),
         );
-        const alreadyInResult = new Set(result.contacts.map((c) => c.phone));
+
+        const alreadyInResultPhones = new Set(result.contacts.map((c) => c.phone));
+        const alreadyInResultEmails = new Set(
+          result.contacts.map((c) => c.email?.toLowerCase()).filter(Boolean),
+        );
         for (const c of newFromTracer) {
-          if (c.phone && !alreadyInResult.has(c.phone)) {
+          const hasNewPhone = c.phone && !alreadyInResultPhones.has(c.phone);
+          const hasNewEmail =
+            c.email && !alreadyInResultEmails.has(c.email.toLowerCase() ?? '');
+          if (hasNewPhone || hasNewEmail) {
             result.contacts.push({
               contactName: c.contactName,
               contactType: c.contactType,
@@ -227,26 +135,92 @@ export async function resolveContacts(
               isNew: true,
             });
             result.newContactsAdded++;
+            if (c.phone) alreadyInResultPhones.add(c.phone);
+            if (c.email) alreadyInResultEmails.add(c.email.toLowerCase());
           }
         }
       } else if (tracerResult.error) {
         result.errors.push(`Tracerfy: ${tracerResult.error}`);
       }
-
-      // If still no phones, try REISkip
-      const hasPhones = result.contacts.some((c) => c.phone);
-      if (!hasPhones) {
-        const reiResult = await skipTraceProperty(dominionLeadId, 'ADVANCED');
-        if (reiResult.success) {
-          result.costCents += reiResult.costCents;
-        } else if (reiResult.error) {
-          result.errors.push(`REISkip: ${reiResult.error}`);
-        }
-      }
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Unknown error';
-      result.errors.push(`Deep skip trace failed: ${msg}`);
-      logger.error({ err, dominionLeadId }, 'Deep skip trace error in contact resolver');
+      result.errors.push(`Tracerfy skip trace failed: ${msg}`);
+      logger.error({ err, dominionLeadId }, 'Tracerfy skip trace error in contact resolver');
+    }
+  }
+
+  // Tier: deep — If Tracerfy returned no phones, try BatchData as fallback
+  if (tier === 'deep') {
+    const hasPhones = result.contacts.some((c) => c.phone);
+    if (!hasPhones) {
+      try {
+        const ownerName =
+          property.ownerName ?? (property as { owner_name?: string }).owner_name ?? '';
+        const parsed = parseOwnerName(ownerName);
+
+        if (parsed) {
+          const firstName =
+            property.ownerFirst ??
+            (property as { owner_first?: string }).owner_first ??
+            parsed.first;
+          const lastName =
+            property.ownerLast ??
+            (property as { owner_last?: string }).owner_last ??
+            parsed.last;
+
+          // Use mailing address (more likely to reach owner), fall back to property
+          const street =
+            property.mailAddress ??
+            (property as { mail_address?: string }).mail_address ??
+            property.streetAddress ??
+            '';
+          const city =
+            property.mailCity ??
+            (property as { mail_city?: string }).mail_city ??
+            property.city ??
+            '';
+          const state =
+            property.mailState ??
+            (property as { mail_state?: string }).mail_state ??
+            property.state ??
+            '';
+          const zip =
+            property.mailZip ??
+            (property as { mail_zip?: string }).mail_zip ??
+            property.zip ??
+            '';
+
+          if (street) {
+            const batchResult = await batchDataSkipTrace({
+              firstName,
+              lastName,
+              street,
+              city,
+              state,
+              zip,
+            });
+
+            if (batchResult.success) {
+              const newContacts = await insertPersonContacts(
+                dominionLeadId,
+                batchResult.persons,
+                'batchdata',
+                existingPhones,
+                existingEmails,
+              );
+              result.newContactsAdded += newContacts.length;
+              result.contacts.push(...newContacts);
+              result.costCents += 1;
+            } else if (batchResult.error) {
+              result.errors.push(`BatchData fallback: ${batchResult.error}`);
+            }
+          }
+        }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : 'Unknown error';
+        result.errors.push(`BatchData fallback failed: ${msg}`);
+        logger.error({ err, dominionLeadId }, 'BatchData fallback error');
+      }
     }
   }
 
@@ -259,7 +233,7 @@ export async function resolveContacts(
       .set({
         phone: primaryContact.phone,
         phoneType: primaryContact.phoneType,
-        skipTraceTier: tier === 'basic' ? 'BATCHDATA' : tier === 'deep' ? 'DEEP' : null,
+        skipTraceTier: tier === 'basic' ? 'STANDARD' : tier === 'deep' ? 'DEEP' : null,
         skipTracedAt: new Date(),
         skipTraceSource: primaryContact.source.toUpperCase(),
         updatedAt: new Date(),
