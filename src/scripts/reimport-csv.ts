@@ -66,6 +66,7 @@ export async function runReimportCsv(
 }
 
 const JUNK_ADDRESSES = ['', 'unknown', 'n/a', 'none', 'null'];
+const JUNK_CITIES = ['', 'unknown', 'n/a', 'none', 'null'];
 
 /** Generate deterministic synthetic APN from address for rows missing APN. */
 function syntheticApn(
@@ -273,9 +274,22 @@ async function runImport(
     const zip = get(values, mapping, 'zip') || null; // missing zip → null, don't crash
 
     // Skip rows with no valid address — can't identify or contact
-    const addrLower = (address || '').toLowerCase().trim();
-    if (!address || JUNK_ADDRESSES.includes(addrLower)) {
-      console.warn(`⚠️  Row ${lineNum}: Skipping — no valid address (got: "${address ?? ''}")`);
+    const street = (address || '').trim();
+    const cityVal = (city || '').trim();
+    const streetLower = street.toLowerCase();
+    const cityLower = cityVal.toLowerCase();
+    const isJunkAddress =
+      !street ||
+      JUNK_ADDRESSES.includes(streetLower) ||
+      streetLower === 'n/a' ||
+      !cityVal ||
+      cityLower === 'unknown' ||
+      JUNK_CITIES.includes(cityLower);
+
+    if (isJunkAddress) {
+      console.warn(
+        `⚠️  Row ${lineNum}: Skipping — no valid address/city (address: "${address ?? ''}", city: "${city ?? ''}")`,
+      );
       skipped++;
       continue;
     }
@@ -701,8 +715,8 @@ async function runImport(
   console.log(`   Created: ${created}`);
   console.log(`   Events:  ${eventsCreated}`);
   console.log(`   Skipped (existing): ${skippedExisting}`);
+  console.log(`   Skipped (invalid address): ${skipped}`);
   console.log(`   Errors:  ${errors}`);
-  console.log(`   Skipped: ${skipped}`);
   console.log('\n   Run scoring with: npx tsx src/scripts/backfill-scoring.ts\n');
 
   return { created, updated, eventsCreated, dominionLeadIds };

@@ -22,6 +22,7 @@ export interface PipelineStats {
   leadsPromoted: number;
   sentinelDispatched: number;
   skippedExisting: number;
+  skippedInvalid?: number;
   errors: number;
   durationMs: number;
 }
@@ -61,6 +62,7 @@ async function runAdapterPipelineInternal(adapterName: string, options?: Record<
     leadsPromoted: 0,
     sentinelDispatched: 0,
     skippedExisting: 0,
+    skippedInvalid: 0,
     errors: 0,
     durationMs: 0,
   };
@@ -99,12 +101,13 @@ async function runAdapterPipelineInternal(adapterName: string, options?: Record<
 
   logger.info(
     {
-      total: stats.recordsProcessed + stats.skippedExisting,
-      newProperties: stats.propertiesCreated + stats.propertiesUpdated,
+      totalRows: stats.recordsProcessed + stats.skippedExisting + (stats.skippedInvalid ?? 0),
+      imported: stats.propertiesCreated + stats.propertiesUpdated,
       skippedExisting: stats.skippedExisting,
+      skippedInvalid: stats.skippedInvalid ?? 0,
       errors: stats.errors,
     },
-    'Import complete — skipped existing properties',
+    'Import pipeline completed',
   );
 
   await logAudit({
@@ -130,6 +133,30 @@ export async function processRecord(
   existingApnCounty?: Set<string>,
 ): Promise<void> {
   const s = stats ?? createEmptyStats();
+
+  // Skip rows with no real address — these are junk data
+  const street = record.property.streetAddress ?? '';
+  const city = record.property.city ?? '';
+  const isJunkAddress =
+    !street ||
+    street.toLowerCase() === 'unknown' ||
+    street.toLowerCase() === 'n/a' ||
+    street.trim() === '' ||
+    city.toLowerCase() === 'unknown' ||
+    city.trim() === '';
+
+  if (isJunkAddress) {
+    logger.debug(
+      {
+        rawAddress: street,
+        rawCity: city,
+        ownerName: record.property.ownerName ?? 'unknown',
+      },
+      'Skipping CSV row with missing/invalid address',
+    );
+    s.skippedInvalid = (s.skippedInvalid ?? 0) + 1;
+    return;
+  }
 
   // Early exit: skip if property already exists (avoids normalization, events, scoring)
   const apn = record.property.apn;
@@ -207,6 +234,7 @@ function createEmptyStats(): PipelineStats {
     leadsPromoted: 0,
     sentinelDispatched: 0,
     skippedExisting: 0,
+    skippedInvalid: 0,
     errors: 0,
     durationMs: 0,
   };

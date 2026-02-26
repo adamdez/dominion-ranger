@@ -6,7 +6,7 @@ import { startServer } from './api/server.js';
 import { initializeAdapters } from './ingestion/adapters/registry.js';
 import { scheduleIngestionJobs } from './jobs/queues.js';
 import { wireEventHandlers } from './events/wiring.js';
-import { startWorkers } from './jobs/worker.js';
+import { startWorkers, stopWorkers } from './jobs/worker.js';
 import { startScheduler, stopScheduler } from './jobs/scheduler.js';
 
 async function main(): Promise<void> {
@@ -33,12 +33,10 @@ async function main(): Promise<void> {
   // Step 4: Wire domain event handlers
   wireEventHandlers();
 
-  // Step 5: Start BullMQ workers
-  await startWorkers();
-
-  // Step 6 & 7: Schedule jobs and scheduler — only when auto-pipeline enabled
+  // Step 5–7: Workers, scheduler, and ingestion jobs — ONLY when auto-pipeline enabled
   if (env.AUTO_PIPELINE_ENABLED) {
-    logger.info('Auto-pipeline enabled — starting scheduler and ingestion jobs');
+    logger.info('Auto-pipeline ENABLED — starting scheduler, worker, and ingestion jobs');
+    await startWorkers();
     try {
       await scheduleIngestionJobs();
       logger.info('Ingestion jobs scheduled');
@@ -48,7 +46,7 @@ async function main(): Promise<void> {
     startScheduler();
     logger.info('Pipeline scheduler started');
   } else {
-    logger.info('Auto-pipeline disabled — server will only handle API requests');
+    logger.info('Auto-pipeline DISABLED — server will only handle API requests');
   }
 
   // Step 8: Start API server
@@ -60,6 +58,7 @@ async function main(): Promise<void> {
 
     if (env.AUTO_PIPELINE_ENABLED) {
       stopScheduler();
+      await stopWorkers();
     }
     await app.close();
     await closeDatabase();
